@@ -22,6 +22,7 @@ import {
   EMPTY_TOKEN_USAGE,
   isRealUserMessage,
   isInternalUserMessage,
+  isResponseUserMessage,
   isAssistantMessage,
 } from '../types/claude';
 
@@ -519,4 +520,4 @@ export function getTaskCalls(messages: ParsedMessage[]): ToolCall[] {
 // Type Guard Functions (Re-exported from claude.ts)
 // =============================================================================
 
-export { isRealUserMessage, isInternalUserMessage, isAssistantMessage };
+export { isRealUserMessage, isInternalUserMessage, isResponseUserMessage, isAssistantMessage };
