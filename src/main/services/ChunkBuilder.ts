@@ -20,7 +20,7 @@ import {
   SessionDetail,
   EMPTY_METRICS,
   isRealUserMessage,
-  isInternalUserMessage,
+  isResponseUserMessage,
   isAssistantMessage,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
@@ -120,9 +120,12 @@ export class ChunkBuilder {
       // Skip the user message itself
       if (msg.uuid === userMsg.uuid) continue;
 
-      // Include assistant responses and internal user messages (tool results)
-      // This ensures tool results are part of the response, not a new chunk
-      if (isAssistantMessage(msg) || isInternalUserMessage(msg)) {
+      // Include assistant responses and response user messages
+      // Response user messages include:
+      // - Tool results (isMeta: true)
+      // - Interruptions (isMeta: false, array content)
+      // This ensures these are part of the response, not starting new chunks
+      if (isAssistantMessage(msg) || isResponseUserMessage(msg)) {
         responses.push(msg);
       }
     }

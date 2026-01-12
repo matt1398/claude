@@ -459,9 +459,33 @@ export function isRealUserMessage(msg: ParsedMessage): boolean {
 /**
  * Type guard to check if a message is an internal user message.
  * Internal user messages are tool results and are part of responses.
+ *
+ * These have isMeta: true and typically contain tool_result content blocks.
  */
 export function isInternalUserMessage(msg: ParsedMessage): boolean {
   return msg.type === 'user' && msg.isMeta === true;
+}
+
+/**
+ * Type guard for user messages that should be included in responses (not start new chunks).
+ *
+ * This includes:
+ * 1. Internal user messages (isMeta: true) - tool results
+ * 2. Interruption messages (isMeta: false, array content) - user interruptions during tool use
+ *
+ * These are user-type messages that are part of the response flow, not new user requests.
+ */
+export function isResponseUserMessage(msg: ParsedMessage): boolean {
+  if (msg.type !== 'user') return false;
+
+  // Internal messages (tool results) - isMeta: true
+  if (msg.isMeta === true) return true;
+
+  // Interruption messages - isMeta: false but array content
+  // These have content like "[Request interrupted by user for tool use]"
+  if (Array.isArray(msg.content)) return true;
+
+  return false;
 }
 
 /**
