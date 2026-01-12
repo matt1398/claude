@@ -193,6 +193,37 @@ export interface ParsedMessage {
   toolCalls: ToolCall[];
   /** Tool results received in this message */
   toolResults: ToolResult[];
+  // Tool result tracking
+  /** Tool use ID this message is responding to (for internal user messages) */
+  sourceToolUseID?: string;
+  /** Assistant UUID that made the tool call (for linking results to calls) */
+  sourceToolAssistantUUID?: string;
+  /** Result status for tool execution (if this is a tool result message) */
+  toolUseResult?: {
+    success: boolean;
+    commandName?: string;
+  };
+}
+
+/**
+ * Type guard: Check if message is a real user message (not internal/meta).
+ */
+export function isRealUserMessage(msg: ParsedMessage): boolean {
+  return msg.type === 'user' && !msg.isMeta;
+}
+
+/**
+ * Type guard: Check if message is an internal user message (tool result).
+ */
+export function isInternalUserMessage(msg: ParsedMessage): boolean {
+  return msg.type === 'user' && msg.isMeta === true;
+}
+
+/**
+ * Type guard: Check if message is an assistant message.
+ */
+export function isAssistantMessage(msg: ParsedMessage): boolean {
+  return msg.type === 'assistant';
 }
 
 // =============================================================================

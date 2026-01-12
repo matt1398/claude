@@ -82,6 +82,19 @@ export class SubagentResolver {
       const filename = path.basename(filePath);
       const agentId = filename.replace(/^agent-/, '').replace(/\.jsonl$/, '');
 
+      // Extract subagent type from first message if available
+      const firstMessage = messages[0];
+      let subagentType: string | undefined;
+
+      if (firstMessage?.type === 'user' && typeof firstMessage.content === 'string') {
+        // Try to extract subagent type from the prompt
+        // Common patterns: "You are an X agent", "As an X agent", etc.
+        const match = firstMessage.content.match(/you are (?:an? )?(\w+) agent/i);
+        if (match) {
+          subagentType = match[1];
+        }
+      }
+
       // Calculate timing
       const { startTime, endTime, durationMs } = this.calculateTiming(messages);
 
@@ -96,6 +109,7 @@ export class SubagentResolver {
         endTime,
         durationMs,
         metrics,
+        subagentType,
         isParallel: false, // Will be set by detectParallelExecution
       };
     } catch (error) {
@@ -135,16 +149,28 @@ export class SubagentResolver {
 
   /**
    * Link subagents to their parent Task tool calls.
-   * Uses timing and Task input data to match.
+   * Uses sourceToolUseID for accurate matching, with fallback heuristics.
    */
   private linkToTaskCalls(subagents: Subagent[], taskCalls: ToolCall[]): void {
-    // Build a list of Task calls with their estimated start times
-    // Since we don't have exact timing, we'll match by order and description
-
     const unlinkedTasks = [...taskCalls];
 
     for (const subagent of subagents) {
-      // First, try to match by subagent type from Task input
+      // PRIORITY 1: Match by sourceToolUseID (most accurate)
+      // The first message in a subagent should have sourceToolUseID pointing to the Task call
+      const firstMessage = subagent.messages[0];
+      if (firstMessage?.sourceToolUseID) {
+        const matchById = unlinkedTasks.find(
+          (tc) => tc.isTask && tc.id === firstMessage.sourceToolUseID
+        );
+
+        if (matchById) {
+          this.applyTaskCallToSubagent(subagent, matchById);
+          unlinkedTasks.splice(unlinkedTasks.indexOf(matchById), 1);
+          continue;
+        }
+      }
+
+      // PRIORITY 2: Match by subagent type from Task input (fallback)
       const matchByType = unlinkedTasks.find(
         (tc) =>
           tc.isTask &&
@@ -158,7 +184,7 @@ export class SubagentResolver {
         continue;
       }
 
-      // Otherwise, match by description similarity
+      // PRIORITY 3: Match by description similarity (fallback)
       const matchByDescription = this.findBestDescriptionMatch(subagent, unlinkedTasks);
       if (matchByDescription) {
         this.applyTaskCallToSubagent(subagent, matchByDescription);
@@ -166,7 +192,7 @@ export class SubagentResolver {
       }
     }
 
-    // If there are still unlinked subagents and tasks, match by order
+    // PRIORITY 4: If there are still unlinked subagents and tasks, match by order (last resort)
     const unlinkedSubagents = subagents.filter((s) => !s.parentTaskId);
     for (let i = 0; i < Math.min(unlinkedSubagents.length, unlinkedTasks.length); i++) {
       if (unlinkedTasks[i].isTask) {

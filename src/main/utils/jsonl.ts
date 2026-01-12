@@ -20,6 +20,9 @@ import {
   MessageType,
   EMPTY_METRICS,
   EMPTY_TOKEN_USAGE,
+  isRealUserMessage,
+  isInternalUserMessage,
+  isAssistantMessage,
 } from '../types/claude';
 
 // =============================================================================
@@ -167,6 +170,9 @@ export function parseJsonlEntry(entry: JsonlEntry): ParsedMessage | null {
     // Tool info
     toolCalls,
     toolResults,
+    sourceToolUseID: entry.sourceToolUseID,
+    sourceToolAssistantUUID: entry.sourceToolAssistantUUID,
+    toolUseResult: entry.toolUseResult,
   };
 }
 
@@ -508,3 +514,9 @@ export function extractTextContent(message: ParsedMessage): string {
 export function getTaskCalls(messages: ParsedMessage[]): ToolCall[] {
   return messages.flatMap((m) => m.toolCalls.filter((tc) => tc.isTask));
 }
+
+// =============================================================================
+// Type Guard Functions (Re-exported from claude.ts)
+// =============================================================================
+
+export { isRealUserMessage, isInternalUserMessage, isAssistantMessage };

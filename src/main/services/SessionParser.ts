@@ -8,7 +8,14 @@
  * - Calculate session metrics
  */
 
-import { ParsedMessage, SessionMetrics, ToolCall } from '../types/claude';
+import {
+  ParsedMessage,
+  SessionMetrics,
+  ToolCall,
+  isRealUserMessage,
+  isInternalUserMessage,
+  isAssistantMessage,
+} from '../types/claude';
 import {
   parseJsonlFile,
   calculateMetrics,
@@ -29,7 +36,9 @@ export interface ParsedSession {
   taskCalls: ToolCall[];
   /** Messages grouped by type */
   byType: {
-    user: ParsedMessage[];
+    user: ParsedMessage[]; // All user messages
+    realUser: ParsedMessage[]; // Only real user messages (not tool results)
+    internalUser: ParsedMessage[]; // Only tool result messages
     assistant: ParsedMessage[];
     system: ParsedMessage[];
     other: ParsedMessage[];
@@ -74,6 +83,8 @@ export class SessionParser {
     // Group by type
     const byType = {
       user: messages.filter((m) => m.type === 'user'),
+      realUser: messages.filter(isRealUserMessage),
+      internalUser: messages.filter(isInternalUserMessage),
       assistant: messages.filter((m) => m.type === 'assistant'),
       system: messages.filter((m) => m.type === 'system'),
       other: messages.filter(

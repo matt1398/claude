@@ -12,7 +12,20 @@
       "Bash(npx tailwindcss:*)",
       "Bash(find:*)",
       "Bash(npm run typecheck:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(chmod:*)",
+      "Bash(/var/folders/b2/71rbv0j12_15zd_sxh1m2cgh0000gn/T/claude/-Users-bskim-ClaudeContext/cd04e160-8455-442a-8fee-31549891d90a/scratchpad/analyze_jsonl.sh:*)",
+      "Bash(/var/folders/b2/71rbv0j12_15zd_sxh1m2cgh0000gn/T/claude/-Users-bskim-ClaudeContext/cd04e160-8455-442a-8fee-31549891d90a/scratchpad/analyze_subagents.sh:*)",
+      "Bash(/Users/bskim/ClaudeContext/.claude/shell/sanitize_jsonl.sh:*)",
+      "Bash(sh:*)",
+      "Bash(jq:*)",
+      "Bash(grep:*)",
+      "Bash(xargs cat:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm run check:*)",
+      "Bash(npm run:*)"
     ]
   }
 }

@@ -8,6 +8,7 @@ interface ChunkViewProps {
 
 export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showToolResults, setShowToolResults] = useState(false);
 
   const formatTokens = (inputTokens: number, outputTokens: number, cacheReadTokens?: number) => {
     const total = inputTokens + outputTokens;
@@ -27,6 +28,10 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
   };
 
   const userMessageText = extractTextContent(chunk.userMessage.content);
+
+  // Separate responses into assistant messages and tool results
+  const assistantResponses = chunk.responses.filter(r => r.type === 'assistant');
+  const toolResults = chunk.responses.filter(r => r.isMeta === true);
 
   const hasSubagents = chunk.subagents.length > 0;
   const parallelSubagents = chunk.subagents.filter((s) => s.isParallel);
@@ -155,33 +160,97 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
           </div>
 
           {/* Assistant Responses */}
-          <div>
-            <h4 className="text-xs font-semibold text-gray-400 mb-2">
-              Responses ({chunk.responses.length})
-            </h4>
-            <div className="space-y-2">
-              {chunk.responses.map((response, idx) => (
-                <div key={response.uuid} className="bg-gray-900/50 rounded p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-gray-500">Response {idx + 1}</span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(response.timestamp).toLocaleString()}
-                    </span>
+          {assistantResponses.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-400 mb-2">
+                Assistant Responses ({assistantResponses.length})
+              </h4>
+              <div className="space-y-2">
+                {assistantResponses.map((response, idx) => (
+                  <div key={response.uuid} className="bg-gray-900/50 rounded p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-gray-500">Response {idx + 1}</span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(response.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    {response.usage && (
+                      <p className="text-xs text-gray-400">
+                        Tokens:{' '}
+                        {formatTokens(
+                          response.usage.input_tokens,
+                          response.usage.output_tokens,
+                          response.usage.cache_read_input_tokens
+                        )}
+                      </p>
+                    )}
                   </div>
-                  {response.usage && (
-                    <p className="text-xs text-gray-400">
-                      Tokens:{' '}
-                      {formatTokens(
-                        response.usage.input_tokens,
-                        response.usage.output_tokens,
-                        response.usage.cache_read_input_tokens
-                      )}
-                    </p>
-                  )}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Tool Results */}
+          {toolResults.length > 0 && (
+            <div>
+              <button
+                onClick={() => setShowToolResults(!showToolResults)}
+                className="w-full flex items-center justify-between text-left mb-2 hover:bg-gray-900/30 rounded p-2 transition-colors"
+              >
+                <h4 className="text-xs font-semibold text-gray-400 flex items-center gap-2">
+                  Tool Results
+                  <span className="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">
+                    {toolResults.length}
+                  </span>
+                </h4>
+                <svg
+                  className={`w-4 h-4 text-gray-400 transform transition-transform ${showToolResults ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showToolResults && (
+                <div className="space-y-2 bg-gray-900/30 rounded p-3">
+                  {toolResults.map((result, idx) => {
+                    const hasError = result.error || result.status === 'error';
+                    const commandName = result.commandName || result.toolName || result.id;
+
+                    return (
+                      <div
+                        key={result.uuid}
+                        className="bg-gray-800/50 rounded p-3 border border-gray-700"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-sm ${hasError ? 'text-red-400' : 'text-green-400'}`}
+                            >
+                              {hasError ? '✗' : '✓'}
+                            </span>
+                            <span className="text-xs font-medium text-gray-300">
+                              {commandName || `Tool ${idx + 1}`}
+                            </span>
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {new Date(result.timestamp).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          <span className="text-gray-500">Status:</span>{' '}
+                          <span className={hasError ? 'text-red-400' : 'text-green-400'}>
+                            {hasError ? 'Error' : 'Success'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Subagents Details */}
           {hasSubagents && (

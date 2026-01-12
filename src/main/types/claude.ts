@@ -27,6 +27,13 @@ export interface JsonlEntry {
   isMeta?: boolean;
   // Cost tracking
   costUsd?: number;
+  // Tool result tracking
+  sourceToolUseID?: string;
+  sourceToolAssistantUUID?: string;
+  toolUseResult?: {
+    success: boolean;
+    commandName?: string;
+  };
 }
 
 /**
@@ -184,6 +191,15 @@ export interface ParsedMessage {
   toolCalls: ToolCall[];
   /** Tool results received in this message */
   toolResults: ToolResult[];
+  /** Source tool use ID if this is a tool result message */
+  sourceToolUseID?: string;
+  /** Source assistant UUID if this is a tool result message */
+  sourceToolAssistantUUID?: string;
+  /** Tool use result information if this is a tool result message */
+  toolUseResult?: {
+    success: boolean;
+    commandName?: string;
+  };
 }
 
 /**
@@ -415,3 +431,30 @@ export const EMPTY_TOKEN_USAGE: TokenUsage = {
   cache_read_input_tokens: 0,
   cache_creation_input_tokens: 0,
 };
+
+// =============================================================================
+// Type Guard Functions
+// =============================================================================
+
+/**
+ * Type guard to check if a message is a real user message.
+ * Real user messages start chunks and are not meta messages.
+ */
+export function isRealUserMessage(msg: ParsedMessage): boolean {
+  return msg.type === 'user' && !msg.isMeta;
+}
+
+/**
+ * Type guard to check if a message is an internal user message.
+ * Internal user messages are tool results and are part of responses.
+ */
+export function isInternalUserMessage(msg: ParsedMessage): boolean {
+  return msg.type === 'user' && msg.isMeta === true;
+}
+
+/**
+ * Type guard to check if a message is an assistant message.
+ */
+export function isAssistantMessage(msg: ParsedMessage): boolean {
+  return msg.type === 'assistant';
+}

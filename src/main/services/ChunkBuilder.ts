@@ -19,6 +19,9 @@ import {
   Session,
   SessionDetail,
   EMPTY_METRICS,
+  isRealUserMessage,
+  isInternalUserMessage,
+  isAssistantMessage,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
 
@@ -46,8 +49,9 @@ export class ChunkBuilder {
     // Filter to main thread messages (non-sidechain)
     const mainMessages = messages.filter((m) => !m.isSidechain);
 
-    // Find all user messages (these start chunks)
-    const userMessages = mainMessages.filter((m) => m.type === 'user');
+    // Find all real user messages (these start chunks)
+    // Use isRealUserMessage to exclude internal user messages (tool results)
+    const userMessages = mainMessages.filter(isRealUserMessage);
 
     for (let i = 0; i < userMessages.length; i++) {
       const userMsg = userMessages[i];
@@ -116,8 +120,9 @@ export class ChunkBuilder {
       // Skip the user message itself
       if (msg.uuid === userMsg.uuid) continue;
 
-      // Include assistant responses
-      if (msg.type === 'assistant') {
+      // Include assistant responses and internal user messages (tool results)
+      // This ensures tool results are part of the response, not a new chunk
+      if (isAssistantMessage(msg) || isInternalUserMessage(msg)) {
         responses.push(msg);
       }
     }
@@ -166,6 +171,7 @@ export class ChunkBuilder {
 
   /**
    * Build tool execution tracking from messages.
+   * Enhanced to use sourceToolUseID for more accurate matching.
    */
   private buildToolExecutions(messages: ParsedMessage[]): ToolExecution[] {
     const executions: ToolExecution[] = [];
@@ -185,8 +191,32 @@ export class ChunkBuilder {
     }
 
     // Second pass: match with results and build executions
+    // Try sourceToolUseID first (most accurate), then fall back to toolResults array
     for (const msg of messages) {
+      // Check if this message has a sourceToolUseID (internal user messages)
+      if (msg.sourceToolUseID) {
+        const callInfo = toolCallMap.get(msg.sourceToolUseID);
+        if (callInfo && msg.toolResults.length > 0) {
+          // Use the first tool result for this internal user message
+          const result = msg.toolResults[0];
+          executions.push({
+            toolCall: callInfo.call,
+            result,
+            startTime: callInfo.startTime,
+            endTime: msg.timestamp,
+            durationMs: msg.timestamp.getTime() - callInfo.startTime.getTime(),
+          });
+        }
+      }
+
+      // Also check toolResults array for any results not matched above
       for (const result of msg.toolResults) {
+        // Skip if already matched via sourceToolUseID
+        const alreadyMatched = executions.some(
+          (e) => e.result?.toolUseId === result.toolUseId
+        );
+        if (alreadyMatched) continue;
+
         const callInfo = toolCallMap.get(result.toolUseId);
         if (callInfo) {
           executions.push({
