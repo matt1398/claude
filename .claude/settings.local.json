@@ -25,7 +25,11 @@
       "Bash(ls:*)",
       "mcp__ide__getDiagnostics",
       "Bash(npm run check:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx tsx:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm typecheck:*)",
+      "Bash(pnpm list:*)"
     ]
   }
 }

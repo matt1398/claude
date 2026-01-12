@@ -207,9 +207,21 @@ export interface ParsedMessage {
 
 /**
  * Type guard: Check if message is a real user message (not internal/meta).
+ *
+ * A real user message must have:
+ * 1. type === 'user'
+ * 2. isMeta !== true (false or undefined)
+ * 3. content as a string (not an array)
+ *
+ * The string content check excludes system-generated messages that have
+ * array content, such as "[Request interrupted by user for tool use]".
+ * These interruption messages have `content` as an array of ContentBlock
+ * rather than a plain string, distinguishing them from genuine user input.
  */
 export function isRealUserMessage(msg: ParsedMessage): boolean {
-  return msg.type === 'user' && !msg.isMeta;
+  return msg.type === 'user'
+    && !msg.isMeta
+    && typeof msg.content === 'string';
 }
 
 /**
