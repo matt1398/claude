@@ -116,6 +116,7 @@ export interface WaterfallItem {
   type: 'main' | 'subagent'
   isParallel?: boolean
   parentId?: string       // Parent item ID for hierarchy
+  groupId?: string        // Group ID for parallel operations
 }
 
 // Waterfall chart data structure
@@ -130,8 +131,7 @@ export interface WaterfallData {
 export interface SubagentGroup {
   agents: ResolvedSubagent[]
   isParallel: boolean
-  startTime: Date
-  endTime: Date
+  groupId: string
 }
 
 // Extend Window interface to include electronAPI

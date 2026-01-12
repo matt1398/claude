@@ -91,8 +91,8 @@ export class SubagentResolver {
       // Calculate token usage
       const tokenUsage = this.calculateTokenUsage(messages);
 
-      // Try to extract type from agentId or messages
-      const type = this.extractSubagentType(agentId, messages);
+      // Try to extract type from messages
+      const type = this.extractSubagentType(messages);
 
       return {
         agentId,
@@ -135,12 +135,11 @@ export class SubagentResolver {
   }
 
   /**
-   * Extracts subagent type from agent ID or messages.
-   * @param agentId - The agent ID
+   * Extracts subagent type from messages.
    * @param messages - Messages in the subagent
    * @returns The subagent type (e.g., "explore", "plan"), or undefined
    */
-  private extractSubagentType(agentId: string, messages: Message[]): string | undefined {
+  private extractSubagentType(messages: Message[]): string | undefined {
     // Try to find type in first user or system message
     for (const msg of messages) {
       if (msg.type === 'system' || msg.type === 'user') {

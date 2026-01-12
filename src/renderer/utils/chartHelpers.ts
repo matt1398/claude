@@ -8,24 +8,6 @@ import { Chunk, WaterfallData, WaterfallItem, TokenUsage } from '../types/data';
 import { detectParallelGroups } from './parallelDetection';
 
 /**
- * Sums token usage across multiple token usage objects
- *
- * @param usages Array of token usage objects
- * @returns Combined token usage
- */
-function sumTokenUsage(usages: TokenUsage[]): TokenUsage {
-  return usages.reduce(
-    (sum, usage) => ({
-      input_tokens: sum.input_tokens + usage.input_tokens,
-      cache_read_input_tokens:
-        (sum.cache_read_input_tokens || 0) + (usage.cache_read_input_tokens || 0),
-      output_tokens: sum.output_tokens + usage.output_tokens,
-    }),
-    { input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 }
-  );
-}
-
-/**
  * Formats token usage as a display string
  *
  * @param usage Token usage object
@@ -110,11 +92,13 @@ export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
   const allTimes = items.flatMap((item) => [item.startTime, item.endTime]);
   const minTime = new Date(Math.min(...allTimes.map((t) => t.getTime())));
   const maxTime = new Date(Math.max(...allTimes.map((t) => t.getTime())));
+  const totalDuration = maxTime.getTime() - minTime.getTime();
 
   return {
     items,
     minTime,
     maxTime,
+    totalDuration,
   };
 }
 
