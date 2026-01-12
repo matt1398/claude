@@ -215,8 +215,14 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
               {showToolResults && (
                 <div className="space-y-2 bg-gray-900/30 rounded p-3">
                   {toolResults.map((result, idx) => {
-                    const hasError = result.error || result.status === 'error';
-                    const commandName = result.commandName || result.toolName || result.id;
+                    // Get error status from toolUseResult or toolResults array
+                    const hasError = result.toolUseResult?.success === false ||
+                                   result.toolResults.some(tr => tr.isError);
+
+                    // Get command/tool name from toolUseResult or toolResults
+                    const commandName = result.toolUseResult?.commandName ||
+                                      (result.toolResults.length > 0 ? result.toolResults[0].toolUseId : undefined) ||
+                                      result.sourceToolUseID;
 
                     return (
                       <div
