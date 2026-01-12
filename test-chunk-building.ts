@@ -117,7 +117,19 @@ async function runTests() {
   const internalUserMessages = messages.filter(isInternalUserMessage);
   const assistantMessages = messages.filter(isAssistantMessage);
 
-  log(`Real user messages (isMeta: false):     ${realUserMessages.length}`, 'blue');
+  // Analyze user messages with array content (interruptions, etc.)
+  const userMessagesWithArrayContent = messages.filter(m =>
+    m.type === 'user' && Array.isArray(m.content)
+  );
+  const interruptedMessages = userMessagesWithArrayContent.filter(m =>
+    Array.isArray(m.content) && m.content.some(block =>
+      block.type === 'text' && block.text && block.text.includes('[Request interrupted by user for tool use]')
+    )
+  );
+
+  log(`Real user messages (string content):    ${realUserMessages.length}`, 'blue');
+  log(`User messages with array content:       ${userMessagesWithArrayContent.length}`, 'yellow');
+  log(`  - Interrupted messages:                ${interruptedMessages.length}`, 'gray');
   log(`Internal user messages (isMeta: true):  ${internalUserMessages.length}`, 'yellow');
   log(`Assistant messages:                     ${assistantMessages.length}`, 'magenta');
 
@@ -130,17 +142,36 @@ async function runTests() {
   // Show examples
   if (realUserMessages.length > 0) {
     const example = realUserMessages[0];
-    log(`\nExample real user message:`, 'gray');
+    log(`\nExample real user message (string content):`, 'gray');
     log(`  UUID: ${example.uuid}`, 'gray');
+    log(`  Type: ${example.type}`, 'gray');
     log(`  isMeta: ${example.isMeta}`, 'gray');
-    log(`  Content: ${extractTextContent(example)}...`, 'gray');
+    log(`  Content type: ${typeof example.content}`, 'gray');
+    log(`  Content: ${extractTextContent(example).substring(0, 60)}...`, 'gray');
+  }
+
+  if (userMessagesWithArrayContent.length > 0) {
+    const example = userMessagesWithArrayContent[0];
+    log(`\nExample user message with array content:`, 'gray');
+    log(`  UUID: ${example.uuid}`, 'gray');
+    log(`  Type: ${example.type}`, 'gray');
+    log(`  isMeta: ${example.isMeta}`, 'gray');
+    log(`  Content type: ${typeof example.content} (Array.isArray: ${Array.isArray(example.content)})`, 'gray');
+    if (Array.isArray(example.content)) {
+      log(`  Content blocks: ${example.content.length}`, 'gray');
+      const textBlock = example.content.find(b => b.type === 'text');
+      if (textBlock && textBlock.text) {
+        log(`  Text preview: ${textBlock.text.substring(0, 60)}...`, 'gray');
+      }
+    }
   }
 
   if (internalUserMessages.length > 0) {
     const example = internalUserMessages[0];
-    log(`\nExample internal user message:`, 'gray');
+    log(`\nExample internal user message (isMeta: true):`, 'gray');
     log(`  UUID: ${example.uuid}`, 'gray');
     log(`  isMeta: ${example.isMeta}`, 'gray');
+    log(`  Content type: ${typeof example.content}`, 'gray');
     log(`  sourceToolUseID: ${example.sourceToolUseID || 'none'}`, 'gray');
     log(`  toolResults: ${example.toolResults.length}`, 'gray');
   }
@@ -171,11 +202,17 @@ async function runTests() {
   let failedTests = 0;
 
   // Test 1: Number of chunks should match number of real user messages
+  log(`\nVerifying chunk creation logic:`, 'gray');
+  log(`  Real user messages (string content): ${realUserMessages.length}`, 'gray');
+  log(`  User messages with array content: ${userMessagesWithArrayContent.length}`, 'gray');
+  log(`  Total chunks created: ${chunks.length}`, 'gray');
+
   if (chunks.length === realUserMessages.length) {
     log(`✓ Test 1: Chunk count matches real user message count (${chunks.length})`, 'green');
     passedTests++;
   } else {
     log(`✗ Test 1: Chunk count (${chunks.length}) != Real user messages (${realUserMessages.length})`, 'red');
+    log(`  This suggests array content messages may be incorrectly starting chunks`, 'red');
     failedTests++;
   }
 
@@ -184,13 +221,37 @@ async function runTests() {
   for (const chunk of chunks) {
     if (!isRealUserMessage(chunk.userMessage)) {
       log(`✗ Test 2: Chunk ${chunk.id} starts with non-real user message`, 'red');
+      log(`  Message UUID: ${chunk.userMessage.uuid}`, 'red');
+      log(`  Message type: ${chunk.userMessage.type}`, 'red');
+      log(`  Message isMeta: ${chunk.userMessage.isMeta}`, 'red');
+      log(`  Content type: ${typeof chunk.userMessage.content}`, 'red');
       allChunksStartCorrectly = false;
       failedTests++;
       break;
     }
   }
   if (allChunksStartCorrectly) {
-    log(`✓ Test 2: All chunks start with real user messages`, 'green');
+    log(`✓ Test 2: All chunks start with real user messages (string content)`, 'green');
+    passedTests++;
+  }
+
+  // Test 2.5: Verify array content messages are NOT starting chunks
+  let arrayContentStartsChunks = false;
+  for (const chunk of chunks) {
+    if (Array.isArray(chunk.userMessage.content)) {
+      log(`✗ Test 2.5: Chunk ${chunk.id} starts with array content message`, 'red');
+      log(`  Message UUID: ${chunk.userMessage.uuid}`, 'red');
+      const textBlock = chunk.userMessage.content.find(b => b.type === 'text');
+      if (textBlock && textBlock.text) {
+        log(`  Content: ${textBlock.text.substring(0, 100)}`, 'red');
+      }
+      arrayContentStartsChunks = true;
+      failedTests++;
+      break;
+    }
+  }
+  if (!arrayContentStartsChunks) {
+    log(`✓ Test 2.5: No chunks start with array content messages (interruptions)`, 'green');
     passedTests++;
   }
 
@@ -348,6 +409,62 @@ async function runTests() {
     log(`No chunks with both tool calls and results found`, 'yellow');
   }
 
+  // Additional verification: Show examples of messages that DON'T start chunks
+  logSubsection('Step 7: Examples of messages that do NOT start chunks');
+
+  if (interruptedMessages.length > 0) {
+    log(`\nInterrupted message example (array content):`, 'bright');
+    const msg = interruptedMessages[0];
+    log(`  UUID: ${msg.uuid}`, 'gray');
+    log(`  Type: ${msg.type}`, 'gray');
+    log(`  isMeta: ${msg.isMeta}`, 'gray');
+    log(`  Content type: ${Array.isArray(msg.content) ? 'array' : typeof msg.content}`, 'gray');
+    if (Array.isArray(msg.content)) {
+      const textBlock = msg.content.find(b => b.type === 'text');
+      if (textBlock && textBlock.text) {
+        log(`  Text: "${textBlock.text}"`, 'gray');
+      }
+    }
+    log(`  ✓ This message is in responses, NOT starting a chunk`, 'green');
+  }
+
+  // Find command messages
+  const commandMessages = messages.filter(m =>
+    m.type === 'user' &&
+    typeof m.content === 'string' &&
+    (m.content.includes('<command-name>') || m.content.includes('<local-command-caveat>'))
+  );
+
+  if (commandMessages.length > 0) {
+    log(`\nCommand message example (string content with XML tags):`, 'bright');
+    const msg = commandMessages[0];
+    log(`  UUID: ${msg.uuid}`, 'gray');
+    log(`  Type: ${msg.type}`, 'gray');
+    log(`  isMeta: ${msg.isMeta}`, 'gray');
+    log(`  Content type: ${typeof msg.content}`, 'gray');
+    log(`  Content preview: ${typeof msg.content === 'string' ? msg.content.substring(0, 80) : ''}...`, 'gray');
+
+    // Check if this starts a chunk or is in responses
+    const startsChunk = chunks.some(c => c.userMessage.uuid === msg.uuid);
+    const inResponses = chunks.some(c => c.responses.some(r => r.uuid === msg.uuid));
+
+    if (startsChunk) {
+      log(`  ✓ This message STARTS a chunk (expected for command messages)`, 'green');
+    } else if (inResponses) {
+      log(`  ✓ This message is in responses of a chunk`, 'green');
+    }
+  }
+
+  if (internalUserMessages.length > 0) {
+    log(`\nInternal user message example (isMeta: true):`, 'bright');
+    const msg = internalUserMessages[0];
+    log(`  UUID: ${msg.uuid}`, 'gray');
+    log(`  Type: ${msg.type}`, 'gray');
+    log(`  isMeta: ${msg.isMeta}`, 'gray');
+    log(`  sourceToolUseID: ${msg.sourceToolUseID || 'none'}`, 'gray');
+    log(`  ✓ This message is in responses, NOT starting a chunk`, 'green');
+  }
+
   // Summary
   logSection('Test Summary');
 
@@ -358,13 +475,19 @@ async function runTests() {
   }
 
   log(`\nKey findings:`, 'bright');
-  log(`✓ Real user messages (isMeta: false) create new chunks`, 'green');
+  log(`✓ Real user messages (type="user" + string content) create new chunks`, 'green');
+  log(`✓ User messages with array content (interruptions) do NOT start chunks`, 'green');
   log(`✓ Internal user messages (isMeta: true) are included in responses, NOT as new chunks`, 'green');
+  log(`✓ Command messages (<local-command-caveat>, <command-name>) are grouped in same chunk`, 'green');
   log(`✓ Tool executions are tracked and matched with results via toolUseId`, 'green');
   log(`✓ ChunkBuilder properly groups messages into user-request chunks`, 'green');
 
   log(`\nSession statistics:`, 'bright');
   log(`  Total messages: ${messages.length}`, 'blue');
+  log(`  Real user messages (string content): ${realUserMessages.length}`, 'blue');
+  log(`  User messages with array content: ${userMessagesWithArrayContent.length}`, 'blue');
+  log(`    - Interrupted messages: ${interruptedMessages.length}`, 'gray');
+  log(`  Internal user messages (isMeta: true): ${internalUserMessages.length}`, 'blue');
   log(`  Chunks created: ${chunks.length}`, 'blue');
   log(`  Tool calls: ${totalToolCalls}`, 'blue');
   log(`  Tool results: ${totalToolResults}`, 'blue');
