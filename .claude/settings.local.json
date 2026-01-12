@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(wc:*)",
+      "Skill(isolate-context)",
+      "Bash(npm create:*)",
+      "Bash(yes:*)",
+      "Bash(npx create-electron-vite@latest claude-viz --template react-ts)",
+      "Bash(printf:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)"
+    ]
+  }
+}
