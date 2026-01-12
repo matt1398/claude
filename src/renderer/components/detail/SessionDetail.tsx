@@ -1,6 +1,5 @@
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
-import { formatDuration } from 'date-fns';
 
 export const SessionDetail: React.FC = () => {
   const { 
@@ -63,14 +62,36 @@ export const SessionDetail: React.FC = () => {
   }
 
   if (!sessionDetail) {
-    return null;
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-400">
+          <svg
+            className="w-16 h-16 mx-auto mb-4 text-yellow-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+          <p className="text-lg mb-2">Unable to load session</p>
+          <p className="text-sm text-gray-500">
+            The session data could not be retrieved. Please try selecting another session.
+          </p>
+        </div>
+      </div>
+    );
   }
 
-  const { session, chunks, totalDuration, totalTokens } = sessionDetail;
+  const { session, chunks, metrics } = sessionDetail;
 
-  const formatTokens = (tokens: typeof totalTokens) => {
-    const total = tokens.input_tokens + tokens.output_tokens;
-    const cached = tokens.cache_read_input_tokens || 0;
+  const formatTokens = (inputTokens: number, outputTokens: number, cacheReadTokens?: number) => {
+    const total = inputTokens + outputTokens;
+    const cached = cacheReadTokens || 0;
     return `${total.toLocaleString()} tokens${cached > 0 ? ` (${cached.toLocaleString()} cached)` : ''}`;
   };
 
@@ -92,7 +113,7 @@ export const SessionDetail: React.FC = () => {
           <div className="bg-gray-800/50 rounded-lg p-3">
             <p className="text-xs text-gray-500 mb-1">Total Duration</p>
             <p className="text-lg font-semibold text-gray-200">
-              {(totalDuration / 1000).toFixed(2)}s
+              {(metrics.durationMs / 1000).toFixed(2)}s
             </p>
           </div>
           <div className="bg-gray-800/50 rounded-lg p-3">
@@ -104,7 +125,7 @@ export const SessionDetail: React.FC = () => {
           <div className="bg-gray-800/50 rounded-lg p-3">
             <p className="text-xs text-gray-500 mb-1">Token Usage</p>
             <p className="text-lg font-semibold text-gray-200">
-              {formatTokens(totalTokens)}
+              {formatTokens(metrics.inputTokens, metrics.outputTokens, metrics.cacheReadTokens)}
             </p>
           </div>
         </div>

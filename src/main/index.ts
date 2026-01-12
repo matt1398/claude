@@ -11,11 +11,10 @@
 
 import { app, BrowserWindow } from 'electron';
 import { join } from 'path';
-import * as os from 'os';
-import * as path from 'path';
 import { ProjectScanner } from './services/ProjectScanner';
 import { SessionParser } from './services/SessionParser';
 import { SubagentResolver } from './services/SubagentResolver';
+import { ChunkBuilder } from './services/ChunkBuilder';
 import { DataCache } from './services/DataCache';
 import { FileWatcher } from './services/FileWatcher';
 import { initializeIpcHandlers, removeIpcHandlers } from './ipc/handlers';
@@ -26,6 +25,7 @@ let mainWindow: BrowserWindow | null = null;
 let projectScanner: ProjectScanner;
 let sessionParser: SessionParser;
 let subagentResolver: SubagentResolver;
+let chunkBuilder: ChunkBuilder;
 let dataCache: DataCache;
 let fileWatcher: FileWatcher;
 let cleanupInterval: NodeJS.Timeout | null = null;
@@ -36,27 +36,38 @@ let cleanupInterval: NodeJS.Timeout | null = null;
 function initializeServices(): void {
   console.log('Initializing services...');
 
-  // Get projects directory path
-  const projectsPath = path.join(os.homedir(), '.claude', 'projects');
-  console.log(`Projects directory: ${projectsPath}`);
-
-  // Initialize services
-  projectScanner = new ProjectScanner(projectsPath);
+  // Initialize services (paths are set automatically from environment)
+  projectScanner = new ProjectScanner();
   sessionParser = new SessionParser(projectScanner);
-  subagentResolver = new SubagentResolver(projectScanner, sessionParser);
+  subagentResolver = new SubagentResolver(projectScanner);
+  chunkBuilder = new ChunkBuilder();
   dataCache = new DataCache(50, 10); // Max 50 sessions, 10 minute TTL
 
+  console.log(`Projects directory: ${projectScanner.getProjectsDir()}`);
+
   // Initialize IPC handlers
-  initializeIpcHandlers(projectScanner, sessionParser, subagentResolver, dataCache);
+  initializeIpcHandlers(
+    projectScanner,
+    sessionParser,
+    subagentResolver,
+    chunkBuilder,
+    dataCache
+  );
 
   // Start file watcher
-  fileWatcher = new FileWatcher(projectsPath, dataCache);
+  fileWatcher = new FileWatcher(dataCache);
   fileWatcher.start();
 
   // Forward file change events to renderer
   fileWatcher.on('file-change', (event) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('file-change', event);
+    }
+  });
+
+  fileWatcher.on('todo-change', (event) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('todo-change', event);
     }
   });
 

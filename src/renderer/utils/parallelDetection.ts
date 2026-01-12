@@ -5,7 +5,16 @@
  * Operations that start within 500ms of each other are considered parallel.
  */
 
-import { ResolvedSubagent, SubagentGroup } from '../types/data';
+import { Subagent } from '../types/data';
+
+/**
+ * Subagent group with parallel detection.
+ */
+export interface SubagentGroup {
+  agents: Subagent[];
+  isParallel: boolean;
+  groupId: string;
+}
 
 /**
  * Groups subagents that were launched in parallel
@@ -18,24 +27,24 @@ import { ResolvedSubagent, SubagentGroup } from '../types/data';
  * @param subagents Array of resolved subagent data
  * @returns Array of subagent groups with parallel detection
  */
-export function detectParallelGroups(subagents: ResolvedSubagent[]): SubagentGroup[] {
+export function detectParallelGroups(subagents: Subagent[]): SubagentGroup[] {
   if (subagents.length === 0) {
     return [];
   }
 
   // Sort by start time for proper grouping
-  const sortedSubagents = [...subagents].sort((a, b) =>
-    new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+  const sortedSubagents = [...subagents].sort(
+    (a, b) => a.startTime.getTime() - b.startTime.getTime()
   );
 
   const groups: SubagentGroup[] = [];
   const PARALLEL_THRESHOLD_MS = 500; // 500ms window for parallel detection
 
   // Group subagents by start time proximity
-  const groupMap = new Map<number, ResolvedSubagent[]>();
+  const groupMap = new Map<number, Subagent[]>();
 
-  sortedSubagents.forEach(agent => {
-    const startMs = new Date(agent.startTime).getTime();
+  sortedSubagents.forEach((agent) => {
+    const startMs = agent.startTime.getTime();
 
     // Round to 500ms bucket to group parallel operations
     const groupKey = Math.floor(startMs / PARALLEL_THRESHOLD_MS) * PARALLEL_THRESHOLD_MS;
@@ -48,7 +57,7 @@ export function detectParallelGroups(subagents: ResolvedSubagent[]): SubagentGro
 
   // Convert map to groups array with parallel detection
   let groupIndex = 0;
-  for (const [_, agents] of Array.from(groupMap.entries())) {
+  for (const [, agents] of Array.from(groupMap.entries())) {
     groups.push({
       agents,
       isParallel: agents.length > 1,

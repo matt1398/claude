@@ -4,104 +4,99 @@
  * Responsibilities:
  * - Find subagent JSONL files in {sessionId}/subagents/ directory
  * - Parse each subagent file
- * - Calculate start/end times and token usage
- * - Detect parallel execution by analyzing timestamps
- * - Link subagents to their parent chunks
+ * - Calculate start/end times and metrics
+ * - Detect parallel execution (100ms overlap threshold)
+ * - Link subagents to parent Task tool calls
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
-import { ResolvedSubagent, Message, TokenUsage, Chunk, SessionDetail } from '../../renderer/types/data';
-import { parseJsonlFile } from '../utils/jsonl';
+import { Subagent, ParsedMessage, ToolCall, SessionMetrics } from '../types/claude';
+import { parseJsonlFile, calculateMetrics } from '../utils/jsonl';
 import { ProjectScanner } from './ProjectScanner';
-import { SessionParser } from './SessionParser';
+
+/** Parallel detection window in milliseconds */
+const PARALLEL_WINDOW_MS = 100;
 
 export class SubagentResolver {
   private projectScanner: ProjectScanner;
-  private sessionParser: SessionParser;
 
-  constructor(projectScanner: ProjectScanner, sessionParser: SessionParser) {
+  constructor(projectScanner: ProjectScanner) {
     this.projectScanner = projectScanner;
-    this.sessionParser = sessionParser;
   }
 
+  // ===========================================================================
+  // Main Resolution
+  // ===========================================================================
+
   /**
-   * Resolves subagents for a session detail, linking them to chunks.
-   * @param sessionDetail - The session detail to resolve subagents for
-   * @param projectId - The encoded project directory name
-   * @returns Promise that resolves to the updated SessionDetail with subagents
+   * Resolve all subagents for a session.
    */
-  async resolveSubagents(sessionDetail: SessionDetail, projectId: string): Promise<SessionDetail> {
-    const sessionId = sessionDetail.session.id;
-    const subagentsPath = this.projectScanner.getSubagentsPath(projectId, sessionId);
+  async resolveSubagents(
+    projectId: string,
+    sessionId: string,
+    taskCalls: ToolCall[]
+  ): Promise<Subagent[]> {
+    // Get subagent files
+    const subagentFiles = await this.projectScanner.listSubagentFiles(projectId, sessionId);
 
-    // Check if subagents directory exists
-    if (!fs.existsSync(subagentsPath)) {
-      return sessionDetail;
+    if (subagentFiles.length === 0) {
+      return [];
     }
 
-    try {
-      // List all subagent files
-      const entries = fs.readdirSync(subagentsPath, { withFileTypes: true });
-      const subagentFiles = entries
-        .filter(entry => entry.isFile() && entry.name.startsWith('agent-') && entry.name.endsWith('.jsonl'))
-        .map(entry => path.join(subagentsPath, entry.name));
+    // Parse all subagent files
+    const subagents = await Promise.all(
+      subagentFiles.map((filePath) => this.parseSubagentFile(filePath))
+    );
 
-      // Parse all subagent files in parallel
-      const subagents = await Promise.all(
-        subagentFiles.map(filePath => this.parseSubagent(filePath))
-      );
+    // Filter out failed parses
+    const validSubagents = subagents.filter((s): s is Subagent => s !== null);
 
-      // Filter out any failed parses
-      const validSubagents = subagents.filter((s): s is ResolvedSubagent => s !== null);
+    // Link to Task calls
+    this.linkToTaskCalls(validSubagents, taskCalls);
 
-      // Detect parallel execution
-      this.detectParallelExecution(validSubagents);
+    // Detect parallel execution
+    this.detectParallelExecution(validSubagents);
 
-      // Link subagents to chunks
-      this.linkSubagentsToChunks(sessionDetail.chunks, validSubagents);
+    // Sort by start time
+    validSubagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
-      return sessionDetail;
-    } catch (error) {
-      console.error(`Error resolving subagents for session ${sessionId}:`, error);
-      return sessionDetail;
-    }
+    return validSubagents;
   }
 
+  // ===========================================================================
+  // Subagent Parsing
+  // ===========================================================================
+
   /**
-   * Parses a single subagent file.
-   * @param filePath - Path to the subagent JSONL file
-   * @returns Promise that resolves to a ResolvedSubagent, or null if parsing fails
+   * Parse a single subagent file.
    */
-  private async parseSubagent(filePath: string): Promise<ResolvedSubagent | null> {
+  private async parseSubagentFile(filePath: string): Promise<Subagent | null> {
     try {
-      const agentId = path.basename(filePath, '.jsonl');
       const messages = await parseJsonlFile(filePath);
 
       if (messages.length === 0) {
         return null;
       }
 
-      // Calculate start and end times
-      const timestamps = messages.map(m => new Date(m.timestamp).getTime());
-      const startTime = new Date(Math.min(...timestamps)).toISOString();
-      const endTime = new Date(Math.max(...timestamps)).toISOString();
-      const duration = Math.max(...timestamps) - Math.min(...timestamps);
+      // Extract agent ID from filename (agent-{id}.jsonl)
+      const filename = path.basename(filePath);
+      const agentId = filename.replace(/^agent-/, '').replace(/\.jsonl$/, '');
 
-      // Calculate token usage
-      const tokenUsage = this.calculateTokenUsage(messages);
+      // Calculate timing
+      const { startTime, endTime, durationMs } = this.calculateTiming(messages);
 
-      // Try to extract type from messages
-      const type = this.extractSubagentType(messages);
+      // Calculate metrics
+      const metrics = calculateMetrics(messages);
 
       return {
-        agentId,
+        id: agentId,
+        filePath,
         messages,
         startTime,
         endTime,
-        duration,
-        tokenUsage,
-        type,
+        durationMs,
+        metrics,
+        isParallel: false, // Will be set by detectParallelExecution
       };
     } catch (error) {
       console.error(`Error parsing subagent file ${filePath}:`, error);
@@ -110,103 +105,182 @@ export class SubagentResolver {
   }
 
   /**
-   * Calculates total token usage for a subagent.
-   * @param messages - Messages in the subagent
-   * @returns TokenUsage object
+   * Calculate timing from messages.
    */
-  private calculateTokenUsage(messages: Message[]): TokenUsage {
-    let inputTokens = 0;
-    let cacheReadTokens = 0;
-    let outputTokens = 0;
+  private calculateTiming(messages: ParsedMessage[]): {
+    startTime: Date;
+    endTime: Date;
+    durationMs: number;
+  } {
+    const timestamps = messages.map((m) => m.timestamp.getTime()).filter((t) => !isNaN(t));
 
-    for (const msg of messages) {
-      if (msg.message?.usage) {
-        inputTokens += msg.message.usage.input_tokens || 0;
-        cacheReadTokens += msg.message.usage.cache_read_input_tokens || 0;
-        outputTokens += msg.message.usage.output_tokens || 0;
-      }
+    if (timestamps.length === 0) {
+      const now = new Date();
+      return { startTime: now, endTime: now, durationMs: 0 };
     }
 
+    const minTime = Math.min(...timestamps);
+    const maxTime = Math.max(...timestamps);
+
     return {
-      input_tokens: inputTokens,
-      cache_read_input_tokens: cacheReadTokens,
-      output_tokens: outputTokens,
+      startTime: new Date(minTime),
+      endTime: new Date(maxTime),
+      durationMs: maxTime - minTime,
     };
   }
 
-  /**
-   * Extracts subagent type from messages.
-   * @param messages - Messages in the subagent
-   * @returns The subagent type (e.g., "explore", "plan"), or undefined
-   */
-  private extractSubagentType(messages: Message[]): string | undefined {
-    // Try to find type in first user or system message
-    for (const msg of messages) {
-      if (msg.type === 'system' || msg.type === 'user') {
-        const text = this.extractMessageText(msg);
+  // ===========================================================================
+  // Task Call Linking
+  // ===========================================================================
 
-        // Look for common patterns
-        if (text.toLowerCase().includes('explore')) return 'explore';
-        if (text.toLowerCase().includes('plan')) return 'plan';
-        if (text.toLowerCase().includes('implement')) return 'implement';
-        if (text.toLowerCase().includes('review')) return 'review';
+  /**
+   * Link subagents to their parent Task tool calls.
+   * Uses timing and Task input data to match.
+   */
+  private linkToTaskCalls(subagents: Subagent[], taskCalls: ToolCall[]): void {
+    // Build a list of Task calls with their estimated start times
+    // Since we don't have exact timing, we'll match by order and description
+
+    const unlinkedTasks = [...taskCalls];
+
+    for (const subagent of subagents) {
+      // First, try to match by subagent type from Task input
+      const matchByType = unlinkedTasks.find(
+        (tc) =>
+          tc.isTask &&
+          tc.taskSubagentType &&
+          tc.taskSubagentType.toLowerCase() === subagent.subagentType?.toLowerCase()
+      );
+
+      if (matchByType) {
+        this.applyTaskCallToSubagent(subagent, matchByType);
+        unlinkedTasks.splice(unlinkedTasks.indexOf(matchByType), 1);
+        continue;
+      }
+
+      // Otherwise, match by description similarity
+      const matchByDescription = this.findBestDescriptionMatch(subagent, unlinkedTasks);
+      if (matchByDescription) {
+        this.applyTaskCallToSubagent(subagent, matchByDescription);
+        unlinkedTasks.splice(unlinkedTasks.indexOf(matchByDescription), 1);
       }
     }
 
-    return undefined;
+    // If there are still unlinked subagents and tasks, match by order
+    const unlinkedSubagents = subagents.filter((s) => !s.parentTaskId);
+    for (let i = 0; i < Math.min(unlinkedSubagents.length, unlinkedTasks.length); i++) {
+      if (unlinkedTasks[i].isTask) {
+        this.applyTaskCallToSubagent(unlinkedSubagents[i], unlinkedTasks[i]);
+      }
+    }
   }
 
   /**
-   * Extracts text content from a message.
-   * @param message - The message to extract text from
-   * @returns Extracted text
+   * Apply Task call info to a subagent.
    */
-  private extractMessageText(message: Message): string {
-    if (!message.message) {
-      return '';
+  private applyTaskCallToSubagent(subagent: Subagent, taskCall: ToolCall): void {
+    subagent.parentTaskId = taskCall.id;
+    subagent.description = taskCall.taskDescription || subagent.description;
+    subagent.subagentType = taskCall.taskSubagentType || subagent.subagentType;
+  }
+
+  /**
+   * Find the best matching Task call by description.
+   */
+  private findBestDescriptionMatch(subagent: Subagent, taskCalls: ToolCall[]): ToolCall | null {
+    // If subagent has no identifying info, skip
+    if (!subagent.description && !subagent.subagentType) {
+      return null;
     }
 
-    const content = message.message.content;
+    // Try to match based on first user message in subagent
+    const firstUserMsg = subagent.messages.find((m) => m.type === 'user');
+    if (!firstUserMsg) return null;
 
-    if (typeof content === 'string') {
-      return content;
+    const subagentPrompt = this.getTextContent(firstUserMsg);
+    if (!subagentPrompt) return null;
+
+    // Find Task call with matching description
+    for (const task of taskCalls) {
+      if (!task.isTask) continue;
+
+      const taskDesc = task.taskDescription || '';
+      const taskPrompt = (task.input.prompt as string) || '';
+
+      // Check if the subagent prompt contains the task description/prompt
+      if (
+        (taskDesc && subagentPrompt.includes(taskDesc)) ||
+        (taskPrompt && subagentPrompt.includes(taskPrompt))
+      ) {
+        return task;
+      }
     }
 
-    if (Array.isArray(content)) {
-      const textParts: string[] = [];
-      for (const part of content) {
-        if (part.type === 'text' && part.text) {
-          textParts.push(part.text);
+    return null;
+  }
+
+  /**
+   * Get text content from a message.
+   */
+  private getTextContent(message: ParsedMessage): string {
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+
+    return message.content
+      .filter((b) => b.type === 'text' && b.text)
+      .map((b) => b.text!)
+      .join('\n');
+  }
+
+  // ===========================================================================
+  // Parallel Detection
+  // ===========================================================================
+
+  /**
+   * Detect parallel execution among subagents.
+   * Subagents with start times within PARALLEL_WINDOW_MS are marked as parallel.
+   */
+  private detectParallelExecution(subagents: Subagent[]): void {
+    if (subagents.length < 2) return;
+
+    // Sort by start time
+    const sorted = [...subagents].sort(
+      (a, b) => a.startTime.getTime() - b.startTime.getTime()
+    );
+
+    // Group by start time buckets
+    const groups: Subagent[][] = [];
+    let currentGroup: Subagent[] = [];
+    let groupStartTime = 0;
+
+    for (const agent of sorted) {
+      const startMs = agent.startTime.getTime();
+
+      if (currentGroup.length === 0) {
+        // Start new group
+        currentGroup.push(agent);
+        groupStartTime = startMs;
+      } else if (startMs - groupStartTime <= PARALLEL_WINDOW_MS) {
+        // Add to current group
+        currentGroup.push(agent);
+      } else {
+        // Finalize current group and start new one
+        if (currentGroup.length > 0) {
+          groups.push(currentGroup);
         }
+        currentGroup = [agent];
+        groupStartTime = startMs;
       }
-      return textParts.join('\n');
     }
 
-    return '';
-  }
-
-  /**
-   * Detects parallel execution among subagents.
-   * Marks subagents as parallel if they have overlapping time ranges
-   * and were invoked at approximately the same time.
-   * @param subagents - Array of resolved subagents
-   */
-  private detectParallelExecution(subagents: ResolvedSubagent[]): void {
-    // Group subagents by start time (within 500ms window)
-    const groups = new Map<number, ResolvedSubagent[]>();
-
-    for (const agent of subagents) {
-      const startMs = new Date(agent.startTime).getTime();
-      const groupKey = Math.floor(startMs / 500) * 500; // Round to 500ms bucket
-
-      if (!groups.has(groupKey)) {
-        groups.set(groupKey, []);
-      }
-      groups.get(groupKey)!.push(agent);
+    // Don't forget the last group
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
     }
 
     // Mark agents in groups with multiple members as parallel
-    for (const group of groups.values()) {
+    for (const group of groups) {
       if (group.length > 1) {
         for (const agent of group) {
           agent.isParallel = true;
@@ -215,86 +289,159 @@ export class SubagentResolver {
     }
   }
 
-  /**
-   * Links subagents to their parent chunks based on timing.
-   * A subagent belongs to a chunk if it starts within that chunk's time range.
-   * @param chunks - Array of chunks
-   * @param subagents - Array of resolved subagents
-   */
-  private linkSubagentsToChunks(chunks: Chunk[], subagents: ResolvedSubagent[]): void {
-    for (const subagent of subagents) {
-      const subagentStartTime = new Date(subagent.startTime);
+  // ===========================================================================
+  // Chunk Linking
+  // ===========================================================================
 
-      // Find the chunk that this subagent belongs to
+  /**
+   * Link subagents to chunks based on timing.
+   * A subagent belongs to the chunk whose time range contains its start time.
+   */
+  linkSubagentsToChunks(
+    chunks: Array<{ startTime: Date; endTime: Date; subagents: Subagent[] }>,
+    subagents: Subagent[]
+  ): void {
+    for (const subagent of subagents) {
+      // Find the chunk that contains this subagent's start time
       for (const chunk of chunks) {
-        // Check if subagent starts within chunk's time range
-        if (
-          subagentStartTime >= chunk.startTime &&
-          subagentStartTime <= chunk.endTime
-        ) {
+        if (subagent.startTime >= chunk.startTime && subagent.startTime <= chunk.endTime) {
           chunk.subagents.push(subagent);
-          break; // Each subagent belongs to only one chunk
+          break;
         }
       }
     }
 
-    // Sort subagents within each chunk by start time
+    // Sort subagents within each chunk
     for (const chunk of chunks) {
-      chunk.subagents.sort((a, b) =>
-        new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
-      );
+      chunk.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
     }
   }
 
   /**
-   * Links subagents to Task tool calls in assistant messages.
-   * Updates subagent descriptions based on Task inputs.
-   * @param chunks - Array of chunks
+   * Link subagents to chunks using Task call timestamps.
+   * More accurate than timing-based linking.
    */
-  linkTaskCallsToSubagents(chunks: Chunk[]): void {
+  linkSubagentsToChunksViaTaskCalls(
+    chunks: Array<{
+      startTime: Date;
+      endTime: Date;
+      subagents: Subagent[];
+      responses: ParsedMessage[];
+    }>,
+    subagents: Subagent[]
+  ): void {
     for (const chunk of chunks) {
-      // Extract all Task calls from assistant responses in this chunk
-      const taskCalls: Array<{ id: string; type?: string; description?: string; timestamp: Date }> = [];
-
+      // Get Task calls from this chunk's responses
+      const chunkTaskIds = new Set<string>();
       for (const response of chunk.responses) {
-        if (response.type === 'assistant') {
-          const calls = this.sessionParser.extractTaskCalls(response);
-          for (const call of calls) {
-            taskCalls.push({
-              ...call,
-              timestamp: new Date(response.timestamp),
-            });
+        for (const tc of response.toolCalls) {
+          if (tc.isTask) {
+            chunkTaskIds.add(tc.id);
           }
         }
       }
 
-      // Try to match subagents to Task calls by timing
-      // Assumption: subagent starts shortly after Task call
-      for (const subagent of chunk.subagents) {
-        const subagentStart = new Date(subagent.startTime);
-
-        // Find the closest Task call that came before this subagent
-        let closestCall: typeof taskCalls[0] | null = null;
-        let minTimeDiff = Infinity;
-
-        for (const call of taskCalls) {
-          if (call.timestamp <= subagentStart) {
-            const timeDiff = subagentStart.getTime() - call.timestamp.getTime();
-            if (timeDiff < minTimeDiff) {
-              minTimeDiff = timeDiff;
-              closestCall = call;
-            }
-          }
+      // Find subagents linked to these Task calls
+      for (const subagent of subagents) {
+        if (subagent.parentTaskId && chunkTaskIds.has(subagent.parentTaskId)) {
+          chunk.subagents.push(subagent);
         }
+      }
 
-        // If we found a Task call within 5 seconds, link it
-        if (closestCall && minTimeDiff < 5000) {
-          subagent.description = closestCall.description;
-          if (closestCall.type && !subagent.type) {
-            subagent.type = closestCall.type;
-          }
-        }
+      // Sort by start time
+      chunk.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    }
+  }
+
+  // ===========================================================================
+  // Utility Methods
+  // ===========================================================================
+
+  /**
+   * Get subagent by ID.
+   */
+  findSubagentById(subagents: Subagent[], id: string): Subagent | undefined {
+    return subagents.find((s) => s.id === id);
+  }
+
+  /**
+   * Get parallel subagent groups.
+   */
+  getParallelGroups(subagents: Subagent[]): Subagent[][] {
+    const parallelAgents = subagents.filter((s) => s.isParallel);
+    if (parallelAgents.length === 0) return [];
+
+    // Group by start time
+    const sorted = [...parallelAgents].sort(
+      (a, b) => a.startTime.getTime() - b.startTime.getTime()
+    );
+
+    const groups: Subagent[][] = [];
+    let currentGroup: Subagent[] = [];
+    let groupStartTime = 0;
+
+    for (const agent of sorted) {
+      const startMs = agent.startTime.getTime();
+
+      if (currentGroup.length === 0) {
+        currentGroup.push(agent);
+        groupStartTime = startMs;
+      } else if (startMs - groupStartTime <= PARALLEL_WINDOW_MS) {
+        currentGroup.push(agent);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [agent];
+        groupStartTime = startMs;
       }
     }
+
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+
+    return groups.filter((g) => g.length > 1);
+  }
+
+  /**
+   * Calculate total metrics for all subagents.
+   */
+  getTotalSubagentMetrics(subagents: Subagent[]): SessionMetrics {
+    if (subagents.length === 0) {
+      return {
+        durationMs: 0,
+        totalTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        messageCount: 0,
+      };
+    }
+
+    let totalDuration = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+    let messageCount = 0;
+
+    for (const agent of subagents) {
+      totalDuration += agent.durationMs;
+      inputTokens += agent.metrics.inputTokens;
+      outputTokens += agent.metrics.outputTokens;
+      cacheReadTokens += agent.metrics.cacheReadTokens;
+      cacheCreationTokens += agent.metrics.cacheCreationTokens;
+      messageCount += agent.metrics.messageCount;
+    }
+
+    return {
+      durationMs: totalDuration,
+      totalTokens: inputTokens + outputTokens,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      messageCount,
+    };
   }
 }

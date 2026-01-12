@@ -49,65 +49,61 @@ export const useStore = create<AppState>((set, get) => ({
     set({ projectsLoading: true, projectsError: null });
     try {
       const projects = await window.electronAPI.getProjects();
-      // Sort by last accessed (descending)
-      const sorted = projects.sort((a, b) => 
-        new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime()
+      // Sort by most recent session (descending)
+      const sorted = projects.sort((a, b) =>
+        (b.mostRecentSession || 0) - (a.mostRecentSession || 0)
       );
       set({ projects: sorted, projectsLoading: false });
     } catch (error) {
-      set({ 
+      set({
         projectsError: error instanceof Error ? error.message : 'Failed to fetch projects',
-        projectsLoading: false 
+        projectsLoading: false
       });
     }
   },
 
   // Select a project and fetch its sessions
   selectProject: (id: string) => {
-    const currentId = get().selectedProjectId;
-    if (currentId === id) return; // Already selected
-    
-    set({ 
+    console.log('[Store] selectProject called with id:', id);
+    set({
       selectedProjectId: id,
       selectedSessionId: null,
       sessionDetail: null,
       sessions: [],
       sessionsError: null
     });
-    
+    console.log('[Store] selectedProjectId set to:', id);
+
     // Fetch sessions for this project
     get().fetchSessions(id);
   },
 
   // Fetch sessions for a specific project
   fetchSessions: async (projectId: string) => {
+    console.log('[Store] fetchSessions called for project:', projectId);
     set({ sessionsLoading: true, sessionsError: null });
     try {
       const sessions = await window.electronAPI.getSessions(projectId);
-      // Sort by date (descending)
-      const sorted = sessions.sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
+      // Sort by createdAt (descending)
+      const sorted = sessions.sort((a, b) => b.createdAt - a.createdAt);
       set({ sessions: sorted, sessionsLoading: false });
+      console.log('[Store] Fetched', sessions.length, 'sessions');
     } catch (error) {
-      set({ 
+      set({
         sessionsError: error instanceof Error ? error.message : 'Failed to fetch sessions',
-        sessionsLoading: false 
+        sessionsLoading: false
       });
     }
   },
 
   // Select a session and fetch its detail
   selectSession: (id: string) => {
-    const currentId = get().selectedSessionId;
-    if (currentId === id) return; // Already selected
-    
-    set({ 
+    set({
       selectedSessionId: id,
       sessionDetail: null,
       sessionDetailError: null
     });
-    
+
     // Fetch detail for this session
     const projectId = get().selectedProjectId;
     if (projectId) {

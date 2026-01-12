@@ -9,7 +9,10 @@
       "Bash(npx create-electron-vite@latest claude-viz --template react-ts)",
       "Bash(printf:*)",
       "Bash(npm install:*)",
-      "Bash(npx tailwindcss:*)"
+      "Bash(npx tailwindcss:*)",
+      "Bash(find:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

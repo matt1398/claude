@@ -4,7 +4,7 @@
  * Transforms Chunk data into WaterfallData format for D3.js visualization
  */
 
-import { Chunk, WaterfallData, WaterfallItem, TokenUsage } from '../types/data';
+import { Chunk, WaterfallData, WaterfallItem, TokenUsage, Subagent } from '../types/data';
 import { detectParallelGroups } from './parallelDetection';
 
 /**
@@ -59,10 +59,15 @@ export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
     label: 'Main Session',
     startTime: chunk.startTime,
     endTime: chunk.endTime,
-    duration: chunk.duration,
-    tokenUsage: chunk.totalTokens,
+    durationMs: chunk.durationMs,
+    tokenUsage: {
+      input_tokens: chunk.metrics.inputTokens,
+      output_tokens: chunk.metrics.outputTokens,
+      cache_read_input_tokens: chunk.metrics.cacheReadTokens,
+    },
     level: 0,
-    type: 'main',
+    type: 'chunk',
+    isParallel: false,
   };
   items.push(mainItem);
 
@@ -71,14 +76,18 @@ export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
 
   // 3. Create waterfall items for each subagent
   groups.forEach((group) => {
-    group.agents.forEach((subagent) => {
+    group.agents.forEach((subagent: Subagent) => {
       const item: WaterfallItem = {
-        id: subagent.agentId,
-        label: subagent.description || subagent.agentId,
-        startTime: new Date(subagent.startTime),
-        endTime: new Date(subagent.endTime),
-        duration: subagent.duration,
-        tokenUsage: subagent.tokenUsage,
+        id: subagent.id,
+        label: subagent.description || subagent.subagentType || subagent.id,
+        startTime: subagent.startTime,
+        endTime: subagent.endTime,
+        durationMs: subagent.durationMs,
+        tokenUsage: {
+          input_tokens: subagent.metrics.inputTokens,
+          output_tokens: subagent.metrics.outputTokens,
+          cache_read_input_tokens: subagent.metrics.cacheReadTokens,
+        },
         level: 1, // All subagents at level 1 (indented under main)
         type: 'subagent',
         isParallel: group.isParallel,
@@ -92,26 +101,33 @@ export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
   const allTimes = items.flatMap((item) => [item.startTime, item.endTime]);
   const minTime = new Date(Math.min(...allTimes.map((t) => t.getTime())));
   const maxTime = new Date(Math.max(...allTimes.map((t) => t.getTime())));
-  const totalDuration = maxTime.getTime() - minTime.getTime();
+  const totalDurationMs = maxTime.getTime() - minTime.getTime();
 
   return {
     items,
     minTime,
     maxTime,
-    totalDuration,
+    totalDurationMs,
   };
 }
 
 /**
  * Generates a color based on item type and parallel status
  *
- * @param type Item type ('main' or 'subagent')
+ * @param type Item type
  * @param isParallel Whether this is a parallel operation
  * @returns CSS color string
  */
-export function getItemColor(type: 'main' | 'subagent', isParallel?: boolean): string {
-  if (type === 'main') {
+export function getItemColor(
+  type: 'chunk' | 'subagent' | 'tool',
+  isParallel?: boolean
+): string {
+  if (type === 'chunk') {
     return '#3b82f6'; // Blue for main session
+  }
+
+  if (type === 'tool') {
+    return '#f59e0b'; // Amber for tools
   }
 
   if (isParallel) {

@@ -17,11 +17,11 @@ function App() {
         </div>
         
         <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="flex-shrink-0">
+          <div className="flex-1 min-h-0 overflow-hidden">
             <ProjectsList />
           </div>
-          
-          <div className="flex-1 overflow-hidden border-t border-gray-800">
+
+          <div className="flex-1 border-t border-gray-800 min-h-0 overflow-hidden">
             <SessionsList />
           </div>
         </div>

@@ -3,11 +3,12 @@
  *
  * Responsibilities:
  * - Cache parsed SessionDetail objects to avoid re-parsing
- * - LRU eviction policy with max 50 sessions
+ * - LRU eviction policy with configurable max size
+ * - TTL-based expiration
  * - Provide cache invalidation for file changes
  */
 
-import { SessionDetail } from '../../renderer/types/data';
+import { SessionDetail } from '../types/claude';
 
 interface CacheEntry<T> {
   value: T;
@@ -25,9 +26,13 @@ export class DataCache {
     this.ttl = ttlMinutes * 60 * 1000;
   }
 
+  // ===========================================================================
+  // Cache Operations
+  // ===========================================================================
+
   /**
    * Gets a cached session detail.
-   * @param key - Cache key in format "projectId:sessionId"
+   * @param key - Cache key in format "projectId/sessionId"
    * @returns The cached SessionDetail, or undefined if not found or expired
    */
   get(key: string): SessionDetail | undefined {
@@ -53,7 +58,7 @@ export class DataCache {
 
   /**
    * Sets a value in the cache.
-   * @param key - Cache key in format "projectId:sessionId"
+   * @param key - Cache key in format "projectId/sessionId"
    * @param value - The SessionDetail to cache
    */
   set(key: string, value: SessionDetail): void {
@@ -80,12 +85,43 @@ export class DataCache {
     return this.get(key) !== undefined;
   }
 
+  // ===========================================================================
+  // Key Building
+  // ===========================================================================
+
+  /**
+   * Build a cache key from project and session IDs.
+   */
+  static buildKey(projectId: string, sessionId: string): string {
+    return `${projectId}/${sessionId}`;
+  }
+
+  /**
+   * Parse a cache key into project and session IDs.
+   */
+  static parseKey(key: string): { projectId: string; sessionId: string } | null {
+    const parts = key.split('/');
+    if (parts.length !== 2) return null;
+    return { projectId: parts[0], sessionId: parts[1] };
+  }
+
+  // ===========================================================================
+  // Invalidation
+  // ===========================================================================
+
   /**
    * Invalidates a specific cache entry.
    * @param key - Cache key to invalidate
    */
   invalidate(key: string): void {
     this.cache.delete(key);
+  }
+
+  /**
+   * Invalidates a cache entry by project and session IDs.
+   */
+  invalidateSession(projectId: string, sessionId: string): void {
+    this.invalidate(DataCache.buildKey(projectId, sessionId));
   }
 
   /**
@@ -96,7 +132,7 @@ export class DataCache {
     const keysToDelete: string[] = [];
 
     for (const key of this.cache.keys()) {
-      if (key.startsWith(`${projectId}:`)) {
+      if (key.startsWith(`${projectId}/`)) {
         keysToDelete.push(key);
       }
     }
@@ -113,6 +149,10 @@ export class DataCache {
     this.cache.clear();
   }
 
+  // ===========================================================================
+  // Cache Management
+  // ===========================================================================
+
   /**
    * Gets current cache size.
    * @returns Number of entries in the cache
@@ -125,10 +165,16 @@ export class DataCache {
    * Gets cache statistics.
    * @returns Object with cache stats
    */
-  stats(): { size: number; maxSize: number; keys: string[] } {
+  stats(): {
+    size: number;
+    maxSize: number;
+    ttlMinutes: number;
+    keys: string[];
+  } {
     return {
       size: this.cache.size,
       maxSize: this.maxSize,
+      ttlMinutes: this.ttl / 60000,
       keys: Array.from(this.cache.keys()),
     };
   }
@@ -137,7 +183,7 @@ export class DataCache {
    * Removes expired entries from the cache.
    * Should be called periodically to prevent memory bloat.
    */
-  cleanExpired(): void {
+  cleanExpired(): number {
     const now = Date.now();
     const keysToDelete: string[] = [];
 
@@ -154,6 +200,8 @@ export class DataCache {
     if (keysToDelete.length > 0) {
       console.log(`DataCache: Cleaned ${keysToDelete.length} expired entries`);
     }
+
+    return keysToDelete.length;
   }
 
   /**
@@ -166,5 +214,23 @@ export class DataCache {
     return setInterval(() => {
       this.cleanExpired();
     }, intervalMs);
+  }
+
+  /**
+   * Gets all cached session IDs for a project.
+   */
+  getProjectSessionIds(projectId: string): string[] {
+    const sessionIds: string[] = [];
+
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(`${projectId}/`)) {
+        const parsed = DataCache.parseKey(key);
+        if (parsed) {
+          sessionIds.push(parsed.sessionId);
+        }
+      }
+    }
+
+    return sessionIds;
   }
 }

@@ -3,56 +3,66 @@
  *
  * Responsibilities:
  * - Read project directories from ~/.claude/projects/
- * - Decode directory names to original paths
- * - Count session files for each project
- * - Determine last accessed time from file modifications
- * - Return sorted list of projects
+ * - Decode directory names to original paths (with cwd fallback)
+ * - List session files for each project
+ * - Read todo data from ~/.claude/todos/
+ * - Return sorted list of projects by recent activity
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
-import { Project } from '../../renderer/types/data';
-import { decodePath, isValidEncodedPath } from '../utils/pathDecoder';
+import { Project, Session } from '../types/claude';
+import {
+  decodePath,
+  isValidEncodedPath,
+  extractProjectName,
+  getProjectsBasePath,
+  getTodosBasePath,
+  buildSessionPath,
+  buildSubagentsPath,
+  buildTodoPath,
+  extractSessionId,
+  isAmbiguousEncoding,
+} from '../utils/pathDecoder';
+import { extractFirstUserMessage, extractCwd, countMessages } from '../utils/jsonl';
 
 export class ProjectScanner {
   private readonly projectsDir: string;
+  private readonly todosDir: string;
 
-  constructor(projectsDir?: string) {
-    // Default to ~/.claude/projects/
-    this.projectsDir = projectsDir || path.join(os.homedir(), '.claude', 'projects');
+  constructor(projectsDir?: string, todosDir?: string) {
+    this.projectsDir = projectsDir || getProjectsBasePath();
+    this.todosDir = todosDir || getTodosBasePath();
   }
+
+  // ===========================================================================
+  // Project Scanning
+  // ===========================================================================
 
   /**
    * Scans the projects directory and returns a list of all projects.
-   * @returns Promise that resolves to an array of projects, sorted by last accessed (most recent first)
+   * @returns Promise resolving to projects sorted by most recent activity
    */
   async scan(): Promise<Project[]> {
     try {
-      // Check if projects directory exists
       if (!fs.existsSync(this.projectsDir)) {
         console.warn(`Projects directory does not exist: ${this.projectsDir}`);
         return [];
       }
 
-      // Read all directories in projects folder
       const entries = fs.readdirSync(this.projectsDir, { withFileTypes: true });
 
       // Filter to only directories with valid encoding pattern
       const projectDirs = entries.filter(
-        entry => entry.isDirectory() && isValidEncodedPath(entry.name)
+        (entry) => entry.isDirectory() && isValidEncodedPath(entry.name)
       );
 
       // Process each project directory
-      const projects = await Promise.all(
-        projectDirs.map(dir => this.scanProject(dir.name))
-      );
+      const projects = await Promise.all(projectDirs.map((dir) => this.scanProject(dir.name)));
 
-      // Filter out any null results (failed scans)
+      // Filter out null results and sort by most recent
       const validProjects = projects.filter((p): p is Project => p !== null);
-
-      // Sort by last accessed (most recent first)
-      validProjects.sort((a, b) => b.lastAccessed.getTime() - a.lastAccessed.getTime());
+      validProjects.sort((a, b) => (b.mostRecentSession || 0) - (a.mostRecentSession || 0));
 
       return validProjects;
     } catch (error) {
@@ -63,48 +73,53 @@ export class ProjectScanner {
 
   /**
    * Scans a single project directory and returns project metadata.
-   * @param encodedName - The encoded directory name
-   * @returns Promise that resolves to a Project object, or null if scan fails
    */
   private async scanProject(encodedName: string): Promise<Project | null> {
     try {
       const projectPath = path.join(this.projectsDir, encodedName);
-      const decodedName = decodePath(encodedName);
-
-      // Get all files in the project directory
       const entries = fs.readdirSync(projectPath, { withFileTypes: true });
 
-      // Count .jsonl files at the root (these are sessions)
+      // Get session files (.jsonl at root level)
       const sessionFiles = entries.filter(
-        entry => entry.isFile() && entry.name.endsWith('.jsonl')
+        (entry) => entry.isFile() && entry.name.endsWith('.jsonl')
       );
 
-      const sessionCount = sessionFiles.length;
+      const sessionIds = sessionFiles.map((f) => extractSessionId(f.name));
 
-      // Find the most recent file modification time
-      let lastAccessed = new Date(0); // Default to epoch
+      // Find most recent session timestamp
+      let mostRecentSession: number | undefined;
+      let createdAt = Date.now();
 
       for (const file of sessionFiles) {
         const filePath = path.join(projectPath, file.name);
         const stats = fs.statSync(filePath);
 
-        if (stats.mtime > lastAccessed) {
-          lastAccessed = stats.mtime;
+        if (!mostRecentSession || stats.mtimeMs > mostRecentSession) {
+          mostRecentSession = stats.mtimeMs;
+        }
+        if (stats.birthtimeMs < createdAt) {
+          createdAt = stats.birthtimeMs;
         }
       }
 
-      // If no session files, use directory mtime
-      if (sessionFiles.length === 0) {
-        const stats = fs.statSync(projectPath);
-        lastAccessed = stats.mtime;
+      // Get actual project path - try cwd from first session if encoding is ambiguous
+      let actualPath = decodePath(encodedName);
+
+      if (isAmbiguousEncoding(encodedName) && sessionFiles.length > 0) {
+        const firstSessionPath = path.join(projectPath, sessionFiles[0].name);
+        const cwd = await extractCwd(firstSessionPath);
+        if (cwd) {
+          actualPath = cwd;
+        }
       }
 
       return {
         id: encodedName,
-        name: decodedName,
-        path: projectPath,
-        lastAccessed,
-        sessionCount,
+        path: actualPath,
+        name: extractProjectName(encodedName),
+        sessions: sessionIds,
+        createdAt: Math.floor(createdAt),
+        mostRecentSession: mostRecentSession ? Math.floor(mostRecentSession) : undefined,
       };
     } catch (error) {
       console.error(`Error scanning project ${encodedName}:`, error);
@@ -114,8 +129,6 @@ export class ProjectScanner {
 
   /**
    * Gets details for a specific project by ID.
-   * @param projectId - The encoded project directory name
-   * @returns Promise that resolves to a Project object, or null if not found
    */
   async getProject(projectId: string): Promise<Project | null> {
     const projectPath = path.join(this.projectsDir, projectId);
@@ -127,10 +140,141 @@ export class ProjectScanner {
     return this.scanProject(projectId);
   }
 
+  // ===========================================================================
+  // Session Listing
+  // ===========================================================================
+
   /**
-   * Lists all session files for a given project.
-   * @param projectId - The encoded project directory name
-   * @returns Promise that resolves to an array of session file paths (absolute paths)
+   * Lists all sessions for a given project with metadata.
+   */
+  async listSessions(projectId: string): Promise<Session[]> {
+    try {
+      const projectPath = path.join(this.projectsDir, projectId);
+
+      if (!fs.existsSync(projectPath)) {
+        return [];
+      }
+
+      const entries = fs.readdirSync(projectPath, { withFileTypes: true });
+      const sessionFiles = entries.filter(
+        (entry) => entry.isFile() && entry.name.endsWith('.jsonl')
+      );
+
+      // Get project path for session records
+      const decodedPath = decodePath(projectId);
+
+      const sessions = await Promise.all(
+        sessionFiles.map(async (file) => {
+          const sessionId = extractSessionId(file.name);
+          const filePath = path.join(projectPath, file.name);
+
+          return this.buildSessionMetadata(projectId, sessionId, filePath, decodedPath);
+        })
+      );
+
+      // Sort by created date (most recent first)
+      sessions.sort((a, b) => b.createdAt - a.createdAt);
+
+      return sessions;
+    } catch (error) {
+      console.error(`Error listing sessions for project ${projectId}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Build session metadata from a session file.
+   */
+  private async buildSessionMetadata(
+    projectId: string,
+    sessionId: string,
+    filePath: string,
+    projectPath: string
+  ): Promise<Session> {
+    const stats = fs.statSync(filePath);
+
+    // Extract first message for preview
+    const firstMsgData = await extractFirstUserMessage(filePath);
+
+    // Count messages
+    const messageCount = await countMessages(filePath);
+
+    // Check for subagents
+    const hasSubagents = this.hasSubagentsSync(projectId, sessionId);
+
+    // Load todo data if exists
+    const todoData = await this.loadTodoData(sessionId);
+
+    return {
+      id: sessionId,
+      projectId,
+      projectPath,
+      todoData,
+      createdAt: Math.floor(stats.birthtimeMs),
+      firstMessage: firstMsgData?.text,
+      messageTimestamp: firstMsgData?.timestamp,
+      hasSubagents,
+      messageCount,
+    };
+  }
+
+  /**
+   * Gets a single session's metadata.
+   */
+  async getSession(projectId: string, sessionId: string): Promise<Session | null> {
+    const filePath = this.getSessionPath(projectId, sessionId);
+
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    const decodedPath = decodePath(projectId);
+    return this.buildSessionMetadata(projectId, sessionId, filePath, decodedPath);
+  }
+
+  // ===========================================================================
+  // Todo Data
+  // ===========================================================================
+
+  /**
+   * Loads todo data for a session from ~/.claude/todos/{sessionId}.json
+   */
+  async loadTodoData(sessionId: string): Promise<unknown | undefined> {
+    try {
+      const todoPath = buildTodoPath(path.dirname(this.projectsDir), sessionId);
+
+      if (!fs.existsSync(todoPath)) {
+        return undefined;
+      }
+
+      const content = fs.readFileSync(todoPath, 'utf8');
+      return JSON.parse(content);
+    } catch (error) {
+      // Silently ignore todo loading errors
+      return undefined;
+    }
+  }
+
+  // ===========================================================================
+  // Path Helpers
+  // ===========================================================================
+
+  /**
+   * Gets the path to the session JSONL file.
+   */
+  getSessionPath(projectId: string, sessionId: string): string {
+    return buildSessionPath(this.projectsDir, projectId, sessionId);
+  }
+
+  /**
+   * Gets the path to the subagents directory.
+   */
+  getSubagentsPath(projectId: string, sessionId: string): string {
+    return buildSubagentsPath(this.projectsDir, projectId, sessionId);
+  }
+
+  /**
+   * Lists all session file paths for a project.
    */
   async listSessionFiles(projectId: string): Promise<string[]> {
     try {
@@ -142,52 +286,82 @@ export class ProjectScanner {
 
       const entries = fs.readdirSync(projectPath, { withFileTypes: true });
 
-      // Filter to .jsonl files only (at root level)
-      const sessionFiles = entries
-        .filter(entry => entry.isFile() && entry.name.endsWith('.jsonl'))
-        .map(entry => path.join(projectPath, entry.name));
-
-      return sessionFiles;
+      return entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith('.jsonl'))
+        .map((entry) => path.join(projectPath, entry.name));
     } catch (error) {
       console.error(`Error listing session files for project ${projectId}:`, error);
       return [];
     }
   }
 
+  // ===========================================================================
+  // Subagent Detection
+  // ===========================================================================
+
   /**
-   * Checks if a project has a subagents directory.
-   * @param projectId - The encoded project directory name
-   * @param sessionId - The session UUID
-   * @returns Promise that resolves to true if subagents directory exists
+   * Checks if a session has a subagents directory (async).
    */
   async hasSubagents(projectId: string, sessionId: string): Promise<boolean> {
-    const subagentsPath = path.join(
-      this.projectsDir,
-      projectId,
-      sessionId,
-      'subagents'
-    );
+    return this.hasSubagentsSync(projectId, sessionId);
+  }
 
+  /**
+   * Checks if a session has a subagents directory (sync).
+   */
+  hasSubagentsSync(projectId: string, sessionId: string): boolean {
+    const subagentsPath = this.getSubagentsPath(projectId, sessionId);
     return fs.existsSync(subagentsPath);
   }
 
   /**
-   * Gets the path to the session file.
-   * @param projectId - The encoded project directory name
-   * @param sessionId - The session UUID
-   * @returns The absolute path to the session JSONL file
+   * Lists all subagent files for a session.
    */
-  getSessionPath(projectId: string, sessionId: string): string {
-    return path.join(this.projectsDir, projectId, `${sessionId}.jsonl`);
+  async listSubagentFiles(projectId: string, sessionId: string): Promise<string[]> {
+    try {
+      const subagentsPath = this.getSubagentsPath(projectId, sessionId);
+
+      if (!fs.existsSync(subagentsPath)) {
+        return [];
+      }
+
+      const entries = fs.readdirSync(subagentsPath, { withFileTypes: true });
+
+      // Filter to agent-*.jsonl files
+      return entries
+        .filter(
+          (entry) =>
+            entry.isFile() && entry.name.startsWith('agent-') && entry.name.endsWith('.jsonl')
+        )
+        .map((entry) => path.join(subagentsPath, entry.name));
+    } catch (error) {
+      console.error(`Error listing subagent files for session ${sessionId}:`, error);
+      return [];
+    }
+  }
+
+  // ===========================================================================
+  // Utility Methods
+  // ===========================================================================
+
+  /**
+   * Gets the base projects directory path.
+   */
+  getProjectsDir(): string {
+    return this.projectsDir;
   }
 
   /**
-   * Gets the path to the subagents directory.
-   * @param projectId - The encoded project directory name
-   * @param sessionId - The session UUID
-   * @returns The absolute path to the subagents directory
+   * Gets the base todos directory path.
    */
-  getSubagentsPath(projectId: string, sessionId: string): string {
-    return path.join(this.projectsDir, projectId, sessionId, 'subagents');
+  getTodosDir(): string {
+    return this.todosDir;
+  }
+
+  /**
+   * Checks if the projects directory exists.
+   */
+  projectsDirExists(): boolean {
+    return fs.existsSync(this.projectsDir);
   }
 }

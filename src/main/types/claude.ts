@@ -1,18 +1,72 @@
 /**
- * Type definitions for the renderer process.
- * These types are aligned with src/main/types/claude.ts for IPC communication.
+ * Core type definitions for Claude Code file parsing.
+ * Based on opcode's architecture and Claude Code's actual JSONL format.
  */
 
 // =============================================================================
-// Electron API (exposed via preload script)
+// JSONL Entry Types (raw file format)
 // =============================================================================
 
-export interface ElectronAPI {
-  getProjects: () => Promise<Project[]>;
-  getSessions: (projectId: string) => Promise<Session[]>;
-  getSessionDetail: (projectId: string, sessionId: string) => Promise<SessionDetail | null>;
-  getSessionMetrics: (projectId: string, sessionId: string) => Promise<SessionMetrics | null>;
-  getWaterfallData: (projectId: string, sessionId: string) => Promise<WaterfallData | null>;
+/**
+ * Raw JSONL entry as stored in session files.
+ * Each line in a .jsonl file represents one entry.
+ */
+export interface JsonlEntry {
+  type?: string;
+  timestamp?: string;
+  uuid?: string;
+  parentUuid?: string | null;
+  message?: MessageData;
+  // Metadata
+  cwd?: string;
+  gitBranch?: string;
+  agentId?: string;
+  sessionId?: string;
+  isSidechain?: boolean;
+  userType?: string;
+  isMeta?: boolean;
+  // Cost tracking
+  costUsd?: number;
+}
+
+/**
+ * Message data within a JSONL entry.
+ */
+export interface MessageData {
+  role: 'user' | 'assistant' | 'system';
+  content: string | ContentBlock[];
+  usage?: TokenUsage;
+  model?: string;
+  stop_reason?: string;
+}
+
+/**
+ * Token usage statistics from Claude API response.
+ */
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+/**
+ * Content block types in assistant messages.
+ */
+export interface ContentBlock {
+  type: 'text' | 'tool_use' | 'tool_result' | 'thinking';
+  // Text block
+  text?: string;
+  // Tool use block
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+  // Tool result block
+  tool_use_id?: string;
+  content?: string | unknown[];
+  is_error?: boolean;
+  // Thinking block
+  thinking?: string;
 }
 
 // =============================================================================
@@ -20,7 +74,7 @@ export interface ElectronAPI {
 // =============================================================================
 
 /**
- * Project information from ~/.claude/projects/
+ * Project information derived from ~/.claude/projects/ directory.
  */
 export interface Project {
   /** Encoded directory name (e.g., "-Users-bskim-myproject") */
@@ -29,7 +83,7 @@ export interface Project {
   path: string;
   /** Display name (last path segment) */
   name: string;
-  /** List of session IDs */
+  /** List of session IDs (JSONL filenames without extension) */
   sessions: string[];
   /** Unix timestamp when project directory was created */
   createdAt: number;
@@ -38,16 +92,16 @@ export interface Project {
 }
 
 /**
- * Session metadata.
+ * Session metadata and summary.
  */
 export interface Session {
-  /** Session UUID */
+  /** Session UUID (JSONL filename without extension) */
   id: string;
   /** Parent project ID */
   projectId: string;
   /** Project filesystem path */
   projectPath: string;
-  /** Todo data if exists */
+  /** Todo data from ~/.claude/todos/{id}.json if exists */
   todoData?: unknown;
   /** Unix timestamp when session file was created */
   createdAt: number;
@@ -57,22 +111,8 @@ export interface Session {
   messageTimestamp?: string;
   /** Whether this session has subagents */
   hasSubagents: boolean;
-  /** Total message count */
+  /** Total message count in the session */
   messageCount: number;
-}
-
-// =============================================================================
-// Metrics Types
-// =============================================================================
-
-/**
- * Token usage statistics.
- */
-export interface TokenUsage {
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_input_tokens?: number;
-  cache_creation_input_tokens?: number;
 }
 
 /**
@@ -98,7 +138,7 @@ export interface SessionMetrics {
 }
 
 // =============================================================================
-// Message Types
+// Parsed Message Types
 // =============================================================================
 
 /**
@@ -107,22 +147,43 @@ export interface SessionMetrics {
 export type MessageType = 'user' | 'assistant' | 'system' | 'summary' | 'file-history-snapshot';
 
 /**
- * Content block types in messages.
+ * Parsed and enriched message from JSONL.
  */
-export interface ContentBlock {
-  type: 'text' | 'tool_use' | 'tool_result' | 'thinking';
-  // Text block
-  text?: string;
-  // Tool use block
-  id?: string;
-  name?: string;
-  input?: Record<string, unknown>;
-  // Tool result block
-  tool_use_id?: string;
-  content?: string | unknown[];
-  is_error?: boolean;
-  // Thinking block
-  thinking?: string;
+export interface ParsedMessage {
+  /** Unique message identifier */
+  uuid: string;
+  /** Parent message UUID for threading */
+  parentUuid: string | null;
+  /** Message type */
+  type: MessageType;
+  /** Message timestamp */
+  timestamp: Date;
+  /** Message role if present */
+  role?: string;
+  /** Message content (string or content blocks) */
+  content: ContentBlock[] | string;
+  /** Token usage for this message */
+  usage?: TokenUsage;
+  /** Model used for this response */
+  model?: string;
+  // Metadata
+  /** Current working directory when message was created */
+  cwd?: string;
+  /** Git branch context */
+  gitBranch?: string;
+  /** Agent ID for subagent messages */
+  agentId?: string;
+  /** Whether this is a sidechain message */
+  isSidechain: boolean;
+  /** Whether this is a meta message */
+  isMeta: boolean;
+  /** User type ("external" for user input) */
+  userType?: string;
+  // Extracted tool information
+  /** Tool calls made in this message */
+  toolCalls: ToolCall[];
+  /** Tool results received in this message */
+  toolResults: ToolResult[];
 }
 
 /**
@@ -153,46 +214,6 @@ export interface ToolResult {
   content: string | unknown[];
   /** Whether the tool execution errored */
   isError: boolean;
-}
-
-/**
- * Parsed message from JSONL.
- */
-export interface ParsedMessage {
-  /** Unique message identifier */
-  uuid: string;
-  /** Parent message UUID for threading */
-  parentUuid: string | null;
-  /** Message type */
-  type: MessageType;
-  /** Message timestamp */
-  timestamp: Date;
-  /** Message role if present */
-  role?: string;
-  /** Message content (string or content blocks) */
-  content: ContentBlock[] | string;
-  /** Token usage for this message */
-  usage?: TokenUsage;
-  /** Model used for this response */
-  model?: string;
-  // Metadata
-  /** Current working directory */
-  cwd?: string;
-  /** Git branch context */
-  gitBranch?: string;
-  /** Agent ID for subagent messages */
-  agentId?: string;
-  /** Whether this is a sidechain message */
-  isSidechain: boolean;
-  /** Whether this is a meta message */
-  isMeta: boolean;
-  /** User type ("external" for user input) */
-  userType?: string;
-  // Tool info
-  /** Tool calls made in this message */
-  toolCalls: ToolCall[];
-  /** Tool results received in this message */
-  toolResults: ToolResult[];
 }
 
 // =============================================================================
@@ -228,24 +249,8 @@ export interface Subagent {
 }
 
 // =============================================================================
-// Chunk Types
+// Chunk Types (for visualization)
 // =============================================================================
-
-/**
- * Tool execution with timing information.
- */
-export interface ToolExecution {
-  /** The tool call */
-  toolCall: ToolCall;
-  /** The tool result if received */
-  result?: ToolResult;
-  /** When the tool was called */
-  startTime: Date;
-  /** When the result was received */
-  endTime?: Date;
-  /** Duration in milliseconds */
-  durationMs?: number;
-}
 
 /**
  * A chunk represents one user message and all subsequent assistant responses.
@@ -273,8 +278,24 @@ export interface Chunk {
   toolExecutions: ToolExecution[];
 }
 
+/**
+ * Tool execution with timing information.
+ */
+export interface ToolExecution {
+  /** The tool call */
+  toolCall: ToolCall;
+  /** The tool result if received */
+  result?: ToolResult;
+  /** When the tool was called */
+  startTime: Date;
+  /** When the result was received */
+  endTime?: Date;
+  /** Duration in milliseconds */
+  durationMs?: number;
+}
+
 // =============================================================================
-// Session Detail
+// Session Detail (complete parsed session)
 // =============================================================================
 
 /**
@@ -346,8 +367,20 @@ export interface WaterfallData {
 }
 
 // =============================================================================
-// File Change Events
+// Utility Types
 // =============================================================================
+
+/**
+ * Path encoding/decoding result.
+ */
+export interface PathInfo {
+  /** Encoded path (directory name) */
+  encoded: string;
+  /** Decoded filesystem path */
+  decoded: string;
+  /** Display name */
+  name: string;
+}
 
 /**
  * File watching event.
@@ -359,10 +392,6 @@ export interface FileChangeEvent {
   sessionId?: string;
   isSubagent: boolean;
 }
-
-// =============================================================================
-// Utility Types
-// =============================================================================
 
 /**
  * Empty metrics constant for initialization.
@@ -386,13 +415,3 @@ export const EMPTY_TOKEN_USAGE: TokenUsage = {
   cache_read_input_tokens: 0,
   cache_creation_input_tokens: 0,
 };
-
-// =============================================================================
-// Window Type Extension
-// =============================================================================
-
-declare global {
-  interface Window {
-    electronAPI: ElectronAPI;
-  }
-}

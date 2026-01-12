@@ -5,37 +5,45 @@
  * - get-projects: List all projects
  * - get-sessions: List sessions for a project
  * - get-session-detail: Get full session detail with subagents
+ * - get-session-metrics: Get metrics for a session
+ * - get-waterfall-data: Get waterfall chart data for a session
  */
 
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
-import { Project, Session, SessionDetail } from '../../renderer/types/data';
+import {
+  Project,
+  Session,
+  SessionDetail,
+  SessionMetrics,
+  WaterfallData,
+} from '../types/claude';
 import { ProjectScanner } from '../services/ProjectScanner';
 import { SessionParser } from '../services/SessionParser';
 import { SubagentResolver } from '../services/SubagentResolver';
+import { ChunkBuilder } from '../services/ChunkBuilder';
 import { DataCache } from '../services/DataCache';
 
 // Service instances
 let projectScanner: ProjectScanner;
 let sessionParser: SessionParser;
 let subagentResolver: SubagentResolver;
+let chunkBuilder: ChunkBuilder;
 let dataCache: DataCache;
 
 /**
  * Initializes IPC handlers with service instances.
- * @param scanner - ProjectScanner instance
- * @param parser - SessionParser instance
- * @param resolver - SubagentResolver instance
- * @param cache - DataCache instance
  */
 export function initializeIpcHandlers(
   scanner: ProjectScanner,
   parser: SessionParser,
   resolver: SubagentResolver,
+  builder: ChunkBuilder,
   cache: DataCache
 ): void {
   projectScanner = scanner;
   sessionParser = parser;
   subagentResolver = resolver;
+  chunkBuilder = builder;
   dataCache = cache;
 
   registerHandlers();
@@ -45,20 +53,27 @@ export function initializeIpcHandlers(
  * Registers all IPC handlers.
  */
 function registerHandlers(): void {
-  // Get all projects
+  // Project handlers
   ipcMain.handle('get-projects', handleGetProjects);
 
-  // Get sessions for a project
+  // Session handlers
   ipcMain.handle('get-sessions', handleGetSessions);
-
-  // Get full session detail
   ipcMain.handle('get-session-detail', handleGetSessionDetail);
+  ipcMain.handle('get-session-metrics', handleGetSessionMetrics);
+
+  // Visualization handlers
+  ipcMain.handle('get-waterfall-data', handleGetWaterfallData);
+
+  console.log('IPC: Handlers registered');
 }
+
+// =============================================================================
+// Project Handlers
+// =============================================================================
 
 /**
  * Handler for 'get-projects' IPC call.
  * Lists all projects from ~/.claude/projects/
- * @returns Promise that resolves to array of projects
  */
 async function handleGetProjects(_event: IpcMainInvokeEvent): Promise<Project[]> {
   try {
@@ -72,12 +87,13 @@ async function handleGetProjects(_event: IpcMainInvokeEvent): Promise<Project[]>
   }
 }
 
+// =============================================================================
+// Session Handlers
+// =============================================================================
+
 /**
  * Handler for 'get-sessions' IPC call.
  * Lists all sessions for a given project.
- * @param _event - IPC event
- * @param projectId - The encoded project directory name
- * @returns Promise that resolves to array of sessions
  */
 async function handleGetSessions(
   _event: IpcMainInvokeEvent,
@@ -91,7 +107,7 @@ async function handleGetSessions(
       return [];
     }
 
-    const sessions = await sessionParser.listSessions(projectId);
+    const sessions = await projectScanner.listSessions(projectId);
     console.log(`IPC: Found ${sessions.length} sessions`);
     return sessions;
   } catch (error) {
@@ -104,10 +120,6 @@ async function handleGetSessions(
  * Handler for 'get-session-detail' IPC call.
  * Gets full session detail including parsed chunks and subagents.
  * Uses cache to avoid re-parsing large files.
- * @param _event - IPC event
- * @param projectId - The encoded project directory name
- * @param sessionId - The session UUID
- * @returns Promise that resolves to SessionDetail
  */
 async function handleGetSessionDetail(
   _event: IpcMainInvokeEvent,
@@ -115,14 +127,14 @@ async function handleGetSessionDetail(
   sessionId: string
 ): Promise<SessionDetail | null> {
   try {
-    console.log(`IPC: get-session-detail for ${projectId}:${sessionId}`);
+    console.log(`IPC: get-session-detail for ${projectId}/${sessionId}`);
 
     if (!projectId || !sessionId) {
       console.error('IPC: get-session-detail called with invalid parameters');
       return null;
     }
 
-    const cacheKey = `${projectId}:${sessionId}`;
+    const cacheKey = DataCache.buildKey(projectId, sessionId);
 
     // Check cache first
     let sessionDetail = dataCache.get(cacheKey);
@@ -134,29 +146,112 @@ async function handleGetSessionDetail(
 
     console.log(`IPC: Cache miss, parsing session: ${cacheKey}`);
 
-    // Parse session
-    sessionDetail = await sessionParser.parseSessionDetail(projectId, sessionId);
+    // Get session metadata
+    const session = await projectScanner.getSession(projectId, sessionId);
+    if (!session) {
+      console.error(`IPC: Session not found: ${sessionId}`);
+      return null;
+    }
+
+    // Parse session messages
+    const parsedSession = await sessionParser.parseSession(projectId, sessionId);
 
     // Resolve subagents
-    sessionDetail = await subagentResolver.resolveSubagents(sessionDetail, projectId);
+    const subagents = await subagentResolver.resolveSubagents(
+      projectId,
+      sessionId,
+      parsedSession.taskCalls
+    );
 
-    // Link Task calls to subagents
-    subagentResolver.linkTaskCallsToSubagents(sessionDetail.chunks);
+    // Build session detail with chunks
+    sessionDetail = chunkBuilder.buildSessionDetail(session, parsedSession.messages, subagents);
 
     // Cache the result
     dataCache.set(cacheKey, sessionDetail);
 
     console.log(
       `IPC: Parsed session with ${sessionDetail.chunks.length} chunks, ` +
-      `${sessionDetail.chunks.reduce((sum, c) => sum + c.subagents.length, 0)} subagents`
+        `${subagents.length} subagents`
     );
 
     return sessionDetail;
   } catch (error) {
-    console.error(`IPC: Error in get-session-detail for ${projectId}:${sessionId}:`, error);
+    console.error(`IPC: Error in get-session-detail for ${projectId}/${sessionId}:`, error);
     return null;
   }
 }
+
+/**
+ * Handler for 'get-session-metrics' IPC call.
+ * Gets metrics for a session without full detail.
+ */
+async function handleGetSessionMetrics(
+  _event: IpcMainInvokeEvent,
+  projectId: string,
+  sessionId: string
+): Promise<SessionMetrics | null> {
+  try {
+    console.log(`IPC: get-session-metrics for ${projectId}/${sessionId}`);
+
+    if (!projectId || !sessionId) {
+      return null;
+    }
+
+    // Try to get from cache first
+    const cacheKey = DataCache.buildKey(projectId, sessionId);
+    const cached = dataCache.get(cacheKey);
+
+    if (cached) {
+      return cached.metrics;
+    }
+
+    // Parse session to get metrics
+    const parsedSession = await sessionParser.parseSession(projectId, sessionId);
+    return parsedSession.metrics;
+  } catch (error) {
+    console.error(`IPC: Error in get-session-metrics for ${projectId}/${sessionId}:`, error);
+    return null;
+  }
+}
+
+// =============================================================================
+// Visualization Handlers
+// =============================================================================
+
+/**
+ * Handler for 'get-waterfall-data' IPC call.
+ * Gets waterfall chart data for a session.
+ */
+async function handleGetWaterfallData(
+  _event: IpcMainInvokeEvent,
+  projectId: string,
+  sessionId: string
+): Promise<WaterfallData | null> {
+  try {
+    console.log(`IPC: get-waterfall-data for ${projectId}/${sessionId}`);
+
+    if (!projectId || !sessionId) {
+      return null;
+    }
+
+    // Get session detail (will use cache if available)
+    const sessionDetail = await handleGetSessionDetail(_event, projectId, sessionId);
+
+    if (!sessionDetail) {
+      return null;
+    }
+
+    // Build waterfall data from chunks
+    return chunkBuilder.buildWaterfallData(sessionDetail.chunks);
+  } catch (error) {
+    console.error(`IPC: Error in get-waterfall-data for ${projectId}/${sessionId}:`, error);
+    return null;
+  }
+}
+
+// =============================================================================
+// Cleanup
+// =============================================================================
 
 /**
  * Removes all IPC handlers.
@@ -166,5 +261,7 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-projects');
   ipcMain.removeHandler('get-sessions');
   ipcMain.removeHandler('get-session-detail');
+  ipcMain.removeHandler('get-session-metrics');
+  ipcMain.removeHandler('get-waterfall-data');
   console.log('IPC: Handlers removed');
 }

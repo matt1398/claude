@@ -56,13 +56,13 @@ export const ProjectsList: React.FC = () => {
   }
 
   return (
-    <div className="divide-y divide-gray-800">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-800">
         <h2 className="text-sm font-semibold text-gray-300">Projects</h2>
         <p className="text-xs text-gray-500 mt-1">{projects.length} total</p>
       </div>
-      
-      <div className="overflow-y-auto max-h-[calc(100vh-200px)]">
+
+      <div className="flex-1 overflow-y-auto">
         {projects.map((project) => (
           <button
             key={project.id}
@@ -87,12 +87,14 @@ export const ProjectsList: React.FC = () => {
               </div>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
-                  {project.sessionCount}
+                  {project.sessions.length}
                 </span>
               </div>
             </div>
             <p className="text-xs text-gray-500 mt-2">
-              Last used {formatDistanceToNow(new Date(project.lastAccessed), { addSuffix: true })}
+              {project.mostRecentSession
+                ? `Last used ${formatDistanceToNow(new Date(project.mostRecentSession), { addSuffix: true })}`
+                : 'No recent activity'}
             </p>
           </button>
         ))}

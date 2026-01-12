@@ -107,6 +107,8 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, width, hei
       .attr('class', 'bar-group');
 
     // Bar rectangles
+    // Note: Properly typed event handlers to prevent runtime errors
+    // D3 v7+ uses (event, datum) signature for all event handlers
     bars
       .append('rect')
       .attr('class', 'bar')
@@ -120,18 +122,21 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, width, hei
       .attr('fill', (d) => getItemColor(d.type, d.isParallel))
       .attr('rx', 4) // Rounded corners
       .attr('opacity', 0.8)
-      .on('mouseover', function (event, d) {
+      .on('mouseover', function (event: MouseEvent, d: WaterfallItem) {
+        // Ensure event is valid before accessing properties
+        if (!event) return;
+
         // Highlight bar on hover
         d3.select(this).attr('opacity', 1).attr('stroke', '#1f2937').attr('stroke-width', 2);
 
-        // Show tooltip
+        // Show tooltip with safe event access
         setTooltip({
           item: d,
-          x: event.pageX,
-          y: event.pageY,
+          x: event.pageX || 0,
+          y: event.pageY || 0,
         });
       })
-      .on('mouseout', function () {
+      .on('mouseout', function (_event: MouseEvent, _d: WaterfallItem) {
         // Remove highlight
         d3.select(this).attr('opacity', 0.8).attr('stroke', 'none');
 
@@ -147,8 +152,8 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, width, hei
       .attr('y', (d) => yScale(d.id)! + yScale.bandwidth() / 2)
       .attr('text-anchor', 'end')
       .attr('dominant-baseline', 'middle')
-      .style('font-size', (d) => (d.type === 'main' ? '14px' : '12px'))
-      .style('font-weight', (d) => (d.type === 'main' ? '600' : '400'))
+      .style('font-size', (d) => (d.type === 'chunk' ? '14px' : '12px'))
+      .style('font-weight', (d) => (d.type === 'chunk' ? '600' : '400'))
       .style('fill', '#374151')
       .text((d) => {
         // Truncate long labels
@@ -168,7 +173,7 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, width, hei
       .attr('dominant-baseline', 'middle')
       .style('font-size', '11px')
       .style('fill', '#6b7280')
-      .text((d) => `${formatDuration(d.duration)} | ${formatTokens(d.tokenUsage)}`);
+      .text((d) => `${formatDuration(d.durationMs)} | ${formatTokens(d.tokenUsage)}`);
 
     // Parallel indicator brackets
     const parallelGroups = new Map<string, WaterfallItem[]>();
@@ -244,12 +249,12 @@ export const WaterfallChart: React.FC<WaterfallChartProps> = ({ data, width, hei
           <div style={{ fontWeight: '600', marginBottom: '8px' }}>{tooltip.item.label}</div>
           <div style={{ marginBottom: '4px' }}>
             <span style={{ opacity: 0.7 }}>Type:</span>{' '}
-            {tooltip.item.type === 'main' ? 'Main Session' : 'Subagent'}
+            {tooltip.item.type === 'chunk' ? 'Main Session' : tooltip.item.type === 'tool' ? 'Tool' : 'Subagent'}
             {tooltip.item.isParallel && ' (Parallel)'}
           </div>
           <div style={{ marginBottom: '4px' }}>
             <span style={{ opacity: 0.7 }}>Duration:</span>{' '}
-            {formatDuration(tooltip.item.duration)}
+            {formatDuration(tooltip.item.durationMs)}
           </div>
           <div style={{ marginBottom: '4px' }}>
             <span style={{ opacity: 0.7 }}>Tokens:</span> {formatTokens(tooltip.item.tokenUsage)}
