@@ -157,6 +157,48 @@ export function linkToolCallsToResults(steps: SemanticStep[]): Map<string, Linke
 }
 
 /**
+ * Build a human-readable summary of display items.
+ *
+ * Strategy:
+ * 1. Count items by type (thinking, tool, output, subagent)
+ * 2. Format as "X thinking, Y tool calls, Z messages, N subagents"
+ * 3. Skip counts that are zero
+ * 4. Return formatted string
+ *
+ * @param items - Display items to summarize
+ * @returns Formatted summary string
+ */
+export function buildSummary(items: AIGroupDisplayItem[]): string {
+  const counts = {
+    thinking: 0,
+    tool: 0,
+    output: 0,
+    subagent: 0,
+  };
+
+  for (const item of items) {
+    counts[item.type]++;
+  }
+
+  const parts: string[] = [];
+
+  if (counts.thinking > 0) {
+    parts.push(`${counts.thinking} thinking`);
+  }
+  if (counts.tool > 0) {
+    parts.push(`${counts.tool} tool ${counts.tool === 1 ? 'call' : 'calls'}`);
+  }
+  if (counts.output > 0) {
+    parts.push(`${counts.output} ${counts.output === 1 ? 'message' : 'messages'}`);
+  }
+  if (counts.subagent > 0) {
+    parts.push(`${counts.subagent} ${counts.subagent === 1 ? 'subagent' : 'subagents'}`);
+  }
+
+  return parts.length > 0 ? parts.join(', ') : 'No items';
+}
+
+/**
  * Build a flat chronological list of display items for the AI Group.
  *
  * Strategy:
@@ -280,11 +322,13 @@ export function enhanceAIGroup(aiGroup: AIGroup): EnhancedAIGroup {
   const lastOutput = findLastOutput(aiGroup.steps);
   const linkedTools = linkToolCallsToResults(aiGroup.steps);
   const displayItems = buildDisplayItems(aiGroup.steps, lastOutput, aiGroup.subagents);
+  const summary = buildSummary(displayItems);
 
   return {
     ...aiGroup,
     lastOutput,
     linkedTools,
     displayItems,
+    itemsSummary: summary,
   };
 }

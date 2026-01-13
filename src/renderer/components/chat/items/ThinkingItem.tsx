@@ -6,6 +6,7 @@ interface ThinkingItemProps {
   step: SemanticStep;
   preview: string;
   onClick: () => void;
+  isExpanded: boolean;
 }
 
 /**
@@ -20,7 +21,9 @@ function formatTimestamp(date: Date): string {
   });
 }
 
-export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onClick }) => {
+export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onClick, isExpanded }) => {
+  const fullContent = step.content.thinkingText || preview;
+
   return (
     <div
       onClick={onClick}
@@ -34,9 +37,15 @@ export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onCli
             {formatTimestamp(step.startTime)}
           </span>
         </div>
-        <p className="text-xs text-purple-200/80 line-clamp-2 italic">
-          {preview}
-        </p>
+        {isExpanded ? (
+          <div className="text-xs text-purple-200/90 whitespace-pre-wrap">
+            {fullContent}
+          </div>
+        ) : (
+          <p className="text-xs text-purple-200/80 line-clamp-2 italic">
+            {preview}
+          </p>
+        )}
       </div>
     </div>
   );

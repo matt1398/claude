@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface CollapsedToggleProps {
-  /** Number of items to show in the summary */
-  itemCount: number;
+  /** Number of items to show in the summary (deprecated, use summary prop) */
+  itemCount?: number;
+  /** Human-readable summary of items (e.g., "2 thinking, 4 tool calls, 3 subagents") */
+  summary?: string;
   /** Whether the list is currently expanded */
   isExpanded: boolean;
   /** Callback when toggle is clicked */
@@ -10,17 +12,26 @@ interface CollapsedToggleProps {
 }
 
 /**
- * CollapsedToggle shows a button that displays item count and expansion state.
+ * CollapsedToggle shows a button that displays item summary and expansion state.
  *
  * Features:
- * - Shows "N items" or "1 item" text
+ * - Shows item summary or fallback to "N items" text
  * - Chevron icon indicating expanded/collapsed state
  * - Collapsed by default (controlled by parent)
  * - Clicking toggles the expansion
  */
-export function CollapsedToggle({ itemCount, isExpanded, onToggle }: CollapsedToggleProps) {
+export function CollapsedToggle({ itemCount, summary, isExpanded, onToggle }: CollapsedToggleProps) {
   const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
-  const itemText = itemCount === 1 ? '1 item' : `${itemCount} items`;
+
+  // Use summary if provided, otherwise fallback to itemCount
+  let displayText: string;
+  if (summary) {
+    displayText = summary;
+  } else if (itemCount !== undefined) {
+    displayText = itemCount === 1 ? '1 item' : `${itemCount} items`;
+  } else {
+    displayText = 'No items';
+  }
 
   return (
     <button
@@ -29,7 +40,7 @@ export function CollapsedToggle({ itemCount, isExpanded, onToggle }: CollapsedTo
     >
       <ChevronIcon className="w-4 h-4 text-claude-dark-text-secondary flex-shrink-0" />
       <span className="text-sm text-claude-dark-text-secondary">
-        {itemText}
+        {displayText}
       </span>
     </button>
   );

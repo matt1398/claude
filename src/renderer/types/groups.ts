@@ -193,6 +193,8 @@ export interface EnhancedAIGroup extends AIGroup {
   displayItems: AIGroupDisplayItem[];
   /** Map of tool call IDs to linked tool items */
   linkedTools: Map<string, LinkedToolItem>;
+  /** Human-readable summary of items (e.g., "2 thinking, 4 tool calls, 3 subagents") */
+  itemsSummary: string;
 }
 
 /**

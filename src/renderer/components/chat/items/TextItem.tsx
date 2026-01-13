@@ -6,6 +6,7 @@ interface TextItemProps {
   step: SemanticStep;
   preview: string;
   onClick: () => void;
+  isExpanded: boolean;
 }
 
 /**
@@ -20,7 +21,9 @@ function formatTimestamp(date: Date): string {
   });
 }
 
-export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick }) => {
+export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isExpanded }) => {
+  const fullContent = step.content.outputText || preview;
+
   return (
     <div
       onClick={onClick}
@@ -34,9 +37,15 @@ export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick }) =>
             {formatTimestamp(step.startTime)}
           </span>
         </div>
-        <p className="text-xs text-claude-dark-text line-clamp-2">
-          {preview}
-        </p>
+        {isExpanded ? (
+          <div className="text-xs text-claude-dark-text whitespace-pre-wrap">
+            {fullContent}
+          </div>
+        ) : (
+          <p className="text-xs text-claude-dark-text line-clamp-2">
+            {preview}
+          </p>
+        )}
       </div>
     </div>
   );

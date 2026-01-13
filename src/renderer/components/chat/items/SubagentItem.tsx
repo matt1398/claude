@@ -6,6 +6,7 @@ interface SubagentItemProps {
   step: SemanticStep;
   subagent: Subagent;
   onClick: () => void;
+  isExpanded: boolean;
 }
 
 /**
@@ -50,10 +51,12 @@ function formatTimestamp(date: Date): string {
   });
 }
 
-export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick }) => {
+export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick, isExpanded }) => {
   const description = subagent.description || step.content.subagentDescription || 'Subagent';
   const subagentType = subagent.subagentType || 'Task';
   const totalTokens = subagent.metrics.totalTokens || 0;
+  const inputTokens = subagent.metrics.inputTokens || 0;
+  const outputTokens = subagent.metrics.outputTokens || 0;
 
   return (
     <div
@@ -84,37 +87,91 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
           </span>
         </div>
 
-        {/* Description */}
-        <p className="text-xs text-blue-200/80 mb-2 line-clamp-2">
-          {description}
-        </p>
-
-        {/* Metrics row */}
-        <div className="flex items-center gap-3 text-xs text-blue-200/70">
-          {/* Duration */}
-          <div className="inline-flex items-center gap-1">
-            <Clock size={12} />
-            <span>{formatDuration(subagent.durationMs)}</span>
-          </div>
-
-          {/* Tokens */}
-          <div className="inline-flex items-center gap-1">
-            <Code size={12} />
-            <span>{formatTokens(totalTokens)} tokens</span>
-          </div>
-
-          {/* Message count */}
-          {subagent.messages.length > 0 && (
-            <div className="text-xs opacity-70">
-              {subagent.messages.length} msg{subagent.messages.length !== 1 ? 's' : ''}
+        {isExpanded ? (
+          <>
+            {/* Full description */}
+            <div className="text-xs text-blue-200/90 mb-3 whitespace-pre-wrap">
+              {description}
             </div>
-          )}
-        </div>
 
-        {/* Click indicator */}
-        <div className="text-xs text-blue-400/70 mt-1 italic">
-          Click to view details
-        </div>
+            {/* Detailed metrics */}
+            <div className="space-y-2 text-xs text-blue-200/80">
+              {/* Duration */}
+              <div className="flex items-center gap-2">
+                <Clock size={14} className="text-blue-400" />
+                <span className="font-medium">Duration:</span>
+                <span>{formatDuration(subagent.durationMs)}</span>
+              </div>
+
+              {/* Tokens breakdown */}
+              <div className="flex items-center gap-2">
+                <Code size={14} className="text-blue-400" />
+                <span className="font-medium">Tokens:</span>
+                <span>{formatTokens(totalTokens)} total</span>
+                <span className="opacity-70">
+                  ({formatTokens(inputTokens)} in / {formatTokens(outputTokens)} out)
+                </span>
+              </div>
+
+              {/* Messages */}
+              {subagent.messages.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <Code size={14} className="text-blue-400" />
+                  <span className="font-medium">Messages:</span>
+                  <span>{subagent.messages.length} message{subagent.messages.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
+
+              {/* Timing */}
+              <div className="opacity-70 space-y-0.5 mt-2">
+                <div>Started: {formatTimestamp(subagent.startTime)}</div>
+                <div>Ended: {formatTimestamp(subagent.endTime)}</div>
+              </div>
+
+              {/* Subagent ID */}
+              {subagent.id && (
+                <div className="opacity-70 mt-2">
+                  <span className="font-medium">ID:</span>{' '}
+                  <code className="text-xs bg-black/30 px-1 py-0.5 rounded">{subagent.id}</code>
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Description */}
+            <p className="text-xs text-blue-200/80 mb-2 line-clamp-2">
+              {description}
+            </p>
+
+            {/* Metrics row */}
+            <div className="flex items-center gap-3 text-xs text-blue-200/70">
+              {/* Duration */}
+              <div className="inline-flex items-center gap-1">
+                <Clock size={12} />
+                <span>{formatDuration(subagent.durationMs)}</span>
+              </div>
+
+              {/* Tokens */}
+              <div className="inline-flex items-center gap-1">
+                <Code size={12} />
+                <span>{formatTokens(totalTokens)} tokens</span>
+              </div>
+
+              {/* Message count */}
+              {subagent.messages.length > 0 && (
+                <div className="text-xs opacity-70">
+                  {subagent.messages.length} msg{subagent.messages.length !== 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
+
+            {/* Click indicator */}
+            <div className="text-xs text-blue-400/70 mt-1 italic">
+              Click to view details
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

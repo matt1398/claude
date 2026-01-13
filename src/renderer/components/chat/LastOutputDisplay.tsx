@@ -1,5 +1,7 @@
 import { CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AIGroupLastOutput } from '../../types/groups';
 
 interface LastOutputDisplayProps {
@@ -30,10 +32,10 @@ export function LastOutputDisplay({ lastOutput }: LastOutputDisplayProps) {
         <div className="text-xs text-claude-dark-text-secondary mb-2">
           {format(timestamp, 'h:mm:ss a')}
         </div>
-        <div className="prose prose-sm prose-invert max-w-none">
-          <div className="text-claude-dark-text whitespace-pre-wrap break-words">
+        <div className="prose prose-invert prose-sm max-w-none">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {lastOutput.text}
-          </div>
+          </ReactMarkdown>
         </div>
       </div>
     );

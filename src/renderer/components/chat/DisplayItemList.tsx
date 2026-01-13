@@ -7,7 +7,8 @@ import { SubagentItem } from './items/SubagentItem';
 
 interface DisplayItemListProps {
   items: AIGroupDisplayItem[];
-  onItemClick: (item: AIGroupDisplayItem) => void;
+  onItemClick: (itemId: string) => void;
+  expandedItemId: string | null;
 }
 
 /**
@@ -31,7 +32,7 @@ function truncateText(text: string, maxLength: number): string {
  *
  * The list is completely flat with no nested toggles or hierarchies.
  */
-export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick }) => {
+export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemId }) => {
   if (!items || items.length === 0) {
     return (
       <div className="px-3 py-2 text-sm text-claude-dark-text-secondary italic">
@@ -43,13 +44,12 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
   return (
     <div className="space-y-2">
       {items.map((item, index) => {
-        const handleClick = () => onItemClick(item);
-
         switch (item.type) {
           case 'thinking': {
             // Create a synthetic SemanticStep for ThinkingItem
+            const itemId = `thinking-${index}`;
             const thinkingStep = {
-              id: `thinking-${index}`,
+              id: itemId,
               type: 'thinking' as const,
               startTime: item.timestamp,
               endTime: item.timestamp,
@@ -61,21 +61,25 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
             };
 
             const preview = truncateText(item.content, 150);
+            const handleClick = () => onItemClick(itemId);
+            const isExpanded = expandedItemId === itemId;
 
             return (
               <ThinkingItem
-                key={`thinking-${index}`}
+                key={itemId}
                 step={thinkingStep}
                 preview={preview}
                 onClick={handleClick}
+                isExpanded={isExpanded}
               />
             );
           }
 
           case 'output': {
             // Create a synthetic SemanticStep for TextItem
+            const itemId = `output-${index}`;
             const textStep = {
-              id: `output-${index}`,
+              id: itemId,
               type: 'output' as const,
               startTime: item.timestamp,
               endTime: item.timestamp,
@@ -87,31 +91,40 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
             };
 
             const preview = truncateText(item.content, 150);
+            const handleClick = () => onItemClick(itemId);
+            const isExpanded = expandedItemId === itemId;
 
             return (
               <TextItem
-                key={`output-${index}`}
+                key={itemId}
                 step={textStep}
                 preview={preview}
                 onClick={handleClick}
+                isExpanded={isExpanded}
               />
             );
           }
 
           case 'tool': {
+            const itemId = `tool-${item.tool.id}`;
+            const handleClick = () => onItemClick(itemId);
+            const isExpanded = expandedItemId === itemId;
+
             return (
               <LinkedToolItem
-                key={`tool-${item.tool.id}`}
+                key={itemId}
                 linkedTool={item.tool}
                 onClick={handleClick}
+                isExpanded={isExpanded}
               />
             );
           }
 
           case 'subagent': {
             // Create a synthetic SemanticStep for SubagentItem
+            const itemId = `subagent-${item.subagent.id}`;
             const subagentStep = {
-              id: item.subagent.id,
+              id: itemId,
               type: 'subagent' as const,
               startTime: item.subagent.startTime,
               endTime: item.subagent.endTime,
@@ -124,12 +137,16 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
               context: 'main' as const,
             };
 
+            const handleClick = () => onItemClick(itemId);
+            const isExpanded = expandedItemId === itemId;
+
             return (
               <SubagentItem
-                key={`subagent-${item.subagent.id}`}
+                key={itemId}
                 step={subagentStep}
                 subagent={item.subagent}
                 onClick={handleClick}
+                isExpanded={isExpanded}
               />
             );
           }

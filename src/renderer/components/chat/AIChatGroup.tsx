@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import type { AIGroup, EnhancedAIGroup, AIGroupDisplayItem } from '../../types/groups';
+import type { AIGroup, EnhancedAIGroup } from '../../types/groups';
 import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
 import { CollapsedToggle } from './CollapsedToggle';
 import { DisplayItemList } from './DisplayItemList';
-import { DetailPopover } from './DetailPopover';
 
 interface AIChatGroupProps {
   aiGroup: AIGroup;
@@ -16,9 +15,8 @@ interface AIChatGroupProps {
  * Features:
  * - LastOutputDisplay: Always visible last output (text or tool result)
  * - CollapsedToggle: Toggle for collapsed content (if hasToggleContent)
- * - DisplayItemList: Shows items when expanded
- * - DetailPopover: Shows full details when an item is clicked
- * - Manages local expansion state and active detail item
+ * - DisplayItemList: Shows items when expanded with inline expansion support
+ * - Manages local expansion state and inline item expansion
  */
 export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
   // Enhance the AI group to get display-ready data
@@ -27,20 +25,15 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
   // Local state for expansion
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Local state for detail popover
-  const [activeDetailItem, setActiveDetailItem] = useState<AIGroupDisplayItem | null>(null);
+  // Local state for inline item expansion
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   // Determine if there's content to toggle
   const hasToggleContent = enhanced.displayItems.length > 0;
 
-  // Handle item click - show detail popover
-  const handleItemClick = (item: AIGroupDisplayItem) => {
-    setActiveDetailItem(item);
-  };
-
-  // Close detail popover
-  const handleCloseDetail = () => {
-    setActiveDetailItem(null);
+  // Handle item click - toggle inline expansion
+  const handleItemClick = (itemId: string) => {
+    setExpandedItemId(prev => prev === itemId ? null : itemId);
   };
 
   return (
@@ -54,7 +47,7 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
       {hasToggleContent && (
         <div className="mb-2">
           <CollapsedToggle
-            itemCount={enhanced.displayItems.length}
+            summary={enhanced.itemsSummary}
             isExpanded={isExpanded}
             onToggle={() => setIsExpanded(!isExpanded)}
           />
@@ -64,12 +57,13 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
       {/* Display Items - show when expanded */}
       {hasToggleContent && isExpanded && (
         <div>
-          <DisplayItemList items={enhanced.displayItems} onItemClick={handleItemClick} />
+          <DisplayItemList
+            items={enhanced.displayItems}
+            onItemClick={handleItemClick}
+            expandedItemId={expandedItemId}
+          />
         </div>
       )}
-
-      {/* Detail Popover - show when item is clicked */}
-      <DetailPopover item={activeDetailItem} onClose={handleCloseDetail} />
     </div>
   );
 }

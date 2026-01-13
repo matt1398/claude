@@ -5,6 +5,7 @@ import type { LinkedToolItem as LinkedToolItemType } from '../../../types/groups
 interface LinkedToolItemProps {
   linkedTool: LinkedToolItemType;
   onClick: () => void;
+  isExpanded: boolean;
 }
 
 /**
@@ -75,9 +76,17 @@ function getStatusIcon(linkedTool: LinkedToolItemType) {
   return <CheckCircle size={12} className="text-green-400" />;
 }
 
-export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick }) => {
+export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick, isExpanded }) => {
   const styles = getToolStyles(linkedTool);
   const statusIcon = getStatusIcon(linkedTool);
+
+  // Format input for display
+  const formatInput = (input: unknown): string => {
+    if (typeof input === 'string') {
+      return input;
+    }
+    return JSON.stringify(input, null, 2);
+  };
 
   return (
     <div
@@ -97,25 +106,77 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
           </span>
         </div>
 
-        {/* Input preview */}
-        <div className="text-xs opacity-80 mb-1">
-          <span className="font-medium">Input:</span>{' '}
-          <span className="font-mono">{linkedTool.inputPreview}</span>
-        </div>
+        {isExpanded ? (
+          <>
+            {/* Full input */}
+            <div className="text-xs mb-3">
+              <span className="font-medium block mb-1">Input:</span>
+              <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs">
+                {formatInput(linkedTool.input)}
+              </pre>
+            </div>
 
-        {/* Output preview (if available) */}
-        {linkedTool.outputPreview && (
-          <div className="text-xs opacity-80">
-            <span className="font-medium">Output:</span>{' '}
-            <span className="font-mono line-clamp-1">{linkedTool.outputPreview}</span>
-          </div>
-        )}
+            {/* Full output */}
+            {!linkedTool.isOrphaned && linkedTool.result && (
+              <div className="text-xs mb-2">
+                <span className="font-medium block mb-1">Output:</span>
+                {linkedTool.result.isError ? (
+                  <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs text-red-300">
+                    {typeof linkedTool.result.content === 'string'
+                      ? linkedTool.result.content
+                      : JSON.stringify(linkedTool.result.content, null, 2)}
+                  </pre>
+                ) : typeof linkedTool.result.content === 'string' ? (
+                  <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs whitespace-pre-wrap">
+                    {linkedTool.result.content}
+                  </pre>
+                ) : (
+                  <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs">
+                    {JSON.stringify(linkedTool.result.content, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
 
-        {/* Orphaned indicator */}
-        {linkedTool.isOrphaned && (
-          <div className="text-xs opacity-60 mt-1 italic">
-            No result received
-          </div>
+            {/* Timing info */}
+            <div className="text-xs opacity-70 space-y-0.5">
+              <div>Started: {linkedTool.startTime.toLocaleTimeString()}</div>
+              {linkedTool.endTime && (
+                <div>Completed: {linkedTool.endTime.toLocaleTimeString()}</div>
+              )}
+              <div>Duration: {formatDuration(linkedTool.durationMs)}</div>
+            </div>
+
+            {/* Orphaned indicator */}
+            {linkedTool.isOrphaned && (
+              <div className="text-xs opacity-60 mt-2 italic">
+                No result received
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Input preview */}
+            <div className="text-xs opacity-80 mb-1">
+              <span className="font-medium">Input:</span>{' '}
+              <span className="font-mono">{linkedTool.inputPreview}</span>
+            </div>
+
+            {/* Output preview (if available) */}
+            {linkedTool.outputPreview && (
+              <div className="text-xs opacity-80">
+                <span className="font-medium">Output:</span>{' '}
+                <span className="font-mono line-clamp-1">{linkedTool.outputPreview}</span>
+              </div>
+            )}
+
+            {/* Orphaned indicator */}
+            {linkedTool.isOrphaned && (
+              <div className="text-xs opacity-60 mt-1 italic">
+                No result received
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
