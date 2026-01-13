@@ -13,6 +13,7 @@ export interface ElectronAPI {
   getSessionDetail: (projectId: string, sessionId: string) => Promise<SessionDetail | null>;
   getSessionMetrics: (projectId: string, sessionId: string) => Promise<SessionMetrics | null>;
   getWaterfallData: (projectId: string, sessionId: string) => Promise<WaterfallData | null>;
+  getSubagentDetail: (projectId: string, sessionId: string, subagentId: string) => Promise<SubagentDetail | null>;
 }
 
 // =============================================================================
@@ -372,6 +373,32 @@ export interface SemanticStep {
   /** Context (main agent vs subagent) */
   context: 'main' | 'subagent';
   agentId?: string;
+
+  /** Source message UUID (for grouping steps by assistant message) */
+  sourceMessageId?: string;
+}
+
+/**
+ * Semantic step group for collapsible visualization.
+ * Groups multiple micro-steps by their source assistant message.
+ */
+export interface SemanticStepGroup {
+  /** Unique group ID */
+  id: string;
+  /** Display label (e.g., "Assistant Response", "Tool: Read") */
+  label: string;
+  /** Steps in this group */
+  steps: SemanticStep[];
+  /** true if multiple steps grouped, false if standalone */
+  isGrouped: boolean;
+  /** Assistant message UUID if grouped */
+  sourceMessageId?: string;
+  /** Earliest step start */
+  startTime: Date;
+  /** Latest step end */
+  endTime: Date;
+  /** Sum of all step durations */
+  totalDuration: number;
 }
 
 /**
@@ -380,6 +407,8 @@ export interface SemanticStep {
 export interface EnhancedChunk extends Chunk {
   /** Semantic steps extracted from messages */
   semanticSteps: SemanticStep[];
+  /** Semantic steps grouped for collapsible UI */
+  semanticStepGroups?: SemanticStepGroup[];
   /** Raw messages for debug sidebar */
   rawMessages: ParsedMessage[];
 }
@@ -402,6 +431,34 @@ export interface SessionDetail {
   subagents: Subagent[];
   /** Aggregated metrics for the entire session */
   metrics: SessionMetrics;
+}
+
+/**
+ * Detailed subagent information for drill-down modal.
+ * Contains parsed execution data for a specific subagent.
+ */
+export interface SubagentDetail {
+  /** Agent ID */
+  id: string;
+  /** Task description */
+  description: string;
+  /** Subagent's chunks with semantic breakdown */
+  chunks: EnhancedChunk[];
+  /** Semantic step groups for visualization */
+  semanticStepGroups?: SemanticStepGroup[];
+  /** Start time */
+  startTime: Date;
+  /** End time */
+  endTime: Date;
+  /** Duration in milliseconds */
+  duration: number;
+  /** Token and message metrics */
+  metrics: {
+    inputTokens: number;
+    outputTokens: number;
+    thinkingTokens: number;
+    messageCount: number;
+  };
 }
 
 // =============================================================================

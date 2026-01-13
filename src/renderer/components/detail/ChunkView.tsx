@@ -1,20 +1,29 @@
 import { useState } from 'react';
-import { Chunk, ContentBlock, EnhancedChunk, SemanticStep } from '../../types/data';
+import { Chunk, ContentBlock, EnhancedChunk, SemanticStep, SemanticStepGroup } from '../../types/data';
 import { GanttTask } from '../../types/gantt';
 import { GanttChart } from './GanttChart';
 import { SemanticStepView } from './SemanticStepView';
+import { SemanticStepGroupView } from './SemanticStepGroupView';
 import { DebugSidebar } from './DebugSidebar';
 
 interface ChunkViewProps {
   chunk: Chunk | EnhancedChunk;
   index: number;
   onDebugClick?: (data: any, title: string) => void;
+  onSubagentClick?: (subagentId: string, description: string) => void;
 }
 
-export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick }) => {
+export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick, onSubagentClick }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showToolResults, setShowToolResults] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
+    // Start with all groups collapsed by default
+    if (isEnhancedChunk(chunk) && chunk.semanticStepGroups) {
+      return new Set(chunk.semanticStepGroups.map(g => g.id));
+    }
+    return new Set();
+  });
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugData, setDebugData] = useState<{ data: unknown; title: string } | null>(null);
 
@@ -69,6 +78,31 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
       }
       return next;
     });
+  };
+
+  // Toggle group collapse
+  const toggleGroup = (groupId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
+  // Collapse all groups
+  const collapseAll = () => {
+    if (isEnhancedChunk(chunk) && chunk.semanticStepGroups) {
+      setCollapsedGroups(new Set(chunk.semanticStepGroups.map(g => g.id)));
+    }
+  };
+
+  // Expand all groups
+  const expandAll = () => {
+    setCollapsedGroups(new Set());
   };
 
   // Handle debug selection
@@ -166,14 +200,32 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
         <div className="px-4 py-4 bg-gray-900/30 space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-xs text-gray-400">Execution Timeline</div>
-            <button
-              onClick={() => {
-                handleDebugSelect(chunk.rawMessages, `Chunk ${index + 1} Raw Messages`);
-              }}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              Debug JSON
-            </button>
+            <div className="flex items-center gap-2">
+              {chunk.semanticStepGroups && chunk.semanticStepGroups.length > 1 && (
+                <>
+                  <button
+                    onClick={collapseAll}
+                    className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    Collapse All
+                  </button>
+                  <button
+                    onClick={expandAll}
+                    className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    Expand All
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => {
+                  handleDebugSelect(chunk.rawMessages, `Chunk ${index + 1} Raw Messages`);
+                }}
+                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Debug JSON
+              </button>
+            </div>
           </div>
 
           {/* Gantt Chart Overview */}
@@ -181,25 +233,55 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
             <div className="text-xs font-medium text-gray-300 mb-3">Overview</div>
             <GanttChart
               tasks={toGanttTasks(chunk.semanticSteps)}
-              height={Math.max(200, chunk.semanticSteps.length * 40)}
+              height={Math.max(200, (chunk.semanticStepGroups?.length || chunk.semanticSteps.length) * 40)}
+              groups={chunk.semanticStepGroups}
+              collapsedGroups={collapsedGroups}
             />
           </div>
 
-          {/* Semantic Steps Detail */}
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-gray-300 mb-2">
-              Execution Steps ({chunk.semanticSteps.length})
+          {/* Semantic Steps Detail - Use groups if available */}
+          {chunk.semanticStepGroups && chunk.semanticStepGroups.length > 0 ? (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-gray-300 mb-2">
+                Execution Groups ({chunk.semanticStepGroups.length})
+              </div>
+              {chunk.semanticStepGroups.map((group) => (
+                <SemanticStepGroupView
+                  key={group.id}
+                  group={group}
+                  isCollapsed={collapsedGroups.has(group.id)}
+                  onToggle={() => toggleGroup(group.id)}
+                >
+                  {group.steps.map((step) => (
+                    <SemanticStepView
+                      key={step.id}
+                      step={step}
+                      isExpanded={expandedSteps.has(step.id)}
+                      onToggle={() => toggleStep(step.id)}
+                      onSelect={() => handleDebugSelect(step, `Step: ${getStepLabel(step)}`)}
+                      onSubagentClick={onSubagentClick}
+                    />
+                  ))}
+                </SemanticStepGroupView>
+              ))}
             </div>
-            {chunk.semanticSteps.map((step) => (
-              <SemanticStepView
-                key={step.id}
-                step={step}
-                isExpanded={expandedSteps.has(step.id)}
-                onToggle={() => toggleStep(step.id)}
-                onSelect={() => handleDebugSelect(step, `Step: ${getStepLabel(step)}`)}
-              />
-            ))}
-          </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-gray-300 mb-2">
+                Execution Steps ({chunk.semanticSteps.length})
+              </div>
+              {chunk.semanticSteps.map((step) => (
+                <SemanticStepView
+                  key={step.id}
+                  step={step}
+                  isExpanded={expandedSteps.has(step.id)}
+                  onToggle={() => toggleStep(step.id)}
+                  onSelect={() => handleDebugSelect(step, `Step: ${getStepLabel(step)}`)}
+                  onSubagentClick={onSubagentClick}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ) : hasSubagents ? (
         <div className="px-4 py-4 bg-gray-900/30">

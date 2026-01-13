@@ -25,6 +25,8 @@ import {
   isTriggerMessage,
   SemanticStep,
   EnhancedChunk,
+  ContentBlock,
+  SemanticStepGroup,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
 
@@ -115,6 +117,7 @@ export class ChunkBuilder {
     // Extract semantic steps for each chunk (now that subagents are linked)
     for (const chunk of chunks) {
       chunk.semanticSteps = this.extractSemanticSteps(chunk);
+      chunk.semanticStepGroups = this.buildSemanticStepGroups(chunk.semanticSteps);
     }
 
     return chunks;
@@ -295,12 +298,138 @@ export class ChunkBuilder {
   }
 
   /**
+   * Check if a tool_use block is a Task tool call.
+   * Task tools spawn async subagents, so we filter them to avoid duplication.
+   */
+  private isTaskToolCall(block: ContentBlock): boolean {
+    return block.type === 'tool_use' && block.name === 'Task';
+  }
+
+  /**
+   * Build semantic step groups from steps.
+   * Groups steps by their source assistant message for collapsible UI.
+   */
+  private buildSemanticStepGroups(steps: SemanticStep[]): SemanticStepGroup[] {
+    const groups: SemanticStepGroup[] = [];
+    let groupIdCounter = 0;
+
+    // Group steps by assistant message or standalone type
+    const stepsByGroup = new Map<string | null, SemanticStep[]>();
+
+    for (const step of steps) {
+      const messageId = this.extractMessageIdFromStep(step);
+      const existingSteps = stepsByGroup.get(messageId) || [];
+      existingSteps.push(step);
+      stepsByGroup.set(messageId, existingSteps);
+    }
+
+    // Build groups
+    for (const [messageId, groupSteps] of stepsByGroup) {
+      const startTime = groupSteps[0].startTime;
+      const endTimes = groupSteps
+        .map(s => s.endTime || new Date(s.startTime.getTime() + s.durationMs))
+        .map(d => d.getTime());
+      const endTime = new Date(Math.max(...endTimes));
+      const totalDuration = groupSteps.reduce((sum, s) => sum + s.durationMs, 0);
+
+      groups.push({
+        id: `group-${++groupIdCounter}`,
+        label: this.buildGroupLabel(groupSteps, messageId || undefined),
+        steps: groupSteps,
+        isGrouped: messageId !== null && groupSteps.length > 1,
+        sourceMessageId: messageId || undefined,
+        startTime,
+        endTime,
+        totalDuration,
+      });
+    }
+
+    // Sort by startTime
+    return groups.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+  }
+
+  /**
+   * Extract the assistant message ID from a step, or null if standalone.
+   * Steps from the same assistant message share the message UUID.
+   * Subagents, tool results, and interruptions are standalone (null).
+   */
+  private extractMessageIdFromStep(step: SemanticStep): string | null {
+    // Use sourceMessageId if available
+    if (step.sourceMessageId) {
+      return step.sourceMessageId;
+    }
+
+    // Standalone steps (not grouped)
+    if (step.type === 'subagent') return null;
+    if (step.type === 'tool_result') return null;
+    if (step.type === 'interruption') return null;
+    if (step.type === 'tool_call') return null; // Tool calls are standalone
+
+    return null;
+  }
+
+  /**
+   * Build a descriptive label for a group.
+   */
+  private buildGroupLabel(steps: SemanticStep[], messageId?: string): string {
+    if (steps.length === 1) {
+      const step = steps[0];
+      switch (step.type) {
+        case 'thinking':
+          return 'Thinking';
+        case 'tool_call':
+          return `Tool: ${step.content.toolName || 'Unknown'}`;
+        case 'tool_result':
+          return `Result: ${step.content.isError ? '❌' : '✓'}`;
+        case 'subagent':
+          return step.content.subagentDescription || 'Subagent';
+        case 'output':
+          return 'Output';
+        case 'interruption':
+          return 'Interruption';
+      }
+    }
+
+    // Multiple steps grouped together
+    const hasThinking = steps.some(s => s.type === 'thinking');
+    const hasOutput = steps.some(s => s.type === 'output');
+    const toolCalls = steps.filter(s => s.type === 'tool_call');
+
+    if (toolCalls.length > 0) {
+      return `Tools (${toolCalls.length})`;
+    }
+    if (hasThinking && hasOutput) {
+      return 'Assistant Response';
+    }
+    if (hasThinking) {
+      return 'Thinking';
+    }
+    if (hasOutput) {
+      return 'Output';
+    }
+
+    return `Response (${steps.length} steps)`;
+  }
+
+  /**
    * Extract semantic steps from chunk messages.
    * Semantic steps represent logical units of work within responses.
+   *
+   * Note: Task tool_use blocks are filtered when corresponding subagents exist,
+   * since the Task call and subagent represent the same execution. Orphaned Task
+   * calls (without subagents) are kept as fallback.
    */
   private extractSemanticSteps(chunk: Chunk): SemanticStep[] {
     const steps: SemanticStep[] = [];
     let stepIdCounter = 0;
+
+    // Build set of Task IDs that have corresponding subagents
+    // This prevents duplicate entries for Task calls that spawned subagents
+    const taskIdsWithSubagents = new Set<string>(
+      chunk.subagents
+        .filter((s) => s.parentTaskId)
+        .map((s) => s.parentTaskId!)
+    );
 
     // Get all messages for this chunk (user message + responses)
     const chunkMessages = [chunk.userMessage, ...chunk.responses];
@@ -320,22 +449,30 @@ export class ChunkBuilder {
               content: { thinkingText: block.thinking },
               context: msg.agentId ? 'subagent' : 'main',
               agentId: msg.agentId,
+              sourceMessageId: msg.uuid,
             });
           }
 
           if (block.type === 'tool_use' && block.id && block.name) {
-            steps.push({
-              id: block.id,
-              type: 'tool_call',
-              startTime: new Date(msg.timestamp),
-              durationMs: 0,
-              content: {
-                toolName: block.name,
-                toolInput: block.input,
-              },
-              context: msg.agentId ? 'subagent' : 'main',
-              agentId: msg.agentId,
-            });
+            // Filter out Task tool calls that have corresponding subagents
+            // Keep orphaned Task calls as fallback
+            const isTaskWithSubagent = this.isTaskToolCall(block) && taskIdsWithSubagents.has(block.id);
+
+            if (!isTaskWithSubagent) {
+              steps.push({
+                id: block.id,
+                type: 'tool_call',
+                startTime: new Date(msg.timestamp),
+                durationMs: 0,
+                content: {
+                  toolName: block.name,
+                  toolInput: block.input,
+                },
+                context: msg.agentId ? 'subagent' : 'main',
+                agentId: msg.agentId,
+                sourceMessageId: msg.uuid,
+              });
+            }
           }
 
           if (block.type === 'text' && block.text) {
@@ -347,6 +484,7 @@ export class ChunkBuilder {
               content: { outputText: block.text },
               context: msg.agentId ? 'subagent' : 'main',
               agentId: msg.agentId,
+              sourceMessageId: msg.uuid,
             });
           }
         }
@@ -617,5 +755,120 @@ export class ChunkBuilder {
    */
   findChunkBySubagentId(chunks: (Chunk | EnhancedChunk)[], subagentId: string): Chunk | EnhancedChunk | undefined {
     return chunks.find((c) => c.subagents.some((s) => s.id === subagentId));
+  }
+
+  // ===========================================================================
+  // Subagent Detail Building (for drill-down)
+  // ===========================================================================
+
+  /**
+   * Build detailed information for a specific subagent.
+   * Used for drill-down modal to show subagent's internal execution.
+   *
+   * @param projectId - Project ID
+   * @param sessionId - Parent session ID
+   * @param subagentId - Subagent ID to load
+   * @param sessionParser - SessionParser instance for parsing subagent file
+   * @param subagentResolver - SubagentResolver instance for nested subagents
+   * @returns SubagentDetail or null if not found
+   */
+  async buildSubagentDetail(
+    projectId: string,
+    sessionId: string,
+    subagentId: string,
+    sessionParser: import('./SessionParser').SessionParser,
+    subagentResolver: import('./SubagentResolver').SubagentResolver
+  ): Promise<import('../types/claude').SubagentDetail | null> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const os = await import('os');
+
+      // Construct path to subagent JSONL file
+      const claudeDir = path.join(os.homedir(), '.claude', 'projects');
+      const subagentPath = path.join(
+        claudeDir,
+        projectId,
+        'subagents',
+        `agent-${subagentId}.jsonl`
+      );
+
+      // Check if file exists
+      try {
+        await fs.access(subagentPath);
+      } catch {
+        console.warn(`Subagent file not found: ${subagentPath}`);
+        return null;
+      }
+
+      // Parse subagent JSONL file
+      const parsedSession = await sessionParser.parseSessionFile(subagentPath);
+
+      // Resolve nested subagents within this subagent
+      const nestedSubagents = await subagentResolver.resolveSubagents(
+        projectId,
+        subagentId, // Use subagentId as sessionId for nested resolution
+        parsedSession.taskCalls
+      );
+
+      // Build chunks with semantic steps
+      const chunks = this.buildChunks(parsedSession.messages, nestedSubagents);
+
+      // Extract description (try to get from first user message)
+      let description = 'Subagent';
+      if (parsedSession.messages.length > 0) {
+        const firstUserMsg = parsedSession.messages.find(m => m.type === 'user' && typeof m.content === 'string');
+        if (firstUserMsg && typeof firstUserMsg.content === 'string') {
+          description = firstUserMsg.content.substring(0, 100);
+          if (firstUserMsg.content.length > 100) {
+            description += '...';
+          }
+        }
+      }
+
+      // Calculate timing
+      const times = parsedSession.messages.map(m => m.timestamp.getTime());
+      const startTime = new Date(Math.min(...times));
+      const endTime = new Date(Math.max(...times));
+      const duration = endTime.getTime() - startTime.getTime();
+
+      // Calculate thinking tokens
+      let thinkingTokens = 0;
+      for (const msg of parsedSession.messages) {
+        if (msg.type === 'assistant' && Array.isArray(msg.content)) {
+          for (const block of msg.content) {
+            if (block.type === 'thinking' && block.thinking) {
+              // Rough estimate: ~4 chars per token
+              thinkingTokens += Math.ceil(block.thinking.length / 4);
+            }
+          }
+        }
+      }
+
+      // Build semantic step groups from all chunks
+      const allSemanticSteps = chunks.flatMap(c => c.semanticSteps);
+      const semanticStepGroups = allSemanticSteps.length > 0
+        ? this.buildSemanticStepGroups(allSemanticSteps)
+        : undefined;
+
+      return {
+        id: subagentId,
+        description,
+        chunks,
+        semanticStepGroups,
+        startTime,
+        endTime,
+        duration,
+        metrics: {
+          inputTokens: parsedSession.metrics.inputTokens,
+          outputTokens: parsedSession.metrics.outputTokens,
+          thinkingTokens,
+          messageCount: parsedSession.metrics.messageCount,
+        },
+      };
+    } catch (error) {
+      console.error(`Error building subagent detail for ${subagentId}:`, error);
+      return null;
+    }
   }
 }

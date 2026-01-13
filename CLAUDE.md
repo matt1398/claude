@@ -188,6 +188,40 @@ isInternalUserMessage(msg)  // isMeta: true, array content
 isAssistantMessage(msg)     // type: "assistant"
 ```
 
+### Task/Subagent Relationship
+
+Task tool calls spawn async subagents that execute in separate sessions. To avoid duplicate entries in the Gantt chart, we filter out Task tool_use blocks when extracting semantic steps:
+
+```typescript
+// Task tool call in main session
+{
+  type: "tool_use",
+  name: "Task",
+  id: "toolu_abc123",
+  input: {
+    prompt: "Implement feature X",
+    subagentType: "Explore"
+  }
+}
+
+// Spawns subagent file: agent-abc123.jsonl
+// Subagent metadata
+{
+  id: "abc123",
+  parentTaskId: "toolu_abc123",  // Links back to Task call
+  description: "Implement feature X",
+  subagentType: "Explore"
+}
+```
+
+**Filtering Logic:**
+1. When extracting semantic steps, build a set of Task IDs that have corresponding subagents: `taskIdsWithSubagents`
+2. Filter out tool_use blocks where `name === 'Task'` AND the tool ID exists in `taskIdsWithSubagents`
+3. Keep orphaned Task calls (without matching subagents) as fallback to ensure visibility
+4. Add subagents as separate semantic steps with their full execution context
+
+This ensures the Gantt chart shows only the subagent execution, not duplicate Task + Subagent entries for the same work.
+
 ## Naming Conventions
 
 | Category | Convention | Example |

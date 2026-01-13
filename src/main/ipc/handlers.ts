@@ -16,6 +16,7 @@ import {
   SessionDetail,
   SessionMetrics,
   WaterfallData,
+  SubagentDetail,
 } from '../types/claude';
 import { ProjectScanner } from '../services/ProjectScanner';
 import { SessionParser } from '../services/SessionParser';
@@ -63,6 +64,9 @@ function registerHandlers(): void {
 
   // Visualization handlers
   ipcMain.handle('get-waterfall-data', handleGetWaterfallData);
+
+  // Subagent handlers
+  ipcMain.handle('get-subagent-detail', handleGetSubagentDetail);
 
   console.log('IPC: Handlers registered');
 }
@@ -250,6 +254,70 @@ async function handleGetWaterfallData(
 }
 
 // =============================================================================
+// Subagent Handlers (for drill-down)
+// =============================================================================
+
+/**
+ * Handler for 'get-subagent-detail' IPC call.
+ * Gets detailed information for a specific subagent for drill-down modal.
+ */
+async function handleGetSubagentDetail(
+  _event: IpcMainInvokeEvent,
+  projectId: string,
+  sessionId: string,
+  subagentId: string
+): Promise<SubagentDetail | null> {
+  try {
+    console.log(`IPC: get-subagent-detail for ${projectId}/${sessionId}/subagent-${subagentId}`);
+
+    if (!projectId || !sessionId || !subagentId) {
+      console.error('IPC: get-subagent-detail called with invalid parameters');
+      return null;
+    }
+
+    const cacheKey = `subagent-${projectId}-${subagentId}`;
+
+    // Check cache first (cast to correct type)
+    let subagentDetail = dataCache.get(cacheKey) as SubagentDetail | undefined;
+
+    if (subagentDetail) {
+      console.log(`IPC: Serving subagent from cache: ${cacheKey}`);
+      return subagentDetail;
+    }
+
+    console.log(`IPC: Cache miss, parsing subagent: ${cacheKey}`);
+
+    // Build subagent detail
+    const builtDetail = await chunkBuilder.buildSubagentDetail(
+      projectId,
+      sessionId,
+      subagentId,
+      sessionParser,
+      subagentResolver
+    );
+
+    if (!builtDetail) {
+      console.error(`IPC: Subagent not found: ${subagentId}`);
+      return null;
+    }
+
+    subagentDetail = builtDetail;
+
+    // Cache the result (cast to any for storage)
+    dataCache.set(cacheKey, subagentDetail as any);
+
+    console.log(
+      `IPC: Parsed subagent with ${subagentDetail.chunks.length} chunks`
+    );
+
+    return subagentDetail;
+  } catch (error) {
+    console.error(`IPC: Error in get-subagent-detail for ${subagentId}:`, error);
+    return null;
+  }
+}
+
+// =============================================================================
 // Cleanup
 // =============================================================================
 
@@ -263,5 +331,6 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-session-detail');
   ipcMain.removeHandler('get-session-metrics');
   ipcMain.removeHandler('get-waterfall-data');
+  ipcMain.removeHandler('get-subagent-detail');
   console.log('IPC: Handlers removed');
 }

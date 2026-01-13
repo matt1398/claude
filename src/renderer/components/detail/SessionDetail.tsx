@@ -2,17 +2,27 @@ import { useState } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
 import { DebugSidebar } from './DebugSidebar';
+import { SubagentDetailModal } from './SubagentDetailModal';
 
 export const SessionDetail: React.FC = () => {
   const {
     sessionDetail,
     selectedSessionId,
+    selectedProjectId,
     sessionDetailLoading,
-    sessionDetailError
+    sessionDetailError,
+    drillDownSubagent
   } = useStore();
 
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugData, setDebugData] = useState<{ data: any; title: string } | null>(null);
+
+  // Handler for subagent drill-down
+  const handleSubagentClick = (subagentId: string, description: string) => {
+    if (selectedProjectId && selectedSessionId) {
+      drillDownSubagent(selectedProjectId, selectedSessionId, subagentId, description);
+    }
+  };
 
   if (!selectedSessionId) {
     return (
@@ -152,6 +162,7 @@ export const SessionDetail: React.FC = () => {
               setDebugData({ data, title });
               setDebugOpen(true);
             }}
+            onSubagentClick={handleSubagentClick}
           />
         ))}
       </div>
@@ -162,6 +173,9 @@ export const SessionDetail: React.FC = () => {
         selectedData={debugData?.data}
         title={debugData?.title || 'Raw Data'}
       />
+
+      {/* Subagent Drill-Down Modal */}
+      <SubagentDetailModal />
     </div>
   );
 };

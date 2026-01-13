@@ -6,13 +6,15 @@ interface SemanticStepViewProps {
   isExpanded: boolean;
   onToggle: () => void;
   onSelect: () => void; // For debug sidebar
+  onSubagentClick?: (subagentId: string, description: string) => void; // For drill-down
 }
 
 export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
   step,
   isExpanded,
   onToggle,
-  onSelect
+  onSelect,
+  onSubagentClick
 }) => {
   const icons: Record<SemanticStep['type'], string> = {
     thinking: '🧠',
@@ -32,11 +34,27 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
     interruption: 'bg-red-900/40 text-red-300',
   };
 
+  // Determine if this is a clickable subagent step
+  const isClickableSubagent = step.type === 'subagent' && onSubagentClick && step.content.subagentId;
+
   return (
-    <div className={`rounded-lg border border-gray-700 ${colors[step.type]}`}>
+    <div className={`rounded-lg border border-gray-700 ${colors[step.type]} ${isClickableSubagent ? 'cursor-pointer' : ''}`}>
       <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2 hover:opacity-80 transition-opacity"
+        onClick={() => {
+          if (isClickableSubagent) {
+            // If it's a clickable subagent, trigger drill-down
+            onSubagentClick(
+              step.content.subagentId!,
+              step.content.subagentDescription || 'Subagent'
+            );
+          } else {
+            // Otherwise, toggle expansion
+            onToggle();
+          }
+        }}
+        className={`w-full flex items-center justify-between px-3 py-2 transition-opacity ${
+          isClickableSubagent ? 'hover:bg-green-900/20' : 'hover:opacity-80'
+        }`}
       >
         <div className="flex items-center gap-2">
           <span>{icons[step.type]}</span>
@@ -45,6 +63,11 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
             <code className="text-xs bg-gray-800 px-1 rounded">
               {step.content.toolName}
             </code>
+          )}
+          {isClickableSubagent && (
+            <span className="text-xs text-green-400" title="Click to drill down">
+              🔍 Click to view
+            </span>
           )}
         </div>
         <div className="flex items-center gap-3 text-xs text-gray-400">

@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { Project, Session, SessionDetail } from '../types/data';
+import { Project, Session, SessionDetail, SubagentDetail } from '../types/data';
+
+interface BreadcrumbItem {
+  id: string;
+  description: string;
+}
 
 interface AppState {
   // Projects state
@@ -19,6 +24,12 @@ interface AppState {
   sessionDetailLoading: boolean;
   sessionDetailError: string | null;
 
+  // Subagent drill-down state
+  drillDownStack: BreadcrumbItem[];
+  currentSubagentDetail: SubagentDetail | null;
+  subagentDetailLoading: boolean;
+  subagentDetailError: string | null;
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -26,6 +37,11 @@ interface AppState {
   selectSession: (id: string) => void;
   fetchSessionDetail: (projectId: string, sessionId: string) => Promise<void>;
   clearSelection: () => void;
+
+  // Drill-down actions
+  drillDownSubagent: (projectId: string, sessionId: string, subagentId: string, description: string) => Promise<void>;
+  navigateToBreadcrumb: (index: number) => void;
+  closeSubagentModal: () => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -43,6 +59,11 @@ export const useStore = create<AppState>((set, get) => ({
   sessionDetail: null,
   sessionDetailLoading: false,
   sessionDetailError: null,
+
+  drillDownStack: [],
+  currentSubagentDetail: null,
+  subagentDetailLoading: false,
+  subagentDetailError: null,
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -132,6 +153,102 @@ export const useStore = create<AppState>((set, get) => ({
       selectedSessionId: null,
       sessions: [],
       sessionDetail: null
+    });
+  },
+
+  // Drill down into a subagent
+  drillDownSubagent: async (projectId: string, sessionId: string, subagentId: string, description: string) => {
+    set({ subagentDetailLoading: true, subagentDetailError: null });
+    try {
+      const detail = await window.electronAPI.getSubagentDetail(projectId, sessionId, subagentId);
+
+      if (!detail) {
+        set({
+          subagentDetailError: 'Failed to load subagent details',
+          subagentDetailLoading: false
+        });
+        return;
+      }
+
+      // Add to breadcrumb stack
+      const currentStack = get().drillDownStack;
+      set({
+        drillDownStack: [...currentStack, { id: subagentId, description }],
+        currentSubagentDetail: detail,
+        subagentDetailLoading: false
+      });
+    } catch (error) {
+      set({
+        subagentDetailError: error instanceof Error ? error.message : 'Failed to load subagent',
+        subagentDetailLoading: false
+      });
+    }
+  },
+
+  // Navigate to a specific breadcrumb (pop stack to that level)
+  navigateToBreadcrumb: (index: number) => {
+    const state = get();
+
+    // If navigating to index 0 or negative, close modal
+    if (index <= 0) {
+      set({
+        drillDownStack: [],
+        currentSubagentDetail: null,
+        subagentDetailError: null
+      });
+      return;
+    }
+
+    // Pop stack to the specified index
+    const newStack = state.drillDownStack.slice(0, index);
+
+    if (newStack.length === 0) {
+      set({
+        drillDownStack: [],
+        currentSubagentDetail: null,
+        subagentDetailError: null
+      });
+      return;
+    }
+
+    // Reload detail for the target level
+    const targetItem = newStack[newStack.length - 1];
+    const projectId = state.selectedProjectId;
+    const sessionId = state.selectedSessionId;
+
+    if (!projectId || !sessionId) return;
+
+    set({ subagentDetailLoading: true, subagentDetailError: null });
+
+    window.electronAPI.getSubagentDetail(projectId, sessionId, targetItem.id)
+      .then(detail => {
+        if (detail) {
+          set({
+            drillDownStack: newStack,
+            currentSubagentDetail: detail,
+            subagentDetailLoading: false
+          });
+        } else {
+          set({
+            subagentDetailError: 'Failed to load subagent details',
+            subagentDetailLoading: false
+          });
+        }
+      })
+      .catch(error => {
+        set({
+          subagentDetailError: error instanceof Error ? error.message : 'Failed to load subagent',
+          subagentDetailLoading: false
+        });
+      });
+  },
+
+  // Close the subagent modal
+  closeSubagentModal: () => {
+    set({
+      drillDownStack: [],
+      currentSubagentDetail: null,
+      subagentDetailError: null
     });
   }
 }));

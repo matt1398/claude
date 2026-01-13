@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test:chunks": "tsx test-chunk-building.ts",
     "test:semantic": "tsx test-semantic-steps.ts",
-    "test:noise": "tsx test-noise-filtering.ts"
+    "test:noise": "tsx test-noise-filtering.ts",
+    "test:task-filtering": "tsx test-task-filtering.ts"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.10.8",

@@ -33,7 +33,8 @@
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs",
       "WebSearch",
-      "Bash(tsx -e:*)"
+      "Bash(tsx -e:*)",
+      "Bash(timeout 5 npm run dev:*)"
     ]
   }
 }

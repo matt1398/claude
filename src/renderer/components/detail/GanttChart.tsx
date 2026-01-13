@@ -5,7 +5,7 @@ import { Bar } from '@visx/shape';
 import { AxisBottom } from '@visx/axis';
 import { useTooltip, TooltipWithBounds } from '@visx/tooltip';
 import { ParentSize } from '@visx/responsive';
-import type { SemanticStepType } from '../../types/data';
+import type { SemanticStepType, SemanticStepGroup } from '../../types/data';
 import type { GanttTask } from '../../types/gantt';
 
 const STEP_COLORS: Record<SemanticStepType, string> = {
@@ -21,16 +21,40 @@ interface GanttChartProps {
   tasks: GanttTask[];
   onTaskClick?: (task: GanttTask) => void;
   height?: number;
+  groups?: SemanticStepGroup[];
+  collapsedGroups?: Set<string>;
 }
 
 const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
-  tasks, onTaskClick, width, height = 300
+  tasks, onTaskClick, width, height = 300, groups, collapsedGroups
 }) => {
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } = useTooltip<GanttTask>();
 
   const margin = { top: 20, right: 20, bottom: 40, left: 180 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
+
+  // Filter tasks based on collapsed groups
+  const visibleTasks = useMemo(() => {
+    if (!groups || !collapsedGroups || collapsedGroups.size === 0) {
+      return tasks;
+    }
+
+    // Build a map of step IDs to their group IDs
+    const stepToGroup = new Map<string, string>();
+    for (const group of groups) {
+      for (const step of group.steps) {
+        stepToGroup.set(step.id, group.id);
+      }
+    }
+
+    // Filter tasks: show only if their group is not collapsed
+    return tasks.filter(task => {
+      const groupId = stepToGroup.get(task.id);
+      if (!groupId) return true; // Show tasks not in any group
+      return !collapsedGroups.has(groupId); // Show if group is expanded
+    });
+  }, [tasks, groups, collapsedGroups]);
 
   // Time scale (X axis)
   const timeScale = useMemo(() => {
@@ -42,12 +66,12 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
     });
   }, [tasks, innerWidth]);
 
-  // Band scale (Y axis - one row per task)
+  // Band scale (Y axis - one row per visible task)
   const bandScale = useMemo(() => scaleBand({
-    domain: tasks.map(t => t.id),
+    domain: visibleTasks.map(t => t.id),
     range: [0, innerHeight],
     padding: 0.2,
-  }), [tasks, innerHeight]);
+  }), [visibleTasks, innerHeight]);
 
   return (
     <div className="relative">
@@ -67,7 +91,7 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
           ))}
 
           {/* Task bars */}
-          {tasks.map((task) => {
+          {visibleTasks.map((task, idx) => {
             const barX = timeScale(task.start);
             const barWidth = timeScale(task.end) - timeScale(task.start);
             const barY = bandScale(task.id) || 0;
@@ -82,7 +106,7 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
                   y={barY}
                   width={innerWidth}
                   height={barHeight}
-                  fill={tasks.indexOf(task) % 2 === 0 ? '#1f2937' : '#111827'}
+                  fill={idx % 2 === 0 ? '#1f2937' : '#111827'}
                 />
                 {/* Task bar */}
                 <Bar
@@ -133,7 +157,7 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
 
         {/* Left labels */}
         <Group left={10} top={margin.top}>
-          {tasks.map((task) => (
+          {visibleTasks.map((task) => (
             <text
               key={task.id}
               y={(bandScale(task.id) || 0) + bandScale.bandwidth() / 2 + 4}
