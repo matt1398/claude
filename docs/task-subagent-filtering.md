@@ -294,7 +294,7 @@ Added `ContentBlock` import to ChunkBuilder because:
 ## Related Documentation
 
 - [CLAUDE.md](../CLAUDE.md) - Full project documentation
-- [claude-jsonl-spec.ts](./claude-jsonl-spec.ts) - JSONL format specification
+- [claude.ts](../src/main/types/claude.ts) - Complete type definitions (JSONL format & application types)
 - [PHASE1-TASK-FILTERING-SUMMARY.md](../PHASE1-TASK-FILTERING-SUMMARY.md) - Implementation summary
 
 ## Future Improvements

@@ -10,7 +10,7 @@
 import * as fs from 'fs';
 import * as readline from 'readline';
 import {
-  JsonlEntry,
+  ChatHistoryEntry,
   ParsedMessage,
   ContentBlock,
   ToolCall,
@@ -20,10 +20,11 @@ import {
   MessageType,
   EMPTY_METRICS,
   EMPTY_TOKEN_USAGE,
-  isRealUserMessage,
-  isInternalUserMessage,
-  isResponseUserMessage,
-  isAssistantMessage,
+  isParsedRealUserMessage,
+  isParsedInternalUserMessage,
+  isParsedResponseUserMessage,
+  isParsedAssistantMessage,
+  isTextContent,
 } from '../types/claude';
 import { sanitizeDisplayContent } from './contentSanitizer';
 
@@ -52,8 +53,8 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedMessage[]>
     if (!line.trim()) continue;
 
     try {
-      const entry = JSON.parse(line) as JsonlEntry;
-      const parsed = parseJsonlEntry(entry);
+      const entry = JSON.parse(line) as ChatHistoryEntry;
+      const parsed = parseChatHistoryEntry(entry);
       if (parsed) {
         messages.push(parsed);
       }
@@ -69,8 +70,8 @@ export async function parseJsonlFile(filePath: string): Promise<ParsedMessage[]>
  * Parse raw JSONL entries without enrichment.
  * Faster for cases where you only need raw data.
  */
-export async function parseJsonlRaw(filePath: string): Promise<JsonlEntry[]> {
-  const entries: JsonlEntry[] = [];
+export async function parseJsonlRaw(filePath: string): Promise<ChatHistoryEntry[]> {
+  const entries: ChatHistoryEntry[] = [];
 
   if (!fs.existsSync(filePath)) {
     return entries;
@@ -86,7 +87,7 @@ export async function parseJsonlRaw(filePath: string): Promise<JsonlEntry[]> {
     if (!line.trim()) continue;
 
     try {
-      entries.push(JSON.parse(line) as JsonlEntry);
+      entries.push(JSON.parse(line) as ChatHistoryEntry);
     } catch (error) {
       console.error(`Error parsing line in ${filePath}:`, error);
     }
@@ -117,8 +118,8 @@ export async function streamJsonlFile(
     if (!line.trim()) continue;
 
     try {
-      const entry = JSON.parse(line) as JsonlEntry;
-      const parsed = parseJsonlEntry(entry);
+      const entry = JSON.parse(line) as ChatHistoryEntry;
+      const parsed = parseChatHistoryEntry(entry);
       if (parsed) {
         await callback(parsed, index++);
       }
@@ -135,7 +136,7 @@ export async function streamJsonlFile(
 /**
  * Parse a single JSONL entry into a ParsedMessage.
  */
-export function parseJsonlEntry(entry: JsonlEntry): ParsedMessage | null {
+export function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | null {
   // Skip entries without uuid (usually metadata)
   if (!entry.uuid) {
     return null;
@@ -146,7 +147,44 @@ export function parseJsonlEntry(entry: JsonlEntry): ParsedMessage | null {
     return null;
   }
 
-  const content = entry.message?.content ?? '';
+  // Handle different entry types
+  let content: string | ContentBlock[] = '';
+  let role: string | undefined;
+  let usage: TokenUsage | undefined;
+  let model: string | undefined;
+  let cwd: string | undefined;
+  let gitBranch: string | undefined;
+  let agentId: string | undefined;
+  let isSidechain = false;
+  let isMeta = false;
+  let userType: string | undefined;
+  let sourceToolUseID: string | undefined;
+  let sourceToolAssistantUUID: string | undefined;
+  let toolUseResult: { success: boolean; commandName?: string } | undefined;
+  let parentUuid: string | null = null;
+
+  // Extract properties based on entry type
+  if (entry.type === 'user' || entry.type === 'assistant' || entry.type === 'system') {
+    const convEntry = entry as any; // Use any to access common properties
+    content = convEntry.message?.content ?? '';
+    role = convEntry.message?.role;
+    usage = convEntry.message?.usage;
+    model = convEntry.message?.model;
+    cwd = convEntry.cwd;
+    gitBranch = convEntry.gitBranch;
+    agentId = convEntry.agentId;
+    isSidechain = convEntry.isSidechain ?? false;
+    isMeta = convEntry.isMeta ?? false;
+    userType = convEntry.userType;
+    parentUuid = convEntry.parentUuid ?? null;
+
+    if (entry.type === 'user') {
+      sourceToolUseID = convEntry.sourceToolUseID;
+      sourceToolAssistantUUID = convEntry.sourceToolAssistantUUID;
+      toolUseResult = convEntry.toolUseResult;
+    }
+  }
+
   const contentBlocks = normalizeContent(content);
 
   // Extract tool calls and results
@@ -155,26 +193,26 @@ export function parseJsonlEntry(entry: JsonlEntry): ParsedMessage | null {
 
   return {
     uuid: entry.uuid,
-    parentUuid: entry.parentUuid ?? null,
+    parentUuid,
     type,
     timestamp: entry.timestamp ? new Date(entry.timestamp) : new Date(),
-    role: entry.message?.role,
+    role,
     content: contentBlocks,
-    usage: entry.message?.usage,
-    model: entry.message?.model,
+    usage,
+    model,
     // Metadata
-    cwd: entry.cwd,
-    gitBranch: entry.gitBranch,
-    agentId: entry.agentId,
-    isSidechain: entry.isSidechain ?? false,
-    isMeta: entry.isMeta ?? false,
-    userType: entry.userType,
+    cwd,
+    gitBranch,
+    agentId,
+    isSidechain,
+    isMeta,
+    userType,
     // Tool info
     toolCalls,
     toolResults,
-    sourceToolUseID: entry.sourceToolUseID,
-    sourceToolAssistantUUID: entry.sourceToolAssistantUUID,
-    toolUseResult: entry.toolUseResult,
+    sourceToolUseID,
+    sourceToolAssistantUUID,
+    toolUseResult,
   };
 }
 
@@ -296,7 +334,7 @@ export async function extractFirstUserMessage(
     for await (const line of rl) {
       if (!line.trim()) continue;
 
-      const entry = JSON.parse(line) as JsonlEntry;
+      const entry = JSON.parse(line) as ChatHistoryEntry;
 
       // Skip non-user messages
       if (entry.type !== 'user') continue;
@@ -325,7 +363,7 @@ export async function extractFirstUserMessage(
       // Handle content blocks
       if (Array.isArray(content)) {
         const textContent = content
-          .filter((b) => b.type === 'text' && b.text)
+          .filter(isTextContent)
           .map((b) => b.text)
           .join(' ');
 
@@ -368,8 +406,9 @@ export async function extractCwd(filePath: string): Promise<string | null> {
     for await (const line of rl) {
       if (!line.trim()) continue;
 
-      const entry = JSON.parse(line) as JsonlEntry;
-      if (entry.cwd) {
+      const entry = JSON.parse(line) as ChatHistoryEntry;
+      // Only conversational entries have cwd
+      if ('cwd' in entry && entry.cwd) {
         fileStream.destroy();
         return entry.cwd;
       }
@@ -514,8 +553,8 @@ export function extractTextContent(message: ParsedMessage): string {
     rawText = message.content;
   } else {
     rawText = message.content
-      .filter((block) => block.type === 'text' && block.text)
-      .map((block) => block.text!)
+      .filter(isTextContent)
+      .map((block) => block.text)
       .join('\n');
   }
 
@@ -533,8 +572,8 @@ export function extractRawTextContent(message: ParsedMessage): string {
   }
 
   return message.content
-    .filter((block) => block.type === 'text' && block.text)
-    .map((block) => block.text!)
+    .filter(isTextContent)
+    .map((block) => block.text)
     .join('\n');
 }
 
@@ -549,4 +588,9 @@ export function getTaskCalls(messages: ParsedMessage[]): ToolCall[] {
 // Type Guard Functions (Re-exported from claude.ts)
 // =============================================================================
 
-export { isRealUserMessage, isInternalUserMessage, isResponseUserMessage, isAssistantMessage };
+export {
+  isParsedRealUserMessage as isRealUserMessage,
+  isParsedInternalUserMessage as isInternalUserMessage,
+  isParsedResponseUserMessage as isResponseUserMessage,
+  isParsedAssistantMessage as isAssistantMessage
+};

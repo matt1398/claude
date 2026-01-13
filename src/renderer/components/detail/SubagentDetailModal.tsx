@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
 import { GanttChart } from './GanttChart';
@@ -17,8 +17,6 @@ export const SubagentDetailModal: React.FC = () => {
     navigateToBreadcrumb,
     closeSubagentModal,
   } = useStore();
-
-  const [expandedChunks, setExpandedChunks] = useState<Set<string>>(new Set());
 
   // Modal is visible if there's a drill-down stack
   const isVisible = drillDownStack.length > 0;

@@ -277,8 +277,8 @@ async function handleGetSubagentDetail(
 
     const cacheKey = `subagent-${projectId}-${subagentId}`;
 
-    // Check cache first (cast to correct type)
-    let subagentDetail = dataCache.get(cacheKey) as SubagentDetail | undefined;
+    // Check cache first
+    let subagentDetail = dataCache.getSubagent(cacheKey);
 
     if (subagentDetail) {
       console.log(`IPC: Serving subagent from cache: ${cacheKey}`);
@@ -303,8 +303,8 @@ async function handleGetSubagentDetail(
 
     subagentDetail = builtDetail;
 
-    // Cache the result (cast to any for storage)
-    dataCache.set(cacheKey, subagentDetail as any);
+    // Cache the result
+    dataCache.setSubagent(cacheKey, subagentDetail);
 
     console.log(
       `IPC: Parsed subagent with ${subagentDetail.chunks.length} chunks`

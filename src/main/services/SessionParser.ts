@@ -12,9 +12,9 @@ import {
   ParsedMessage,
   SessionMetrics,
   ToolCall,
-  isRealUserMessage,
-  isInternalUserMessage,
-  isAssistantMessage,
+  isParsedRealUserMessage,
+  isParsedInternalUserMessage,
+  isParsedAssistantMessage,
 } from '../types/claude';
 import {
   parseJsonlFile,
@@ -83,8 +83,8 @@ export class SessionParser {
     // Group by type
     const byType = {
       user: messages.filter((m) => m.type === 'user'),
-      realUser: messages.filter(isRealUserMessage),
-      internalUser: messages.filter(isInternalUserMessage),
+      realUser: messages.filter(isParsedRealUserMessage),
+      internalUser: messages.filter(isParsedInternalUserMessage),
       assistant: messages.filter((m) => m.type === 'assistant'),
       system: messages.filter((m) => m.type === 'system'),
       other: messages.filter(

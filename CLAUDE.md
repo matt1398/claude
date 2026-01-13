@@ -33,7 +33,7 @@ claude-viz/
 │   │   │   ├── DataCache.ts      # LRU cache with TTL
 │   │   │   └── FileWatcher.ts    # Watches for file changes
 │   │   ├── types/
-│   │   │   └── claude.ts         # Core type definitions
+│   │   │   └── claude.ts         # Complete type definitions (JSONL format & app types)
 │   │   └── utils/
 │   │       ├── jsonl.ts          # JSONL parsing & metrics
 │   │       └── pathDecoder.ts    # Path encoding/decoding
@@ -62,8 +62,7 @@ claude-viz/
 │           ├── chartHelpers.ts
 │           └── parallelDetection.ts
 │
-├── docs/
-│   └── claude-jsonl-spec.ts      # JSONL format specification
+├── docs/                         # Documentation
 │
 ├── test-chunk-building.ts        # Test suite for chunk logic
 └── Configuration files
@@ -343,7 +342,7 @@ claude-dark-text-secondary: #a3a3a3
 - `README.md` - Project overview and setup
 - `TEST-README.md` - Detailed test documentation
 - `CHUNK-TEST-SUMMARY.md` - Quick test reference
-- `docs/claude-jsonl-spec.ts` - Complete JSONL format specification
+- `src/main/types/claude.ts` - Complete type definitions (JSONL format & application types)
 
 ## Troubleshooting
 

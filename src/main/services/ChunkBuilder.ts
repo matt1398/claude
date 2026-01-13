@@ -19,14 +19,15 @@ import {
   Session,
   SessionDetail,
   EMPTY_METRICS,
-  isResponseUserMessage,
-  isAssistantMessage,
-  isNoiseMessage,
-  isTriggerMessage,
+  isParsedResponseUserMessage,
+  isParsedAssistantMessage,
+  isParsedNoiseMessage,
+  isParsedTriggerMessage,
   SemanticStep,
   EnhancedChunk,
   ContentBlock,
   SemanticStepGroup,
+  isTextContent,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
 
@@ -57,11 +58,11 @@ export class ChunkBuilder {
     const mainMessages = messages.filter((m) => !m.isSidechain);
 
     // Filter out noise messages (commands, caveats, snapshots)
-    const cleanMessages = mainMessages.filter((m) => !isNoiseMessage(m));
+    const cleanMessages = mainMessages.filter((m) => !isParsedNoiseMessage(m));
 
     // Find all trigger messages (these start chunks)
-    // Use isTriggerMessage to identify genuine user inputs
-    const userMessages = cleanMessages.filter(isTriggerMessage);
+    // Use isParsedTriggerMessage to identify genuine user inputs
+    const userMessages = cleanMessages.filter(isParsedTriggerMessage);
 
     for (let i = 0; i < userMessages.length; i++) {
       const userMsg = userMessages[i];
@@ -152,7 +153,7 @@ export class ChunkBuilder {
       // - Interruptions (isMeta: false, array content)
       // This ensures these are part of the response, not starting new chunks
       // Noise messages are already filtered out at this point
-      if (isAssistantMessage(msg) || isResponseUserMessage(msg)) {
+      if (isParsedAssistantMessage(msg) || isParsedResponseUserMessage(msg)) {
         responses.push(msg);
       }
     }
@@ -690,7 +691,7 @@ export class ChunkBuilder {
     if (typeof chunk.userMessage.content === 'string') {
       text = chunk.userMessage.content;
     } else {
-      const textBlock = chunk.userMessage.content.find((b) => b.type === 'text' && b.text);
+      const textBlock = chunk.userMessage.content.find(isTextContent);
       text = textBlock?.text || '';
     }
 
@@ -766,7 +767,7 @@ export class ChunkBuilder {
    * Used for drill-down modal to show subagent's internal execution.
    *
    * @param projectId - Project ID
-   * @param sessionId - Parent session ID
+   * @param sessionId - Parent session ID (currently unused, kept for API consistency)
    * @param subagentId - Subagent ID to load
    * @param sessionParser - SessionParser instance for parsing subagent file
    * @param subagentResolver - SubagentResolver instance for nested subagents
@@ -774,7 +775,7 @@ export class ChunkBuilder {
    */
   async buildSubagentDetail(
     projectId: string,
-    sessionId: string,
+    _sessionId: string, // Unused but kept for API consistency
     subagentId: string,
     sessionParser: import('./SessionParser').SessionParser,
     subagentResolver: import('./SubagentResolver').SubagentResolver

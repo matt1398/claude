@@ -10,7 +10,7 @@
  */
 
 import * as path from 'path';
-import { Subagent, ParsedMessage, ToolCall, SessionMetrics } from '../types/claude';
+import { Subagent, ParsedMessage, ToolCall, SessionMetrics, isTextContent } from '../types/claude';
 import { parseJsonlFile, calculateMetrics } from '../utils/jsonl';
 import { ProjectScanner } from './ProjectScanner';
 
@@ -254,8 +254,8 @@ export class SubagentResolver {
     }
 
     return message.content
-      .filter((b) => b.type === 'text' && b.text)
-      .map((b) => b.text!)
+      .filter(isTextContent)
+      .map((b) => b.text)
       .join('\n');
   }
 

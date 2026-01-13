@@ -11,10 +11,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { SessionParser } from './src/main/services/SessionParser';
-import { ChunkBuilder } from './src/main/services/ChunkBuilder';
-import { ProjectScanner } from './src/main/services/ProjectScanner';
-import type { EnhancedChunk } from './src/main/types/claude';
+import { SessionParser } from '../src/main/services/SessionParser';
+import { ChunkBuilder } from '../src/main/services/ChunkBuilder';
+import { ProjectScanner } from '../src/main/services/ProjectScanner';
+import type { EnhancedChunk } from '../src/main/types/claude';
 
 // Color helpers for terminal output
 const colors = {

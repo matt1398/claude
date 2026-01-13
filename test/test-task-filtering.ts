@@ -7,11 +7,11 @@
 
 import * as path from 'path';
 import * as os from 'os';
-import { parseJsonlFile } from './src/main/utils/jsonl';
-import { ChunkBuilder } from './src/main/services/ChunkBuilder';
-import { SubagentResolver } from './src/main/services/SubagentResolver';
-import { ProjectScanner } from './src/main/services/ProjectScanner';
-import { ToolCall } from './src/main/types/claude';
+import { parseJsonlFile } from '../src/main/utils/jsonl';
+import { ChunkBuilder } from '../src/main/services/ChunkBuilder';
+import { SubagentResolver } from '../src/main/services/SubagentResolver';
+import { ProjectScanner } from '../src/main/services/ProjectScanner';
+import { ToolCall } from '../src/main/types/claude';
 
 const colors = {
   reset: '\x1b[0m',

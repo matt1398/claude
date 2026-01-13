@@ -8,15 +8,18 @@
  * - Provide cache invalidation for file changes
  */
 
-import { SessionDetail } from '../types/claude';
+import { SessionDetail, SubagentDetail } from '../types/claude';
 
 interface CacheEntry<T> {
   value: T;
   timestamp: number;
 }
 
+// Union type for cached values
+type CachedValue = SessionDetail | SubagentDetail;
+
 export class DataCache {
-  private cache: Map<string, CacheEntry<SessionDetail>>;
+  private cache: Map<string, CacheEntry<CachedValue>>;
   private maxSize: number;
   private ttl: number; // Time-to-live in milliseconds
 
@@ -53,7 +56,33 @@ export class DataCache {
     this.cache.delete(key);
     this.cache.set(key, entry);
 
-    return entry.value;
+    return entry.value as SessionDetail;
+  }
+
+  /**
+   * Gets a cached subagent detail.
+   * @param key - Cache key in format "subagent-projectId-subagentId"
+   * @returns The cached SubagentDetail, or undefined if not found or expired
+   */
+  getSubagent(key: string): SubagentDetail | undefined {
+    const entry = this.cache.get(key);
+
+    if (!entry) {
+      return undefined;
+    }
+
+    // Check if entry has expired
+    const now = Date.now();
+    if (now - entry.timestamp > this.ttl) {
+      this.cache.delete(key);
+      return undefined;
+    }
+
+    // Move to end (mark as recently used)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+
+    return entry.value as SubagentDetail;
   }
 
   /**
@@ -62,6 +91,26 @@ export class DataCache {
    * @param value - The SessionDetail to cache
    */
   set(key: string, value: SessionDetail): void {
+    // If at max size, remove least recently used (first entry)
+    if (this.cache.size >= this.maxSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
+    }
+
+    this.cache.set(key, {
+      value,
+      timestamp: Date.now(),
+    });
+  }
+
+  /**
+   * Sets a subagent detail value in the cache.
+   * @param key - Cache key in format "subagent-projectId-subagentId"
+   * @param value - The SubagentDetail to cache
+   */
+  setSubagent(key: string, value: SubagentDetail): void {
     // If at max size, remove least recently used (first entry)
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;

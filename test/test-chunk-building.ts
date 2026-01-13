@@ -10,9 +10,9 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { parseJsonlFile, isRealUserMessage, isInternalUserMessage, isAssistantMessage } from './src/main/utils/jsonl';
-import { ChunkBuilder } from './src/main/services/ChunkBuilder';
-import { ParsedMessage, isNoiseMessage } from './src/main/types/claude';
+import { parseJsonlFile, isRealUserMessage, isInternalUserMessage, isAssistantMessage } from '../src/main/utils/jsonl';
+import { ChunkBuilder } from '../src/main/services/ChunkBuilder';
+import { ParsedMessage, isNoiseMessage } from '../src/main/types/claude';
 
 // ANSI color codes for terminal output
 const colors = {

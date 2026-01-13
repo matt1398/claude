@@ -34,7 +34,14 @@
       "mcp__plugin_context7_context7__query-docs",
       "WebSearch",
       "Bash(tsx -e:*)",
-      "Bash(timeout 5 npm run dev:*)"
+      "Bash(timeout 5 npm run dev:*)",
+      "Bash(echo:*)",
+      "Bash(if [ -f /Users/bskim/ClaudeContext/.eslintrc.json ])",
+      "Bash([ -f /Users/bskim/ClaudeContext/.eslintrc.js ])",
+      "Bash([ -f /Users/bskim/ClaudeContext/eslint.config.js ])",
+      "Bash(then echo \"ESLint config found\")",
+      "Bash(else echo \"No ESLint config\")",
+      "Bash(fi)"
     ]
   }
 }
