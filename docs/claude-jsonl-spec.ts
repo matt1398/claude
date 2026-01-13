@@ -93,6 +93,14 @@ export interface BaseEntry {
   uuid?: string;
 }
 
+/**
+ * Base for conversational entries (user, assistant, system).
+ *
+ * Sidechain behavior:
+ * - isSidechain: false → Main agent message
+ * - isSidechain: true → Subagent message
+ * - sessionId: For subagents, points to parent session UUID
+ */
 export interface ConversationalEntry extends BaseEntry {
   parentUuid: string | null;
   isSidechain: boolean;
@@ -174,6 +182,9 @@ export type ChatHistoryEntry = UserEntry | AssistantEntry | SystemEntry | Summar
 /**
  * Real user message - starts a new chunk.
  * Must be: type='user' AND isMeta!=true AND content is string
+ *
+ * Note: This is the basic filter for user input. For chunk creation,
+ * prefer `isTriggerMessage()` which also filters noise messages.
  */
 export function isRealUserMessage(entry: ChatHistoryEntry): entry is UserEntry {
   return entry.type === 'user'
@@ -222,6 +233,75 @@ export function isSubagentEntry(entry: ChatHistoryEntry): boolean {
 }
 
 // =============================================================================
+// Noise Filtering Type Guards
+// =============================================================================
+
+/**
+ * Noise message - system-generated metadata to be filtered.
+ * These messages don't contribute to conversation flow or visualization.
+ *
+ * Filtered patterns:
+ * - file-history-snapshot entries
+ * - system entries with local_command subtype
+ * - user messages containing system XML tags:
+ *   - <command-name>, <command-message>, <command-args>
+ *   - <local-command-stdout>, <local-command-caveat>
+ *   - <system-reminder>
+ */
+export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
+  // Filter file-history-snapshot entries
+  if (entry.type === 'file-history-snapshot') return true;
+
+  // Filter system entries with local_command subtype
+  if (entry.type === 'system') {
+    const systemEntry = entry as SystemEntry;
+    return systemEntry.subtype === 'local_command' as any;
+  }
+
+  // Filter user messages with system XML tags
+  if (entry.type === 'user') {
+    const userEntry = entry as UserEntry;
+    const content = userEntry.message?.content;
+
+    if (typeof content === 'string') {
+      const systemTags = [
+        '<command-name>',
+        '<command-message>',
+        '<command-args>',
+        '<local-command-stdout>',
+        '<local-command-caveat>',
+        '<system-reminder>'
+      ];
+
+      return systemTags.some(tag => content.includes(tag));
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Trigger message - genuine user input that starts chunks.
+ * This is the primary filter for chunk creation.
+ *
+ * Requirements:
+ * - Must be type: 'user'
+ * - Must have isMeta !== true
+ * - Must have string content (not array)
+ * - Must NOT match noise message patterns
+ *
+ * Flow messages (responses, tool results, interruptions) are NOT trigger messages.
+ * Noise messages (system metadata) are NOT trigger messages.
+ */
+export function isTriggerMessage(entry: ChatHistoryEntry): entry is UserEntry {
+  // Must be a real user message first
+  if (!isRealUserMessage(entry)) return false;
+
+  // Must not be noise
+  return !isNoiseMessage(entry);
+}
+
+// =============================================================================
 // Content Type Guards
 // =============================================================================
 
@@ -246,22 +326,74 @@ export function isImageContent(content: ContentBlock): content is ImageContent {
 }
 
 // =============================================================================
+// Subagent Directory Structures
+// =============================================================================
+
+/**
+ * Claude Code supports two subagent directory structures:
+ *
+ * NEW STRUCTURE (Current):
+ * ~/.claude/projects/
+ *   {project_name}/
+ *     {session_uuid}.jsonl              ← Main agent
+ *     {session_uuid}/
+ *       agent_{agent_uuid}.jsonl         ← Subagents
+ *
+ * OLD STRUCTURE (Legacy, still supported):
+ * ~/.claude/projects/
+ *   {project_name}/
+ *     {session_uuid}.jsonl              ← Main agent
+ *     agent_{agent_uuid}.jsonl           ← Subagents (at root)
+ *
+ * Identification:
+ * - Main agent: isSidechain: false (or undefined)
+ * - Subagent: isSidechain: true
+ * - Linking: subagent.sessionId === parent session UUID
+ *
+ * When scanning for subagents:
+ * 1. First check {session_uuid}/ subdirectory (new structure)
+ * 2. Fall back to project root for agent_*.jsonl (old structure)
+ * 3. Match by sessionId field to link to parent
+ */
+
+// =============================================================================
 // Message Flow Pattern
 // =============================================================================
 
 /**
  * Typical conversation flow:
  *
- * 1. User types → type: "user", isMeta: false, content: string → STARTS CHUNK
- * 2. Assistant responds → type: "assistant", may contain tool_use
- * 3. Tool executes → type: "user", isMeta: true, contains tool_result → PART OF RESPONSE
- * 4. User interrupts → type: "user", isMeta: false, content: array → PART OF RESPONSE
- * 5. Assistant continues → type: "assistant"
+ * 1. User types → type: "user", isMeta: false, content: string → TRIGGER MESSAGE (STARTS CHUNK)
+ * 2. Assistant responds → type: "assistant", may contain tool_use → FLOW MESSAGE (PART OF RESPONSE)
+ * 3. Tool executes → type: "user", isMeta: true, contains tool_result → FLOW MESSAGE (PART OF RESPONSE)
+ * 4. User interrupts → type: "user", isMeta: false, content: array → FLOW MESSAGE (PART OF RESPONSE)
+ * 5. Assistant continues → type: "assistant" → FLOW MESSAGE (PART OF RESPONSE)
+ *
+ * Message Categories:
+ *
+ * 1. TRIGGER MESSAGES (start chunks):
+ *    - Genuine user input that initiates a new request/response cycle
+ *    - Detected by: isTriggerMessage() type guard
+ *    - Requirements: type='user', isMeta!=true, string content, NOT noise
+ *
+ * 2. FLOW MESSAGES (part of responses):
+ *    - All assistant messages
+ *    - Internal user messages (tool results): isMeta=true
+ *    - Interruption messages: user messages with array content
+ *
+ * 3. NOISE MESSAGES (filtered out):
+ *    - System-generated metadata
+ *    - file-history-snapshot entries
+ *    - system entries with local_command subtype
+ *    - User messages containing system XML tags:
+ *      <command-name>, <command-message>, <command-args>,
+ *      <local-command-stdout>, <local-command-caveat>, <system-reminder>
+ *    - Detected by: isNoiseMessage() type guard
  *
  * Key Rules:
- * - Real user messages (string content, !isMeta) START chunks
- * - Response user messages (array content OR isMeta:true) are PART of responses
- * - Assistant messages are always part of responses
+ * - Trigger messages (genuine user input, not noise) START chunks
+ * - Flow messages (responses, tool results, interruptions) are PART of responses
+ * - Noise messages are FILTERED OUT entirely
  *
  * Tool Linking:
  * - tool_use.id in assistant message

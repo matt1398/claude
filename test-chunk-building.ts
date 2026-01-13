@@ -12,7 +12,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { parseJsonlFile, isRealUserMessage, isInternalUserMessage, isAssistantMessage } from './src/main/utils/jsonl';
 import { ChunkBuilder } from './src/main/services/ChunkBuilder';
-import { ParsedMessage } from './src/main/types/claude';
+import { ParsedMessage, isNoiseMessage } from './src/main/types/claude';
 
 // ANSI color codes for terminal output
 const colors = {
@@ -201,17 +201,21 @@ async function runTests() {
   let passedTests = 0;
   let failedTests = 0;
 
-  // Test 1: Number of chunks should match number of real user messages
+  // Test 1: Number of chunks should match number of real user messages (excluding noise)
   log(`\nVerifying chunk creation logic:`, 'gray');
   log(`  Real user messages (string content): ${realUserMessages.length}`, 'gray');
   log(`  User messages with array content: ${userMessagesWithArrayContent.length}`, 'gray');
+  const noiseMessages = realUserMessages.filter(isNoiseMessage);
+  const nonNoiseRealUserMessages = realUserMessages.length - noiseMessages.length;
+  log(`  Noise messages (filtered out): ${noiseMessages.length}`, 'gray');
+  log(`  Non-noise real user messages: ${nonNoiseRealUserMessages}`, 'gray');
   log(`  Total chunks created: ${chunks.length}`, 'gray');
 
-  if (chunks.length === realUserMessages.length) {
-    log(`✓ Test 1: Chunk count matches real user message count (${chunks.length})`, 'green');
+  if (chunks.length === nonNoiseRealUserMessages) {
+    log(`✓ Test 1: Chunk count matches non-noise real user message count (${chunks.length})`, 'green');
     passedTests++;
   } else {
-    log(`✗ Test 1: Chunk count (${chunks.length}) != Real user messages (${realUserMessages.length})`, 'red');
+    log(`✗ Test 1: Chunk count (${chunks.length}) != Non-noise real user messages (${nonNoiseRealUserMessages})`, 'red');
     log(`  This suggests array content messages may be incorrectly starting chunks`, 'red');
     failedTests++;
   }
@@ -267,19 +271,21 @@ async function runTests() {
     }
   }
 
-  // Filter main thread messages (non-sidechain) to get accurate count
+  // Filter main thread messages (non-sidechain) and exclude noise
   const mainThreadInternalMessages = internalUserMessages.filter(m => !m.isSidechain);
+  const nonNoiseInternalMessages = mainThreadInternalMessages.filter(m => !isNoiseMessage(m));
 
   log(`\nInternal message analysis:`, 'gray');
   log(`  Total internal user messages: ${internalUserMessages.length}`, 'gray');
   log(`  Main thread internal messages: ${mainThreadInternalMessages.length}`, 'gray');
+  log(`  Non-noise internal messages: ${nonNoiseInternalMessages.length}`, 'gray');
   log(`  Found in responses: ${internalMessagesInResponses}`, 'gray');
 
-  if (internalMessagesInResponses >= mainThreadInternalMessages.length) {
-    log(`✓ Test 3: All ${mainThreadInternalMessages.length} main-thread internal user messages are in responses`, 'green');
+  if (internalMessagesInResponses >= nonNoiseInternalMessages.length) {
+    log(`✓ Test 3: All ${nonNoiseInternalMessages.length} non-noise internal user messages are in responses`, 'green');
     passedTests++;
   } else {
-    log(`✗ Test 3: Found ${internalMessagesInResponses}/${mainThreadInternalMessages.length} internal messages in responses`, 'red');
+    log(`✗ Test 3: Found ${internalMessagesInResponses}/${nonNoiseInternalMessages.length} non-noise internal messages in responses`, 'red');
     failedTests++;
   }
 

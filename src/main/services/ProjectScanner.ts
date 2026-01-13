@@ -297,6 +297,9 @@ export class ProjectScanner {
 
   // ===========================================================================
   // Subagent Detection
+  // Supports two directory structures:
+  // - NEW: {projectId}/{sessionId}/subagents/agent-{agentId}.jsonl
+  // - OLD: {projectId}/agent-{agentId}.jsonl (legacy, still supported)
   // ===========================================================================
 
   /**
@@ -307,35 +310,98 @@ export class ProjectScanner {
   }
 
   /**
-   * Checks if a session has a subagents directory (sync).
+   * Checks if a session has subagent files in either NEW or OLD structure (sync).
    */
   hasSubagentsSync(projectId: string, sessionId: string): boolean {
-    const subagentsPath = this.getSubagentsPath(projectId, sessionId);
-    return fs.existsSync(subagentsPath);
+    // Check NEW structure: {projectId}/{sessionId}/subagents/
+    const newSubagentsPath = this.getSubagentsPath(projectId, sessionId);
+    if (fs.existsSync(newSubagentsPath)) {
+      try {
+        const entries = fs.readdirSync(newSubagentsPath);
+        const hasNewFiles = entries.some(
+          (name) => name.startsWith('agent-') && name.endsWith('.jsonl')
+        );
+        if (hasNewFiles) {
+          return true;
+        }
+      } catch (error) {
+        // Continue to check OLD structure
+      }
+    }
+
+    // Check OLD structure: {projectId}/agent-*.jsonl
+    try {
+      const projectPath = path.join(this.projectsDir, projectId);
+      if (fs.existsSync(projectPath)) {
+        const entries = fs.readdirSync(projectPath);
+        return entries.some((name) => name.startsWith('agent-') && name.endsWith('.jsonl'));
+      }
+    } catch (error) {
+      // Ignore errors
+    }
+
+    return false;
   }
 
   /**
-   * Lists all subagent files for a session.
+   * Lists all subagent files for a session from both NEW and OLD structures.
+   * Returns NEW structure files first, then OLD structure files.
    */
   async listSubagentFiles(projectId: string, sessionId: string): Promise<string[]> {
-    try {
-      const subagentsPath = this.getSubagentsPath(projectId, sessionId);
+    const allFiles: string[] = [];
 
-      if (!fs.existsSync(subagentsPath)) {
+    try {
+      // Scan NEW structure: {projectId}/{sessionId}/subagents/agent-*.jsonl
+      const newSubagentsPath = this.getSubagentsPath(projectId, sessionId);
+      if (fs.existsSync(newSubagentsPath)) {
+        const entries = fs.readdirSync(newSubagentsPath, { withFileTypes: true });
+        const newFiles = entries
+          .filter(
+            (entry) =>
+              entry.isFile() && entry.name.startsWith('agent-') && entry.name.endsWith('.jsonl')
+          )
+          .map((entry) => path.join(newSubagentsPath, entry.name));
+        allFiles.push(...newFiles);
+      }
+    } catch (error) {
+      console.error(
+        `Error scanning NEW subagent structure for session ${sessionId}:`,
+        error
+      );
+    }
+
+    try {
+      // Scan OLD structure: {projectId}/agent-*.jsonl
+      const oldFiles = await this.getProjectRootSubagentFiles(projectId);
+      allFiles.push(...oldFiles);
+    } catch (error) {
+      console.error(
+        `Error scanning OLD subagent structure for project ${projectId}:`,
+        error
+      );
+    }
+
+    return allFiles;
+  }
+
+  /**
+   * Gets subagent files from project root (OLD structure).
+   * Scans {projectId}/agent-*.jsonl files.
+   */
+  private async getProjectRootSubagentFiles(projectId: string): Promise<string[]> {
+    try {
+      const projectPath = path.join(this.projectsDir, projectId);
+
+      if (!fs.existsSync(projectPath)) {
         return [];
       }
 
-      const entries = fs.readdirSync(subagentsPath, { withFileTypes: true });
-
-      // Filter to agent-*.jsonl files
-      return entries
-        .filter(
-          (entry) =>
-            entry.isFile() && entry.name.startsWith('agent-') && entry.name.endsWith('.jsonl')
-        )
-        .map((entry) => path.join(subagentsPath, entry.name));
+      const files = fs.readdirSync(projectPath);
+      return files
+        .filter((f) => f.startsWith('agent-') && f.endsWith('.jsonl'))
+        .map((f) => path.join(projectPath, f));
     } catch (error) {
-      console.error(`Error listing subagent files for session ${sessionId}:`, error);
+      console.error(`Error reading project root for subagent files:`, error);
       return [];
     }
   }

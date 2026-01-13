@@ -562,3 +562,58 @@ export function isResponseUserMessage(msg: ParsedMessage): boolean {
 export function isAssistantMessage(msg: ParsedMessage): boolean {
   return msg.type === 'assistant';
 }
+
+/**
+ * Type guard to check if a message is a noise message.
+ * Noise messages are system-level entries that should be filtered out from chunks:
+ * - system messages (turn duration, init)
+ * - summary messages
+ * - file-history-snapshot messages
+ * - command messages (e.g., /help, /clear)
+ * - caveat messages (system-generated warnings/reminders)
+ *
+ * Examples of noise messages:
+ * - System: { type: 'system', content: 'Turn duration: 1234ms' }
+ * - Summary: { type: 'summary', content: 'Session summary...' }
+ * - File snapshot: { type: 'file-history-snapshot', ... }
+ * - Command: { type: 'user', content: '<command-name>/help</command-name>' }
+ * - Caveat: { type: 'user', content: '<local-command-caveat>...</local-command-caveat>' }
+ * - Reminder: { type: 'user', content: '<system-reminder>...</system-reminder>' }
+ *
+ * These don't contribute to the main conversation flow and should not appear in chunks.
+ */
+export function isNoiseMessage(msg: ParsedMessage): boolean {
+  // File snapshots are metadata, not messages
+  if (msg.type === 'file-history-snapshot') return true;
+
+  // Summaries are aggregated context, not conversation
+  if (msg.type === 'summary') return true;
+
+  // System messages are metadata
+  if (msg.type === 'system') return true;
+
+  // User messages that are local commands or caveats
+  if (msg.type === 'user') {
+    const content = msg.content;
+    if (typeof content === 'string') {
+      // Check for XML tags indicating system-generated content
+      if (content.includes('<command-name>')) return true;
+      if (content.includes('<command-message>')) return true;
+      if (content.includes('<command-args>')) return true;
+      if (content.includes('<local-command-caveat>')) return true;
+      if (content.includes('<local-command-stdout>')) return true;
+      if (content.includes('<system-reminder>')) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Type guard to check if a message is a trigger message (starts a chunk).
+ * Trigger messages are genuine user inputs that initiate new chunks.
+ * This is an alias for isRealUserMessage to clarify intent in chunk building.
+ */
+export function isTriggerMessage(msg: ParsedMessage): boolean {
+  return isRealUserMessage(msg);
+}

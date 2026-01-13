@@ -19,9 +19,10 @@ import {
   Session,
   SessionDetail,
   EMPTY_METRICS,
-  isRealUserMessage,
   isResponseUserMessage,
   isAssistantMessage,
+  isNoiseMessage,
+  isTriggerMessage,
   SemanticStep,
   EnhancedChunk,
 } from '../types/claude';
@@ -43,7 +44,8 @@ export class ChunkBuilder {
 
   /**
    * Build chunks from messages.
-   * A chunk consists of one user message and all subsequent responses until the next user message.
+   * A chunk consists of one trigger message (genuine user input) and all subsequent responses.
+   * Noise messages (commands, caveats, snapshots) are filtered out.
    * Returns EnhancedChunks with semantic step breakdown.
    */
   buildChunks(messages: ParsedMessage[], subagents: Subagent[] = []): EnhancedChunk[] {
@@ -52,16 +54,19 @@ export class ChunkBuilder {
     // Filter to main thread messages (non-sidechain)
     const mainMessages = messages.filter((m) => !m.isSidechain);
 
-    // Find all real user messages (these start chunks)
-    // Use isRealUserMessage to exclude internal user messages (tool results)
-    const userMessages = mainMessages.filter(isRealUserMessage);
+    // Filter out noise messages (commands, caveats, snapshots)
+    const cleanMessages = mainMessages.filter((m) => !isNoiseMessage(m));
+
+    // Find all trigger messages (these start chunks)
+    // Use isTriggerMessage to identify genuine user inputs
+    const userMessages = cleanMessages.filter(isTriggerMessage);
 
     for (let i = 0; i < userMessages.length; i++) {
       const userMsg = userMessages[i];
       const nextUserMsg = userMessages[i + 1];
 
-      // Collect responses until next user message
-      const responses = this.collectResponses(mainMessages, userMsg, nextUserMsg);
+      // Collect responses until next user message (from clean messages, noise already filtered)
+      const responses = this.collectResponses(cleanMessages, userMsg, nextUserMsg);
 
       // Collect sidechain messages for this time range
       const sidechainMessages = this.collectSidechainMessages(
@@ -109,7 +114,7 @@ export class ChunkBuilder {
 
     // Extract semantic steps for each chunk (now that subagents are linked)
     for (const chunk of chunks) {
-      chunk.semanticSteps = this.extractSemanticSteps(chunk, messages);
+      chunk.semanticSteps = this.extractSemanticSteps(chunk);
     }
 
     return chunks;
@@ -117,6 +122,7 @@ export class ChunkBuilder {
 
   /**
    * Collect responses for a user message.
+   * Note: Input messages should already be filtered for noise (no system/summary/snapshot messages).
    */
   private collectResponses(
     messages: ParsedMessage[],
@@ -142,6 +148,7 @@ export class ChunkBuilder {
       // - Tool results (isMeta: true)
       // - Interruptions (isMeta: false, array content)
       // This ensures these are part of the response, not starting new chunks
+      // Noise messages are already filtered out at this point
       if (isAssistantMessage(msg) || isResponseUserMessage(msg)) {
         responses.push(msg);
       }
@@ -291,7 +298,7 @@ export class ChunkBuilder {
    * Extract semantic steps from chunk messages.
    * Semantic steps represent logical units of work within responses.
    */
-  private extractSemanticSteps(chunk: Chunk, allMessages: ParsedMessage[]): SemanticStep[] {
+  private extractSemanticSteps(chunk: Chunk): SemanticStep[] {
     const steps: SemanticStep[] = [];
     let stepIdCounter = 0;
 
