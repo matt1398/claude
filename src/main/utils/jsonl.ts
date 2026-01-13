@@ -25,6 +25,7 @@ import {
   isResponseUserMessage,
   isAssistantMessage,
 } from '../types/claude';
+import { sanitizeDisplayContent } from './contentSanitizer';
 
 // =============================================================================
 // Core Parsing Functions
@@ -310,12 +311,15 @@ export async function extractFirstUserMessage(
           continue;
         }
 
-        // Found a valid user message
-        fileStream.destroy();
-        return {
-          text: content.substring(0, 500), // Limit preview length
-          timestamp: entry.timestamp ?? new Date().toISOString(),
-        };
+        // Found a valid user message - apply sanitization for display
+        const sanitized = sanitizeDisplayContent(content);
+        if (sanitized.length > 0) {
+          fileStream.destroy();
+          return {
+            text: sanitized.substring(0, 500), // Limit preview length
+            timestamp: entry.timestamp ?? new Date().toISOString(),
+          };
+        }
       }
 
       // Handle content blocks
@@ -326,11 +330,15 @@ export async function extractFirstUserMessage(
           .join(' ');
 
         if (textContent && !textContent.includes('<command-name>')) {
-          fileStream.destroy();
-          return {
-            text: textContent.substring(0, 500),
-            timestamp: entry.timestamp ?? new Date().toISOString(),
-          };
+          // Apply sanitization for display
+          const sanitized = sanitizeDisplayContent(textContent);
+          if (sanitized.length > 0) {
+            fileStream.destroy();
+            return {
+              text: sanitized.substring(0, 500),
+              timestamp: entry.timestamp ?? new Date().toISOString(),
+            };
+          }
         }
       }
     }
@@ -497,8 +505,29 @@ export async function isValidJsonl(filePath: string): Promise<boolean> {
 
 /**
  * Extract text content from a message for display.
+ * This version applies content sanitization to filter XML-like tags.
  */
 export function extractTextContent(message: ParsedMessage): string {
+  let rawText: string;
+
+  if (typeof message.content === 'string') {
+    rawText = message.content;
+  } else {
+    rawText = message.content
+      .filter((block) => block.type === 'text' && block.text)
+      .map((block) => block.text!)
+      .join('\n');
+  }
+
+  // Apply sanitization to remove XML-like tags for display
+  return sanitizeDisplayContent(rawText);
+}
+
+/**
+ * Extract raw text content from a message without sanitization.
+ * Used for debug purposes where you need to see the original content including XML tags.
+ */
+export function extractRawTextContent(message: ParsedMessage): string {
   if (typeof message.content === 'string') {
     return message.content;
   }

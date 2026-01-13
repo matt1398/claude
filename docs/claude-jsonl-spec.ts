@@ -125,7 +125,7 @@ export interface UserEntry extends ConversationalEntry {
   message: UserMessage;
   isMeta?: boolean;
   agentId?: string;
-  // Present when isMeta: true
+
   toolUseResult?: {
     success: boolean;
     commandName?: string;

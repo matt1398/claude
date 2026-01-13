@@ -1,13 +1,18 @@
+import { useState } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
+import { DebugSidebar } from './DebugSidebar';
 
 export const SessionDetail: React.FC = () => {
-  const { 
+  const {
     sessionDetail,
     selectedSessionId,
-    sessionDetailLoading, 
-    sessionDetailError 
+    sessionDetailLoading,
+    sessionDetailError
   } = useStore();
+
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugData, setDebugData] = useState<{ data: any; title: string } | null>(null);
 
   if (!selectedSessionId) {
     return (
@@ -107,6 +112,12 @@ export const SessionDetail: React.FC = () => {
               {session.firstMessage}
             </p>
           </div>
+          <button
+            onClick={() => setDebugOpen(!debugOpen)}
+            className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          >
+            {debugOpen ? 'Hide Debug' : 'Debug JSON'}
+          </button>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mt-4">
@@ -133,9 +144,24 @@ export const SessionDetail: React.FC = () => {
 
       <div className="p-6 space-y-6">
         {chunks.map((chunk, index) => (
-          <ChunkView key={chunk.id} chunk={chunk} index={index} />
+          <ChunkView
+            key={chunk.id}
+            chunk={chunk}
+            index={index}
+            onDebugClick={(data: any, title: string) => {
+              setDebugData({ data, title });
+              setDebugOpen(true);
+            }}
+          />
         ))}
       </div>
+
+      <DebugSidebar
+        isOpen={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        selectedData={debugData?.data}
+        title={debugData?.title || 'Raw Data'}
+      />
     </div>
   );
 };

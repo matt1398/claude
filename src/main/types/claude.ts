@@ -311,6 +311,74 @@ export interface ToolExecution {
 }
 
 // =============================================================================
+// Semantic Step Types (Enhanced Chunk Visualization)
+// =============================================================================
+
+/**
+ * Semantic step types for breakdown within responses.
+ */
+export type SemanticStepType =
+  | 'thinking'      // Extended thinking content
+  | 'tool_call'     // Tool invocation
+  | 'tool_result'   // Tool result received
+  | 'subagent'      // Subagent execution
+  | 'output'        // Main text output
+  | 'interruption'; // User interruption
+
+/**
+ * A semantic step represents a logical unit of work within a response.
+ */
+export interface SemanticStep {
+  /** Unique step identifier */
+  id: string;
+  /** Step type */
+  type: SemanticStepType;
+  /** When the step started */
+  startTime: Date;
+  /** When the step ended */
+  endTime?: Date;
+  /** Duration in milliseconds */
+  durationMs: number;
+
+  /** Content varies by type */
+  content: {
+    thinkingText?: string;      // For thinking
+    toolName?: string;          // For tool_call/result
+    toolInput?: unknown;        // For tool_call
+    toolResultContent?: string; // For tool_result
+    isError?: boolean;          // For tool_result
+    subagentId?: string;        // For subagent
+    subagentDescription?: string;
+    outputText?: string;        // For output
+  };
+
+  /** Token attribution */
+  tokens?: {
+    input: number;
+    output: number;
+    cached?: number;
+  };
+
+  /** Parallel execution */
+  isParallel?: boolean;
+  groupId?: string;
+
+  /** Context (main agent vs subagent) */
+  context: 'main' | 'subagent';
+  agentId?: string;
+}
+
+/**
+ * Enhanced chunk with semantic step breakdown.
+ */
+export interface EnhancedChunk extends Chunk {
+  /** Semantic steps extracted from messages */
+  semanticSteps: SemanticStep[];
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+// =============================================================================
 // Session Detail (complete parsed session)
 // =============================================================================
 

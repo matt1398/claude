@@ -1,14 +1,82 @@
 import { useState } from 'react';
-import { Chunk, ContentBlock } from '../../types/data';
+import { Chunk, ContentBlock, EnhancedChunk, SemanticStep } from '../../types/data';
+import { GanttTask } from '../../types/gantt';
+import { GanttChart } from './GanttChart';
+import { SemanticStepView } from './SemanticStepView';
+import { DebugSidebar } from './DebugSidebar';
 
 interface ChunkViewProps {
-  chunk: Chunk;
+  chunk: Chunk | EnhancedChunk;
   index: number;
+  onDebugClick?: (data: any, title: string) => void;
 }
 
-export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
+export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showToolResults, setShowToolResults] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugData, setDebugData] = useState<{ data: unknown; title: string } | null>(null);
+
+  // Type guard to check if chunk is an EnhancedChunk
+  const isEnhancedChunk = (c: Chunk | EnhancedChunk): c is EnhancedChunk => {
+    return 'semanticSteps' in c && Array.isArray(c.semanticSteps);
+  };
+
+  // Helper function to convert SemanticStep[] to GanttTask[]
+  const toGanttTasks = (steps: SemanticStep[]): GanttTask[] => {
+    return steps.map((step) => ({
+      id: step.id,
+      name: getStepLabel(step),
+      start: step.startTime,
+      end: step.endTime || new Date(step.startTime.getTime() + step.durationMs),
+      custom_class: `gantt-${step.type}`,
+      metadata: {
+        stepType: step.type,
+        tokens: step.tokens || { input: 0, output: 0 },
+        context: step.context,
+        isParallel: step.isParallel,
+      },
+    }));
+  };
+
+  // Helper to get step label
+  const getStepLabel = (step: SemanticStep): string => {
+    switch (step.type) {
+      case 'thinking':
+        return 'Thinking';
+      case 'tool_call':
+        return step.content.toolName || 'Tool Call';
+      case 'tool_result':
+        return `Result: ${step.content.isError ? '❌' : '✓'}`;
+      case 'subagent':
+        return step.content.subagentDescription || 'Subagent';
+      case 'output':
+        return 'Output';
+      case 'interruption':
+        return 'Interruption';
+    }
+  };
+
+  // Toggle step expansion
+  const toggleStep = (stepId: string) => {
+    setExpandedSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(stepId)) {
+        next.delete(stepId);
+      } else {
+        next.add(stepId);
+      }
+      return next;
+    });
+  };
+
+  // Handle debug selection
+  const handleDebugSelect = (data: unknown, title: string) => {
+    setDebugData({ data, title });
+    setDebugOpen(true);
+    onDebugClick?.(data, title);
+  };
 
   const formatTokens = (inputTokens: number, outputTokens: number, cacheReadTokens?: number) => {
     const total = inputTokens + outputTokens;
@@ -93,10 +161,49 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
         </div>
       </div>
 
-      {/* Timeline Visualization */}
-      {hasSubagents && (
+      {/* Timeline Visualization - Enhanced or Legacy */}
+      {isEnhancedChunk(chunk) && chunk.semanticSteps.length > 0 ? (
+        <div className="px-4 py-4 bg-gray-900/30 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-xs text-gray-400">Execution Timeline</div>
+            <button
+              onClick={() => {
+                handleDebugSelect(chunk.rawMessages, `Chunk ${index + 1} Raw Messages`);
+              }}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              Debug JSON
+            </button>
+          </div>
+
+          {/* Gantt Chart Overview */}
+          <div className="bg-gray-800/30 rounded-lg p-4">
+            <div className="text-xs font-medium text-gray-300 mb-3">Overview</div>
+            <GanttChart
+              tasks={toGanttTasks(chunk.semanticSteps)}
+              height={Math.max(200, chunk.semanticSteps.length * 40)}
+            />
+          </div>
+
+          {/* Semantic Steps Detail */}
+          <div className="space-y-2">
+            <div className="text-xs font-medium text-gray-300 mb-2">
+              Execution Steps ({chunk.semanticSteps.length})
+            </div>
+            {chunk.semanticSteps.map((step) => (
+              <SemanticStepView
+                key={step.id}
+                step={step}
+                isExpanded={expandedSteps.has(step.id)}
+                onToggle={() => toggleStep(step.id)}
+                onSelect={() => handleDebugSelect(step, `Step: ${getStepLabel(step)}`)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : hasSubagents ? (
         <div className="px-4 py-4 bg-gray-900/30">
-          <div className="text-xs text-gray-400 mb-2">Execution Timeline</div>
+          <div className="text-xs text-gray-400 mb-2">Execution Timeline (Legacy)</div>
 
           {/* Main execution bar */}
           <div className="mb-3">
@@ -143,7 +250,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
             );
           })}
         </div>
-      )}
+      ) : null}
 
       {/* Expanded Details */}
       {isExpanded && (
@@ -297,6 +404,14 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index }) => {
           )}
         </div>
       )}
+
+      {/* Debug Sidebar */}
+      <DebugSidebar
+        isOpen={debugOpen}
+        onClose={() => setDebugOpen(false)}
+        selectedData={debugData?.data}
+        title={debugData?.title || 'Debug Data'}
+      />
     </div>
   );
 };

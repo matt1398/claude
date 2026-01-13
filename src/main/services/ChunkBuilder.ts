@@ -22,6 +22,8 @@ import {
   isRealUserMessage,
   isResponseUserMessage,
   isAssistantMessage,
+  SemanticStep,
+  EnhancedChunk,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
 
@@ -42,9 +44,10 @@ export class ChunkBuilder {
   /**
    * Build chunks from messages.
    * A chunk consists of one user message and all subsequent responses until the next user message.
+   * Returns EnhancedChunks with semantic step breakdown.
    */
-  buildChunks(messages: ParsedMessage[], subagents: Subagent[] = []): Chunk[] {
-    const chunks: Chunk[] = [];
+  buildChunks(messages: ParsedMessage[], subagents: Subagent[] = []): EnhancedChunk[] {
+    const chunks: EnhancedChunk[] = [];
 
     // Filter to main thread messages (non-sidechain)
     const mainMessages = messages.filter((m) => !m.isSidechain);
@@ -76,7 +79,8 @@ export class ChunkBuilder {
       // Build tool executions
       const toolExecutions = this.buildToolExecutions([userMsg, ...responses]);
 
-      const chunk: Chunk = {
+      // Create base chunk
+      const baseChunk: Chunk = {
         id: generateChunkId(),
         userMessage: userMsg,
         responses,
@@ -89,11 +93,24 @@ export class ChunkBuilder {
         toolExecutions,
       };
 
+      // Link subagents first (needed for extractSemanticSteps)
+      // Will be properly linked for all chunks at the end
+      const chunk: EnhancedChunk = {
+        ...baseChunk,
+        semanticSteps: [], // Will be filled after subagents are linked
+        rawMessages: [userMsg, ...responses],
+      };
+
       chunks.push(chunk);
     }
 
     // Link subagents to chunks
     this.linkSubagentsToChunks(chunks, subagents);
+
+    // Extract semantic steps for each chunk (now that subagents are linked)
+    for (const chunk of chunks) {
+      chunk.semanticSteps = this.extractSemanticSteps(chunk, messages);
+    }
 
     return chunks;
   }
@@ -253,7 +270,7 @@ export class ChunkBuilder {
   /**
    * Link subagents to chunks based on timing.
    */
-  private linkSubagentsToChunks(chunks: Chunk[], subagents: Subagent[]): void {
+  private linkSubagentsToChunks(chunks: (Chunk | EnhancedChunk)[], subagents: Subagent[]): void {
     for (const subagent of subagents) {
       // Find the chunk that contains this subagent's start time
       for (const chunk of chunks) {
@@ -268,6 +285,113 @@ export class ChunkBuilder {
     for (const chunk of chunks) {
       chunk.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
     }
+  }
+
+  /**
+   * Extract semantic steps from chunk messages.
+   * Semantic steps represent logical units of work within responses.
+   */
+  private extractSemanticSteps(chunk: Chunk, allMessages: ParsedMessage[]): SemanticStep[] {
+    const steps: SemanticStep[] = [];
+    let stepIdCounter = 0;
+
+    // Get all messages for this chunk (user message + responses)
+    const chunkMessages = [chunk.userMessage, ...chunk.responses];
+
+    for (const msg of chunkMessages) {
+      if (msg.type === 'assistant') {
+        // Extract from content blocks
+        const content = Array.isArray(msg.content) ? msg.content : [];
+
+        for (const block of content) {
+          if (block.type === 'thinking' && block.thinking) {
+            steps.push({
+              id: `${msg.uuid}-thinking-${stepIdCounter++}`,
+              type: 'thinking',
+              startTime: new Date(msg.timestamp),
+              durationMs: 0, // Estimated from token count
+              content: { thinkingText: block.thinking },
+              context: msg.agentId ? 'subagent' : 'main',
+              agentId: msg.agentId,
+            });
+          }
+
+          if (block.type === 'tool_use' && block.id && block.name) {
+            steps.push({
+              id: block.id,
+              type: 'tool_call',
+              startTime: new Date(msg.timestamp),
+              durationMs: 0,
+              content: {
+                toolName: block.name,
+                toolInput: block.input,
+              },
+              context: msg.agentId ? 'subagent' : 'main',
+              agentId: msg.agentId,
+            });
+          }
+
+          if (block.type === 'text' && block.text) {
+            steps.push({
+              id: `${msg.uuid}-output-${stepIdCounter++}`,
+              type: 'output',
+              startTime: new Date(msg.timestamp),
+              durationMs: 0,
+              content: { outputText: block.text },
+              context: msg.agentId ? 'subagent' : 'main',
+              agentId: msg.agentId,
+            });
+          }
+        }
+      }
+
+      // Tool results from internal user messages
+      if (msg.type === 'user' && msg.isMeta) {
+        for (const result of msg.toolResults || []) {
+          steps.push({
+            id: result.toolUseId,
+            type: 'tool_result',
+            startTime: new Date(msg.timestamp),
+            durationMs: 0,
+            content: {
+              toolResultContent:
+                typeof result.content === 'string'
+                  ? result.content
+                  : JSON.stringify(result.content),
+              isError: result.isError,
+            },
+            context: msg.agentId ? 'subagent' : 'main',
+            agentId: msg.agentId,
+          });
+        }
+      }
+    }
+
+    // Link subagents as steps
+    for (const subagent of chunk.subagents) {
+      steps.push({
+        id: subagent.id,
+        type: 'subagent',
+        startTime: subagent.startTime,
+        endTime: subagent.endTime,
+        durationMs: subagent.durationMs,
+        content: {
+          subagentId: subagent.id,
+          subagentDescription: subagent.description,
+        },
+        tokens: {
+          input: subagent.metrics.inputTokens,
+          output: subagent.metrics.outputTokens,
+          cached: subagent.metrics.cacheReadTokens,
+        },
+        isParallel: subagent.isParallel,
+        context: 'subagent',
+        agentId: subagent.id,
+      });
+    }
+
+    // Sort by startTime
+    return steps.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   }
 
   // ===========================================================================
@@ -304,7 +428,7 @@ export class ChunkBuilder {
   /**
    * Build waterfall chart data from chunks.
    */
-  buildWaterfallData(chunks: Chunk[]): WaterfallData {
+  buildWaterfallData(chunks: (Chunk | EnhancedChunk)[]): WaterfallData {
     if (chunks.length === 0) {
       const now = new Date();
       return {
@@ -439,7 +563,7 @@ export class ChunkBuilder {
   /**
    * Get total metrics for all chunks.
    */
-  getTotalChunkMetrics(chunks: Chunk[]): SessionMetrics {
+  getTotalChunkMetrics(chunks: (Chunk | EnhancedChunk)[]): SessionMetrics {
     if (chunks.length === 0) {
       return { ...EMPTY_METRICS };
     }
@@ -474,7 +598,7 @@ export class ChunkBuilder {
   /**
    * Find chunk containing a specific message UUID.
    */
-  findChunkByMessageId(chunks: Chunk[], messageUuid: string): Chunk | undefined {
+  findChunkByMessageId(chunks: (Chunk | EnhancedChunk)[], messageUuid: string): Chunk | EnhancedChunk | undefined {
     return chunks.find(
       (c) =>
         c.userMessage.uuid === messageUuid || c.responses.some((r) => r.uuid === messageUuid)
@@ -484,7 +608,7 @@ export class ChunkBuilder {
   /**
    * Find chunk containing a specific subagent.
    */
-  findChunkBySubagentId(chunks: Chunk[], subagentId: string): Chunk | undefined {
+  findChunkBySubagentId(chunks: (Chunk | EnhancedChunk)[], subagentId: string): Chunk | EnhancedChunk | undefined {
     return chunks.find((c) => c.subagents.some((s) => s.id === subagentId));
   }
 }
