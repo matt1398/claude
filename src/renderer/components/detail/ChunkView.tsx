@@ -14,6 +14,11 @@ interface ChunkViewProps {
 }
 
 export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick, onSubagentClick }) => {
+  // Type guard to check if chunk is an EnhancedChunk
+  const isEnhancedChunk = (c: Chunk | EnhancedChunk): c is EnhancedChunk => {
+    return 'semanticSteps' in c && Array.isArray(c.semanticSteps);
+  };
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [showToolResults, setShowToolResults] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
@@ -26,11 +31,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
   });
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugData, setDebugData] = useState<{ data: unknown; title: string } | null>(null);
-
-  // Type guard to check if chunk is an EnhancedChunk
-  const isEnhancedChunk = (c: Chunk | EnhancedChunk): c is EnhancedChunk => {
-    return 'semanticSteps' in c && Array.isArray(c.semanticSteps);
-  };
 
   // Helper function to convert SemanticStep[] to GanttTask[]
   const toGanttTasks = (steps: SemanticStep[]): GanttTask[] => {
