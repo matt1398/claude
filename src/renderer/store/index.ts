@@ -47,6 +47,13 @@ interface AppState {
   // Chart mode
   ganttChartMode: 'timeline' | 'context';
 
+  // Detail popover state
+  activeDetailItem: {
+    aiGroupId: string;
+    itemId: string;
+    type: 'thinking' | 'text' | 'linked-tool' | 'subagent';
+  } | null;
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -65,6 +72,10 @@ interface AppState {
   setAIGroupExpansion: (aiGroupId: string, level: AIGroupExpansionLevel) => void;
   toggleStepExpansion: (stepId: string) => void;
   setGanttChartMode: (mode: 'timeline' | 'context') => void;
+
+  // Detail popover actions
+  showDetailPopover: (aiGroupId: string, itemId: string, type: 'thinking' | 'text' | 'linked-tool' | 'subagent') => void;
+  hideDetailPopover: () => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -98,6 +109,8 @@ export const useStore = create<AppState>((set, get) => ({
   expandedStepIds: new Set(),
 
   ganttChartMode: 'timeline',
+
+  activeDetailItem: null,
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -356,5 +369,21 @@ export const useStore = create<AppState>((set, get) => ({
   // Set Gantt chart display mode
   setGanttChartMode: (mode: 'timeline' | 'context') => {
     set({ ganttChartMode: mode });
+  },
+
+  // Show detail popover
+  showDetailPopover: (aiGroupId: string, itemId: string, type: 'thinking' | 'text' | 'linked-tool' | 'subagent') => {
+    set({
+      activeDetailItem: {
+        aiGroupId,
+        itemId,
+        type
+      }
+    });
+  },
+
+  // Hide detail popover
+  hideDetailPopover: () => {
+    set({ activeDetailItem: null });
   }
 }));

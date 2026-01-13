@@ -25,7 +25,6 @@ import type {
   ParsedMessage,
   Subagent,
   SemanticStep,
-  ContentBlock,
   SessionMetrics,
 } from '../types/data';
 
@@ -219,10 +218,9 @@ export function extractCommands(text: string): CommandInfo[] {
  * ContentBlock type does not include 'image' type.
  * Need to investigate actual JSONL format to determine how images are represented.
  *
- * @param content - Content blocks or string
  * @returns Array of ImageData objects (currently always empty)
  */
-export function extractImages(content: ContentBlock[] | string): ImageData[] {
+export function extractImages(): ImageData[] {
   // Images will be handled in a future phase once we understand the JSONL format
   return [];
 }

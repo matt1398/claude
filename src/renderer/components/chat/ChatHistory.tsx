@@ -1,14 +1,10 @@
 import type { ConversationTurn } from '../../types/groups';
-import { UserMessageBubble } from './UserMessageBubble';
-import { AIGroupContainer } from './AIGroupContainer';
+import { UserChatGroup } from './UserChatGroup';
+import { AIChatGroup } from './AIChatGroup';
 import { useStore } from '../../store';
 import { useVisibleAIGroup } from '../../hooks/useVisibleAIGroup';
 
-interface ChatHistoryProps {
-  onSubagentClick?: (subagentId: string, description: string) => void;
-}
-
-export function ChatHistory({ onSubagentClick }: ChatHistoryProps) {
+export function ChatHistory(): JSX.Element {
   const conversation = useStore((s) => s.conversation);
   const conversationLoading = useStore((s) => s.conversationLoading);
   const setVisibleAIGroup = useStore((s) => s.setVisibleAIGroup);
@@ -59,15 +55,12 @@ export function ChatHistory({ onSubagentClick }: ChatHistoryProps) {
             {conversation.turns.map((turn: ConversationTurn) => (
               <div key={turn.id} className="flex flex-col gap-4">
                 {/* User message */}
-                <UserMessageBubble userGroup={turn.userGroup} />
+                <UserChatGroup userGroup={turn.userGroup} />
 
                 {/* AI responses */}
                 {turn.aiGroups.map((aiGroup) => (
                   <div ref={registerAIGroupRef(aiGroup.id)} key={aiGroup.id}>
-                    <AIGroupContainer
-                      aiGroup={aiGroup}
-                      onSubagentClick={onSubagentClick}
-                    />
+                    <AIChatGroup aiGroup={aiGroup} />
                   </div>
                 ))}
               </div>

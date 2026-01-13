@@ -124,6 +124,78 @@ export interface AIGroupSummary {
 }
 
 /**
+ * Linked tool item pairing a tool call with its result.
+ * Includes preview text for display in collapsed/item views.
+ */
+export interface LinkedToolItem {
+  /** Tool call ID */
+  id: string;
+  /** Tool name */
+  name: string;
+  /** Tool input parameters */
+  input: Record<string, unknown>;
+  /** Tool result if received */
+  result?: {
+    content: string | unknown[];
+    isError: boolean;
+  };
+  /** Preview of input (first 100 chars) */
+  inputPreview: string;
+  /** Preview of output (first 200 chars) */
+  outputPreview?: string;
+  /** When the tool was called */
+  startTime: Date;
+  /** When the result was received */
+  endTime?: Date;
+  /** Duration in milliseconds */
+  durationMs?: number;
+  /** Whether this is an orphaned call (no result) */
+  isOrphaned: boolean;
+}
+
+/**
+ * Display item for the AI Group - union of possible items to show.
+ * These are flattened and shown in chronological order.
+ */
+export type AIGroupDisplayItem =
+  | { type: 'thinking'; content: string; timestamp: Date }
+  | { type: 'tool'; tool: LinkedToolItem }
+  | { type: 'subagent'; subagent: Subagent }
+  | { type: 'output'; content: string; timestamp: Date };
+
+/**
+ * The last output in an AI Group - what user sees as "the answer".
+ * Either text output or the last tool result.
+ */
+export interface AIGroupLastOutput {
+  /** Output type */
+  type: 'text' | 'tool_result';
+  /** Text content if type === 'text' */
+  text?: string;
+  /** Tool name if type === 'tool_result' */
+  toolName?: string;
+  /** Tool result content if type === 'tool_result' */
+  toolResult?: string;
+  /** Whether the tool result was an error */
+  isError?: boolean;
+  /** Timestamp of this output */
+  timestamp: Date;
+}
+
+/**
+ * Enhanced AI Group with display-ready data for the new UI.
+ * Extends the base AIGroup with computed properties for rendering.
+ */
+export interface EnhancedAIGroup extends AIGroup {
+  /** The last visible output (text or tool result) */
+  lastOutput: AIGroupLastOutput | null;
+  /** Flattened display items in chronological order */
+  displayItems: AIGroupDisplayItem[];
+  /** Map of tool call IDs to linked tool items */
+  linkedTools: Map<string, LinkedToolItem>;
+}
+
+/**
  * Status of an AI Group.
  */
 export type AIGroupStatus = 'complete' | 'interrupted' | 'error' | 'in_progress';
