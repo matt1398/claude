@@ -5,6 +5,7 @@
  * - get-projects: List all projects
  * - get-sessions: List sessions for a project
  * - get-session-detail: Get full session detail with subagents
+ * - get-session-groups: Get conversation groups for a session (alternative to chunks)
  * - get-session-metrics: Get metrics for a session
  * - get-waterfall-data: Get waterfall chart data for a session
  */
@@ -17,6 +18,7 @@ import {
   SessionMetrics,
   WaterfallData,
   SubagentDetail,
+  ConversationGroup,
 } from '../types/claude';
 import { ProjectScanner } from '../services/ProjectScanner';
 import { SessionParser } from '../services/SessionParser';
@@ -60,6 +62,7 @@ function registerHandlers(): void {
   // Session handlers
   ipcMain.handle('get-sessions', handleGetSessions);
   ipcMain.handle('get-session-detail', handleGetSessionDetail);
+  ipcMain.handle('get-session-groups', handleGetSessionGroups);
   ipcMain.handle('get-session-metrics', handleGetSessionMetrics);
 
   // Visualization handlers
@@ -182,6 +185,48 @@ async function handleGetSessionDetail(
   } catch (error) {
     console.error(`IPC: Error in get-session-detail for ${projectId}/${sessionId}:`, error);
     return null;
+  }
+}
+
+/**
+ * Handler for 'get-session-groups' IPC call.
+ * Gets conversation groups for a session using the new buildGroups API.
+ * This is an alternative to chunks that provides a simpler, more natural grouping.
+ */
+async function handleGetSessionGroups(
+  _event: IpcMainInvokeEvent,
+  projectId: string,
+  sessionId: string
+): Promise<ConversationGroup[]> {
+  try {
+    console.log(`IPC: get-session-groups for ${projectId}/${sessionId}`);
+
+    if (!projectId || !sessionId) {
+      console.error('IPC: get-session-groups called with invalid parameters');
+      return [];
+    }
+
+    // Parse session messages
+    const parsedSession = await sessionParser.parseSession(projectId, sessionId);
+
+    // Resolve subagents
+    const subagents = await subagentResolver.resolveSubagents(
+      projectId,
+      sessionId,
+      parsedSession.taskCalls
+    );
+
+    // Build conversation groups using the new API
+    const groups = chunkBuilder.buildGroups(parsedSession.messages, subagents);
+
+    console.log(
+      `IPC: Built ${groups.length} conversation groups with ${subagents.length} subagents`
+    );
+
+    return groups;
+  } catch (error) {
+    console.error(`IPC: Error in get-session-groups for ${projectId}/${sessionId}:`, error);
+    return [];
   }
 }
 
@@ -329,6 +374,7 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-projects');
   ipcMain.removeHandler('get-sessions');
   ipcMain.removeHandler('get-session-detail');
+  ipcMain.removeHandler('get-session-groups');
   ipcMain.removeHandler('get-session-metrics');
   ipcMain.removeHandler('get-waterfall-data');
   ipcMain.removeHandler('get-subagent-detail');

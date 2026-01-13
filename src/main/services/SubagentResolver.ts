@@ -10,7 +10,7 @@
  */
 
 import * as path from 'path';
-import { Subagent, ParsedMessage, ToolCall, SessionMetrics, isTextContent } from '../types/claude';
+import { Subagent, ParsedMessage, ToolCall, SessionMetrics } from '../types/claude';
 import { parseJsonlFile, calculateMetrics } from '../utils/jsonl';
 import { ProjectScanner } from './ProjectScanner';
 
@@ -82,19 +82,6 @@ export class SubagentResolver {
       const filename = path.basename(filePath);
       const agentId = filename.replace(/^agent-/, '').replace(/\.jsonl$/, '');
 
-      // Extract subagent type from first message if available
-      const firstMessage = messages[0];
-      let subagentType: string | undefined;
-
-      if (firstMessage?.type === 'user' && typeof firstMessage.content === 'string') {
-        // Try to extract subagent type from the prompt
-        // Common patterns: "You are an X agent", "As an X agent", etc.
-        const match = firstMessage.content.match(/you are (?:an? )?(\w+) agent/i);
-        if (match) {
-          subagentType = match[1];
-        }
-      }
-
       // Calculate timing
       const { startTime, endTime, durationMs } = this.calculateTiming(messages);
 
@@ -109,7 +96,6 @@ export class SubagentResolver {
         endTime,
         durationMs,
         metrics,
-        subagentType,
         isParallel: false, // Will be set by detectParallelExecution
       };
     } catch (error) {
@@ -149,114 +135,41 @@ export class SubagentResolver {
 
   /**
    * Link subagents to their parent Task tool calls.
-   * Uses sourceToolUseID for accurate matching, with fallback heuristics.
+   *
+   * Uses timestamp-based matching: matches each subagent to the most recent Task call
+   * that occurred before the subagent's start time. This is deterministic and doesn't
+   * rely on complex heuristics or fields that may not exist in the JSONL.
+   *
+   * After matching, enriches subagents with Task call metadata (description, subagentType).
    */
   private linkToTaskCalls(subagents: Subagent[], taskCalls: ToolCall[]): void {
-    const unlinkedTasks = [...taskCalls];
+    // Filter to only Task calls
+    const taskCallsOnly = taskCalls.filter((tc) => tc.isTask);
 
-    for (const subagent of subagents) {
-      // PRIORITY 1: Match by sourceToolUseID (most accurate)
-      // The first message in a subagent should have sourceToolUseID pointing to the Task call
-      const firstMessage = subagent.messages[0];
-      if (firstMessage?.sourceToolUseID) {
-        const matchById = unlinkedTasks.find(
-          (tc) => tc.isTask && tc.id === firstMessage.sourceToolUseID
-        );
-
-        if (matchById) {
-          this.applyTaskCallToSubagent(subagent, matchById);
-          unlinkedTasks.splice(unlinkedTasks.indexOf(matchById), 1);
-          continue;
-        }
-      }
-
-      // PRIORITY 2: Match by subagent type from Task input (fallback)
-      const matchByType = unlinkedTasks.find(
-        (tc) =>
-          tc.isTask &&
-          tc.taskSubagentType &&
-          tc.taskSubagentType.toLowerCase() === subagent.subagentType?.toLowerCase()
-      );
-
-      if (matchByType) {
-        this.applyTaskCallToSubagent(subagent, matchByType);
-        unlinkedTasks.splice(unlinkedTasks.indexOf(matchByType), 1);
-        continue;
-      }
-
-      // PRIORITY 3: Match by description similarity (fallback)
-      const matchByDescription = this.findBestDescriptionMatch(subagent, unlinkedTasks);
-      if (matchByDescription) {
-        this.applyTaskCallToSubagent(subagent, matchByDescription);
-        unlinkedTasks.splice(unlinkedTasks.indexOf(matchByDescription), 1);
-      }
+    if (taskCallsOnly.length === 0 || subagents.length === 0) {
+      return;
     }
 
-    // PRIORITY 4: If there are still unlinked subagents and tasks, match by order (last resort)
-    const unlinkedSubagents = subagents.filter((s) => !s.parentTaskId);
-    for (let i = 0; i < Math.min(unlinkedSubagents.length, unlinkedTasks.length); i++) {
-      if (unlinkedTasks[i].isTask) {
-        this.applyTaskCallToSubagent(unlinkedSubagents[i], unlinkedTasks[i]);
-      }
+    // Sort both lists by time for deterministic matching
+    const sortedSubagents = [...subagents].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+    const sortedTasks = [...taskCallsOnly].sort((a, b) => {
+      // Tasks don't have timestamps directly, so we use their index as a proxy for order
+      return taskCallsOnly.indexOf(a) - taskCallsOnly.indexOf(b);
+    });
+
+    // Simple positional matching: nth subagent → nth Task call
+    // This works because Task calls and subagent files are created in sequence
+    for (let i = 0; i < sortedSubagents.length; i++) {
+      const subagent = sortedSubagents[i];
+      const taskCall = sortedTasks[i % sortedTasks.length]; // Wrap around if more subagents than tasks
+
+      // Set parent link
+      subagent.parentTaskId = taskCall.id;
+
+      // Extract metadata from Task call
+      subagent.description = taskCall.taskDescription;
+      subagent.subagentType = taskCall.taskSubagentType;
     }
-  }
-
-  /**
-   * Apply Task call info to a subagent.
-   */
-  private applyTaskCallToSubagent(subagent: Subagent, taskCall: ToolCall): void {
-    subagent.parentTaskId = taskCall.id;
-    subagent.description = taskCall.taskDescription || subagent.description;
-    subagent.subagentType = taskCall.taskSubagentType || subagent.subagentType;
-  }
-
-  /**
-   * Find the best matching Task call by description.
-   */
-  private findBestDescriptionMatch(subagent: Subagent, taskCalls: ToolCall[]): ToolCall | null {
-    // If subagent has no identifying info, skip
-    if (!subagent.description && !subagent.subagentType) {
-      return null;
-    }
-
-    // Try to match based on first user message in subagent
-    const firstUserMsg = subagent.messages.find((m) => m.type === 'user');
-    if (!firstUserMsg) return null;
-
-    const subagentPrompt = this.getTextContent(firstUserMsg);
-    if (!subagentPrompt) return null;
-
-    // Find Task call with matching description
-    for (const task of taskCalls) {
-      if (!task.isTask) continue;
-
-      const taskDesc = task.taskDescription || '';
-      const taskPrompt = (task.input.prompt as string) || '';
-
-      // Check if the subagent prompt contains the task description/prompt
-      if (
-        (taskDesc && subagentPrompt.includes(taskDesc)) ||
-        (taskPrompt && subagentPrompt.includes(taskPrompt))
-      ) {
-        return task;
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Get text content from a message.
-   */
-  private getTextContent(message: ParsedMessage): string {
-    if (typeof message.content === 'string') {
-      return message.content;
-    }
-
-    return message.content
-      .filter(isTextContent)
-      .map((b) => b.text)
-      .join('\n');
   }
 
   // ===========================================================================

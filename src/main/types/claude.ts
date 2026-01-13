@@ -187,11 +187,13 @@ export type ChatHistoryEntry = UserEntry | AssistantEntry | SystemEntry | Summar
 // =============================================================================
 
 /**
- * Real user message - starts a new chunk.
+ * Real user message - starts a new chunk/group.
  * Must be: type='user' AND isMeta!=true AND content is string
  *
- * Note: This is the basic filter for user input. For chunk creation,
- * prefer `isTriggerMessage()` which also filters noise messages.
+ * This is the PRIMARY classifier for conversation group boundaries.
+ * All real user messages (not noise) should start new groups.
+ *
+ * Note: For chunk creation, prefer `isTriggerMessage()` which also filters noise messages.
  */
 export function isRealUserMessage(entry: ChatHistoryEntry): entry is UserEntry {
   return entry.type === 'user'
@@ -237,6 +239,25 @@ export function isAssistantMessage(entry: ChatHistoryEntry): entry is AssistantE
  */
 export function isSubagentEntry(entry: ChatHistoryEntry): boolean {
   return 'isSidechain' in entry && entry.isSidechain === true && 'agentId' in entry && !!(entry as any).agentId;
+}
+
+/**
+ * Task tool result - internal user message that contains a tool_result for a Task tool.
+ * Used to link Task tool calls with their subagent executions.
+ */
+export function isTaskToolResult(entry: ChatHistoryEntry): entry is UserEntry {
+  if (entry.type !== 'user') return false;
+  if (!entry.isMeta) return false;
+
+  const userEntry = entry as UserEntry;
+  if (!userEntry.sourceToolUseID) return false;
+
+  // Check if content contains a tool_result block
+  if (!Array.isArray(userEntry.message?.content)) return false;
+
+  return userEntry.message.content.some(block =>
+    block && typeof block === 'object' && block.type === 'tool_result'
+  );
 }
 
 // =============================================================================
@@ -719,6 +740,64 @@ export interface ToolExecution {
 }
 
 // =============================================================================
+// Conversation Group Types (Simplified Grouping Strategy)
+// =============================================================================
+
+/**
+ * Task execution links a Task tool call to its subagent execution.
+ * This provides a complete view of async subagent work initiated by Task tool.
+ */
+export interface TaskExecution {
+  /** The Task tool_use block that initiated the subagent */
+  taskCall: ToolCall;
+  /** When the Task tool was called */
+  taskCallTimestamp: Date;
+  /** The linked subagent execution */
+  subagent: Subagent;
+  /** The isMeta:true tool_result message for this Task */
+  toolResult: ParsedMessage;
+  /** When the tool result was received */
+  resultTimestamp: Date;
+  /** Duration from task call to result */
+  durationMs: number;
+}
+
+/**
+ * ConversationGroup represents a natural grouping in the conversation flow:
+ * - One real user message (isMeta: false, string content)
+ * - All AI responses until the next user message (assistant messages + internal messages)
+ * - Subagents spawned during this group
+ * - Tool executions (excluding Task tools with subagents to avoid duplication)
+ * - Task executions (Task tools with their subagent results)
+ *
+ * This is a simplified alternative to Chunks that focuses on natural conversation boundaries.
+ */
+export interface ConversationGroup {
+  /** Unique group identifier */
+  id: string;
+  /** Group type - currently only one type but extensible */
+  type: 'user-ai-exchange';
+  /** The real user message that starts this group (isMeta: false) */
+  userMessage: ParsedMessage;
+  /** All AI responses: assistant messages and internal messages (tool results, etc.) */
+  aiResponses: ParsedMessage[];
+  /** Subagents spawned during this group */
+  subagents: Subagent[];
+  /** Tool executions (excluding Task tools that have matching subagents) */
+  toolExecutions: ToolExecution[];
+  /** Task tool calls with their subagent executions */
+  taskExecutions: TaskExecution[];
+  /** When the group started (user message timestamp) */
+  startTime: Date;
+  /** When the group ended (last AI response timestamp) */
+  endTime: Date;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Aggregated metrics for the group */
+  metrics: SessionMetrics;
+}
+
+// =============================================================================
 // Semantic Step Types (Enhanced Chunk Visualization)
 // =============================================================================
 
@@ -1083,4 +1162,21 @@ export function isParsedTriggerMessage(msg: ParsedMessage): boolean {
 
   // Must not be noise
   return !isParsedNoiseMessage(msg);
+}
+
+/**
+ * Type guard to check if a ParsedMessage is a Task tool result.
+ * Used to link Task tool calls with their subagent executions.
+ */
+export function isParsedTaskToolResult(msg: ParsedMessage): boolean {
+  if (msg.type !== 'user') return false;
+  if (!msg.isMeta) return false;
+  if (!msg.sourceToolUseID) return false;
+
+  // Check if content contains a tool_result block
+  if (!Array.isArray(msg.content)) return false;
+
+  return msg.content.some(block =>
+    block && typeof block === 'object' && block.type === 'tool_result'
+  );
 }

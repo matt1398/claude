@@ -14,6 +14,8 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke('get-waterfall-data', projectId, sessionId),
   getSubagentDetail: (projectId: string, sessionId: string, subagentId: string) =>
     ipcRenderer.invoke('get-subagent-detail', projectId, sessionId, subagentId),
+  getSessionGroups: (projectId: string, sessionId: string) =>
+    ipcRenderer.invoke('get-session-groups', projectId, sessionId),
 };
 
 // Use contextBridge to securely expose the API to the renderer process

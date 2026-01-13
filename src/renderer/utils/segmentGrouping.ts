@@ -3,8 +3,15 @@
  * Groups semantic steps into segments for compact display.
  */
 
-import { SemanticStep, Chunk, EnhancedChunk } from '../types/data';
+import { SemanticStep, Chunk, EnhancedChunk, ConversationGroup } from '../types/data';
 import { TaskSegment } from '../types/gantt';
+
+/**
+ * Type guard to check if the input is a ConversationGroup.
+ */
+function isConversationGroup(input: Chunk | EnhancedChunk | ConversationGroup): input is ConversationGroup {
+  return 'taskExecutions' in input;
+}
 
 /**
  * Group semantic steps into segments for visualization.
@@ -13,7 +20,7 @@ import { TaskSegment } from '../types/gantt';
  */
 export function groupIntoSegments(
   steps: SemanticStep[],
-  chunk: Chunk | EnhancedChunk
+  chunk: Chunk | EnhancedChunk | ConversationGroup
 ): TaskSegment[] {
   if (steps.length === 0) {
     return [];
@@ -24,9 +31,20 @@ export function groupIntoSegments(
 
   // Build mapping of subagent IDs to their parent Task tool use IDs
   const subagentToTaskId = new Map<string, string>();
-  for (const subagent of chunk.subagents) {
-    if (subagent.parentTaskId && subagent.id) {
-      subagentToTaskId.set(subagent.id, subagent.parentTaskId);
+
+  if (isConversationGroup(chunk)) {
+    // For ConversationGroup, use taskExecutions to build the map
+    for (const taskExec of chunk.taskExecutions) {
+      if (taskExec.subagent.id && taskExec.taskCall.id) {
+        subagentToTaskId.set(taskExec.subagent.id, taskExec.taskCall.id);
+      }
+    }
+  } else {
+    // For Chunk/EnhancedChunk, use subagents' parentTaskId
+    for (const subagent of chunk.subagents) {
+      if (subagent.parentTaskId && subagent.id) {
+        subagentToTaskId.set(subagent.id, subagent.parentTaskId);
+      }
     }
   }
 
@@ -47,14 +65,25 @@ export function groupIntoSegments(
       const subagentId = step.content.subagentId;
       const taskId = subagentId ? subagentToTaskId.get(subagentId) : undefined;
 
-      // Find the Task tool call in toolExecutions
-      const taskExecution = chunk.toolExecutions.find(
-        exec => exec.toolCall.id === taskId && exec.toolCall.name === 'Task'
-      );
-
-      const label = step.content.subagentDescription ||
-                    taskExecution?.toolCall.taskDescription ||
-                    'Task Execution';
+      // Find the Task tool call
+      let label: string;
+      if (isConversationGroup(chunk)) {
+        // For ConversationGroup, use taskExecutions
+        const taskExec = chunk.taskExecutions.find(
+          exec => exec.taskCall.id === taskId
+        );
+        label = step.content.subagentDescription ||
+                taskExec?.taskCall.taskDescription ||
+                'Task Execution';
+      } else {
+        // For Chunk/EnhancedChunk, use toolExecutions
+        const taskExecution = chunk.toolExecutions.find(
+          exec => exec.toolCall.id === taskId && exec.toolCall.name === 'Task'
+        );
+        label = step.content.subagentDescription ||
+                taskExecution?.toolCall.taskDescription ||
+                'Task Execution';
+      }
 
       // Create segment with just the subagent step
       // (The Task tool_use is already filtered in extractSemanticSteps)

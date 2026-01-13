@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Chunk, ContentBlock, EnhancedChunk, SemanticStep } from '../../types/data';
+import { Chunk, ContentBlock, EnhancedChunk, SemanticStep, ConversationGroup, ToolResult } from '../../types/data';
 import { GanttChart } from './GanttChart';
 import { SemanticStepView } from './SemanticStepView';
 import { DebugSidebar } from './DebugSidebar';
@@ -7,15 +7,21 @@ import { ContextLengthChart } from './ContextLengthChart';
 import { groupIntoSegments } from '../../utils/segmentGrouping';
 
 interface ChunkViewProps {
-  chunk: Chunk | EnhancedChunk;
+  chunk: Chunk | EnhancedChunk | ConversationGroup;
   index: number;
   onDebugClick?: (data: any, title: string) => void;
   onSubagentClick?: (subagentId: string, description: string) => void;
 }
 
 export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick, onSubagentClick }) => {
+  // Type guard to check if chunk is a ConversationGroup
+  const isConversationGroup = (c: Chunk | EnhancedChunk | ConversationGroup): c is ConversationGroup => {
+    return 'type' in c && c.type === 'user-ai-exchange' && 'aiResponses' in c;
+  };
+
   // Type guard to check if chunk is an EnhancedChunk
-  const isEnhancedChunk = (c: Chunk | EnhancedChunk): c is EnhancedChunk => {
+  const isEnhancedChunk = (c: Chunk | EnhancedChunk | ConversationGroup): c is EnhancedChunk => {
+    if (isConversationGroup(c)) return false;
     return 'semanticSteps' in c && Array.isArray(c.semanticSteps);
   };
 
@@ -31,6 +37,16 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     if (!isEnhancedChunk(chunk)) return [];
     return groupIntoSegments(chunk.semanticSteps, chunk);
   }, [chunk]);
+
+  // Get responses array (handles both Chunk and ConversationGroup)
+  const getResponses = () => {
+    if (isConversationGroup(chunk)) {
+      return chunk.aiResponses;
+    }
+    return chunk.responses;
+  };
+
+  const responses = getResponses();
 
   // Helper to get step label
   const getStepLabel = (step: SemanticStep): string => {
@@ -80,8 +96,8 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     if (typeof content === 'string') return content;
 
     const textBlocks = content
-      .filter((block) => block.type === 'text' && block.text)
-      .map((block) => block.text)
+      .filter((block: ContentBlock) => block.type === 'text' && block.text)
+      .map((block: ContentBlock) => block.text)
       .join(' ');
 
     return textBlocks || 'No text content';
@@ -90,11 +106,15 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
   const userMessageText = extractTextContent(chunk.userMessage.content);
 
   // Separate responses into assistant messages and tool results
-  const assistantResponses = chunk.responses.filter(r => r.type === 'assistant');
-  const toolResults = chunk.responses.filter(r => r.isMeta === true);
+  const assistantResponses = responses.filter((r: any) => r.type === 'assistant');
+  const toolResults = responses.filter((r: any) => r.isMeta === true);
 
   const hasSubagents = chunk.subagents.length > 0;
-  const parallelSubagents = chunk.subagents.filter((s) => s.isParallel);
+  const parallelSubagents = chunk.subagents.filter((s: any) => s.isParallel);
+
+  // Check if this is a ConversationGroup with task executions
+  const hasTaskExecutions = isConversationGroup(chunk) && chunk.taskExecutions.length > 0;
+  const taskExecutionCount = isConversationGroup(chunk) ? chunk.taskExecutions.length : 0;
 
   return (
     <div className="border border-gray-700 rounded-lg overflow-hidden bg-gray-800/30">
@@ -103,7 +123,9 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
         <div className="flex items-start justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
-              <h3 className="text-sm font-semibold text-gray-300">Chunk {index + 1}</h3>
+              <h3 className="text-sm font-semibold text-gray-300">
+                {isConversationGroup(chunk) ? 'Group' : 'Chunk'} {index + 1}
+              </h3>
               {hasSubagents && (
                 <span className="text-xs bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded">
                   {chunk.subagents.length} subagent{chunk.subagents.length !== 1 ? 's' : ''}
@@ -112,6 +134,11 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
               {parallelSubagents.length > 0 && (
                 <span className="text-xs bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded">
                   {parallelSubagents.length} parallel
+                </span>
+              )}
+              {hasTaskExecutions && (
+                <span className="text-xs bg-green-900/40 text-green-300 px-2 py-0.5 rounded">
+                  {taskExecutionCount} task{taskExecutionCount !== 1 ? 's' : ''}
                 </span>
               )}
             </div>
@@ -143,7 +170,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
         </div>
         <div className="bg-gray-800/30 px-4 py-2">
           <p className="text-xs text-gray-500 mb-0.5">Responses</p>
-          <p className="text-sm font-medium text-gray-200">{chunk.responses.length}</p>
+          <p className="text-sm font-medium text-gray-200">{responses.length}</p>
         </div>
         <div className="bg-gray-800/30 px-4 py-2">
           <p className="text-xs text-gray-500 mb-0.5">Tokens</p>
@@ -160,7 +187,11 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
             <div className="text-xs text-gray-400">Execution Timeline</div>
             <button
               onClick={() => {
-                handleDebugSelect(chunk.rawMessages, `Chunk ${index + 1} Raw Messages`);
+                const debugData = isEnhancedChunk(chunk) ? chunk.rawMessages : chunk;
+                const debugTitle = isConversationGroup(chunk)
+                  ? `Group ${index + 1} Data`
+                  : `Chunk ${index + 1} Raw Messages`;
+                handleDebugSelect(debugData, debugTitle);
               }}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
             >
@@ -210,7 +241,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
             <div className="text-xs font-medium text-gray-300 mb-2">
               Execution Steps ({chunk.semanticSteps.length})
             </div>
-            {chunk.semanticSteps.map((step) => (
+            {chunk.semanticSteps.map((step: SemanticStep) => (
               <SemanticStepView
                 key={step.id}
                 step={step}
@@ -240,7 +271,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
           </div>
 
           {/* Subagent bars */}
-          {chunk.subagents.map((subagent) => {
+          {chunk.subagents.map((subagent: any) => {
             const startOffset =
               ((subagent.startTime.getTime() - chunk.startTime.getTime()) / chunk.durationMs) * 100;
             const width = (subagent.durationMs / chunk.durationMs) * 100;
@@ -294,7 +325,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                 Assistant Responses ({assistantResponses.length})
               </h4>
               <div className="space-y-2">
-                {assistantResponses.map((response, idx) => (
+                {assistantResponses.map((response: any, idx: number) => (
                   <div key={response.uuid} className="bg-gray-900/50 rounded p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-gray-500">Response {idx + 1}</span>
@@ -342,10 +373,10 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
               </button>
               {showToolResults && (
                 <div className="space-y-2 bg-gray-900/30 rounded p-3">
-                  {toolResults.map((result, idx) => {
+                  {toolResults.map((result: any, idx: number) => {
                     // Get error status from toolUseResult or toolResults array
                     const hasError = result.toolUseResult?.success === false ||
-                                   result.toolResults.some(tr => tr.isError);
+                                   result.toolResults.some((tr: ToolResult) => tr.isError);
 
                     // Get command/tool name from toolUseResult or toolResults
                     const commandName = result.toolUseResult?.commandName ||
@@ -393,7 +424,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                 Subagents ({chunk.subagents.length})
               </h4>
               <div className="space-y-2">
-                {chunk.subagents.map((subagent) => (
+                {chunk.subagents.map((subagent: any) => (
                   <div key={subagent.id} className="bg-gray-900/50 rounded p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-gray-300">
@@ -416,6 +447,53 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                       <div>
                         <span className="text-gray-500">Tokens:</span>{' '}
                         {formatTokens(subagent.metrics.inputTokens, subagent.metrics.outputTokens, subagent.metrics.cacheReadTokens)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Task Executions (ConversationGroup only) */}
+          {hasTaskExecutions && isConversationGroup(chunk) && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-400 mb-2">
+                Task Executions ({chunk.taskExecutions.length})
+              </h4>
+              <div className="space-y-2">
+                {chunk.taskExecutions.map((taskExec: any) => (
+                  <div key={taskExec.taskCall.id} className="bg-gray-900/50 rounded p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-gray-300">
+                        {taskExec.taskCall.taskDescription || taskExec.subagent.description || 'Task'}
+                      </span>
+                      {taskExec.subagent.isParallel && (
+                        <span className="text-xs bg-blue-900/40 text-blue-300 px-2 py-0.5 rounded">
+                          Parallel
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs text-gray-400">
+                      <div>
+                        <span className="text-gray-500">Type:</span>{' '}
+                        {taskExec.taskCall.taskSubagentType || 'Unknown'}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Duration:</span>{' '}
+                        {(taskExec.durationMs / 1000).toFixed(2)}s
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Messages:</span>{' '}
+                        {taskExec.subagent.messages.length}
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Tokens:</span>{' '}
+                        {formatTokens(
+                          taskExec.subagent.metrics.inputTokens,
+                          taskExec.subagent.metrics.outputTokens,
+                          taskExec.subagent.metrics.cacheReadTokens
+                        )}
                       </div>
                     </div>
                   </div>

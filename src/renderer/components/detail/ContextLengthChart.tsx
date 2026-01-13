@@ -23,15 +23,10 @@ export function ContextLengthChart({
   const innerHeight = height - margin.top - margin.bottom;
 
   // Filter out steps without context data, sort, and group consecutive steps with same context
-  // Also separate main context from subagent context
-  const { contextSteps, contextGroups, mainSteps, subagentSteps } = useMemo(() => {
+  const { contextSteps, contextGroups } = useMemo(() => {
     const filtered = steps
       .filter(s => s.accumulatedContext !== undefined)
       .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-
-    // Separate main and subagent steps
-    const main = filtered.filter(s => s.context === 'main' || (s.type !== 'subagent' && !s.agentId));
-    const subagent = filtered.filter(s => s.context === 'subagent' || s.type === 'subagent' || s.agentId);
 
     // Group consecutive steps with the same context value (for main context)
     const groups: Array<{ context: number; steps: SemanticStep[]; startIndex: number }> = [];
@@ -64,8 +59,6 @@ export function ContextLengthChart({
     return {
       contextSteps: filtered,
       contextGroups: groups,
-      mainSteps: main,
-      subagentSteps: subagent,
     };
   }, [steps]);
 
@@ -107,7 +100,7 @@ export function ContextLengthChart({
         ))}
 
         {/* Bars */}
-        {contextSteps.map((step, index) => {
+        {contextSteps.map(step => {
           const barWidth = xScale(step.accumulatedContext || 0);
           const barY = yScale(step.id) || 0;
           const barHeight = yScale.bandwidth();
@@ -119,7 +112,6 @@ export function ContextLengthChart({
           const group = contextGroups.find(g => g.steps.includes(step));
           const isGrouped = group && group.steps.length > 1;
           const isFirstInGroup = group && group.steps[0] === step;
-          const isLastInGroup = group && group.steps[group.steps.length - 1] === step;
 
           // Color scheme: different for subagent vs main
           const percentage = (step.accumulatedContext || 0) / MAX_CONTEXT;
