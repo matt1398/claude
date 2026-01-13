@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { Project, Session, SessionDetail, SubagentDetail } from '../types/data';
+import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
+import { transformChunksToConversation } from '../utils/groupTransformer';
 
 interface BreadcrumbItem {
   id: string;
@@ -30,6 +32,21 @@ interface AppState {
   subagentDetailLoading: boolean;
   subagentDetailError: string | null;
 
+  // Conversation state (new chat architecture)
+  conversation: SessionConversation | null;
+  conversationLoading: boolean;
+
+  // Visible AI Group (for Gantt sync)
+  visibleAIGroupId: string | null;
+  selectedAIGroup: AIGroup | null;
+
+  // Expansion states
+  aiGroupExpansionLevels: Map<string, AIGroupExpansionLevel>;
+  expandedStepIds: Set<string>;
+
+  // Chart mode
+  ganttChartMode: 'timeline' | 'context';
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -42,6 +59,12 @@ interface AppState {
   drillDownSubagent: (projectId: string, sessionId: string, subagentId: string, description: string) => Promise<void>;
   navigateToBreadcrumb: (index: number) => void;
   closeSubagentModal: () => void;
+
+  // Conversation actions (new)
+  setVisibleAIGroup: (aiGroupId: string | null) => void;
+  setAIGroupExpansion: (aiGroupId: string, level: AIGroupExpansionLevel) => void;
+  toggleStepExpansion: (stepId: string) => void;
+  setGanttChartMode: (mode: 'timeline' | 'context') => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -64,6 +87,17 @@ export const useStore = create<AppState>((set, get) => ({
   currentSubagentDetail: null,
   subagentDetailLoading: false,
   subagentDetailError: null,
+
+  conversation: null,
+  conversationLoading: false,
+
+  visibleAIGroupId: null,
+  selectedAIGroup: null,
+
+  aiGroupExpansionLevels: new Map(),
+  expandedStepIds: new Set(),
+
+  ganttChartMode: 'timeline',
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -134,14 +168,37 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Fetch full session detail with chunks and subagents
   fetchSessionDetail: async (projectId: string, sessionId: string) => {
-    set({ sessionDetailLoading: true, sessionDetailError: null });
+    set({
+      sessionDetailLoading: true,
+      sessionDetailError: null,
+      conversationLoading: true
+    });
     try {
       const detail = await window.electronAPI.getSessionDetail(projectId, sessionId);
-      set({ sessionDetail: detail, sessionDetailLoading: false });
+
+      // Transform chunks to conversation
+      // Note: detail.chunks are actually EnhancedChunk[] at runtime despite type definition
+      const conversation: SessionConversation | null = detail
+        ? transformChunksToConversation(detail.chunks as any, detail.subagents)
+        : null;
+
+      // Initialize visibleAIGroupId to first AI Group if available
+      const firstAIGroupId = conversation?.turns?.[0]?.aiGroups?.[0]?.id ?? null;
+      const firstAIGroup = conversation?.turns?.[0]?.aiGroups?.[0] ?? null;
+
+      set({
+        sessionDetail: detail,
+        sessionDetailLoading: false,
+        conversation,
+        conversationLoading: false,
+        visibleAIGroupId: firstAIGroupId,
+        selectedAIGroup: firstAIGroup
+      });
     } catch (error) {
-      set({ 
+      set({
         sessionDetailError: error instanceof Error ? error.message : 'Failed to fetch session detail',
-        sessionDetailLoading: false 
+        sessionDetailLoading: false,
+        conversationLoading: false
       });
     }
   },
@@ -250,5 +307,54 @@ export const useStore = create<AppState>((set, get) => ({
       currentSubagentDetail: null,
       subagentDetailError: null
     });
+  },
+
+  // Set visible AI Group (called by scroll observer)
+  setVisibleAIGroup: (aiGroupId: string | null) => {
+    const state = get();
+
+    if (aiGroupId === state.visibleAIGroupId) return;
+
+    // Find the AIGroup in the conversation
+    let selectedAIGroup: AIGroup | null = null;
+    if (aiGroupId && state.conversation) {
+      for (const turn of state.conversation.turns) {
+        const found = turn.aiGroups.find(g => g.id === aiGroupId);
+        if (found) {
+          selectedAIGroup = found;
+          break;
+        }
+      }
+    }
+
+    set({
+      visibleAIGroupId: aiGroupId,
+      selectedAIGroup
+    });
+  },
+
+  // Set expansion level for a specific AI Group
+  setAIGroupExpansion: (aiGroupId: string, level: AIGroupExpansionLevel) => {
+    const state = get();
+    const newLevels = new Map(state.aiGroupExpansionLevels);
+    newLevels.set(aiGroupId, level);
+    set({ aiGroupExpansionLevels: newLevels });
+  },
+
+  // Toggle expansion state for a semantic step
+  toggleStepExpansion: (stepId: string) => {
+    const state = get();
+    const newExpandedStepIds = new Set(state.expandedStepIds);
+    if (newExpandedStepIds.has(stepId)) {
+      newExpandedStepIds.delete(stepId);
+    } else {
+      newExpandedStepIds.add(stepId);
+    }
+    set({ expandedStepIds: newExpandedStepIds });
+  },
+
+  // Set Gantt chart display mode
+  setGanttChartMode: (mode: 'timeline' | 'context') => {
+    set({ ganttChartMode: mode });
   }
 }));
