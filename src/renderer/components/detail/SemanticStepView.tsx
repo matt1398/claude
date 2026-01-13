@@ -71,16 +71,25 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
             <span>{step.tokens.output.toLocaleString()} tokens</span>
           )}
           <span>{step.durationMs}ms</span>
-          <button
+          <div
             onClick={(e) => {
               e.stopPropagation();
               onSelect();
             }}
-            className="hover:text-gray-200 transition-colors"
+            className="hover:text-gray-200 transition-colors cursor-pointer"
             title="Show debug info"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelect();
+              }
+            }}
           >
             🔍
-          </button>
+          </div>
         </div>
       </button>
 

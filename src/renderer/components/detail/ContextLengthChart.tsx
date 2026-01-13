@@ -18,15 +18,55 @@ export function ContextLengthChart({
   width = 1000,
   height = 400
 }: ContextLengthChartProps) {
-  const margin = { top: 40, right: 100, bottom: 40, left: 200 };
+  const margin = { top: 40, right: 200, bottom: 40, left: 200 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
-  // Filter out steps without context data and sort
-  const contextSteps = useMemo(() => {
-    return steps
+  // Filter out steps without context data, sort, and group consecutive steps with same context
+  // Also separate main context from subagent context
+  const { contextSteps, contextGroups, mainSteps, subagentSteps } = useMemo(() => {
+    const filtered = steps
       .filter(s => s.accumulatedContext !== undefined)
       .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+
+    // Separate main and subagent steps
+    const main = filtered.filter(s => s.context === 'main' || (s.type !== 'subagent' && !s.agentId));
+    const subagent = filtered.filter(s => s.context === 'subagent' || s.type === 'subagent' || s.agentId);
+
+    // Group consecutive steps with the same context value (for main context)
+    const groups: Array<{ context: number; steps: SemanticStep[]; startIndex: number }> = [];
+    let currentGroup: { context: number; steps: SemanticStep[]; startIndex: number } | null = null;
+
+    filtered.forEach((step, index) => {
+      const context = step.accumulatedContext || 0;
+      
+      if (currentGroup && currentGroup.context === context) {
+        // Same context, add to current group
+        currentGroup.steps.push(step);
+      } else {
+        // Different context, start new group
+        if (currentGroup) {
+          groups.push(currentGroup);
+        }
+        currentGroup = {
+          context,
+          steps: [step],
+          startIndex: index,
+        };
+      }
+    });
+
+    // Add last group
+    if (currentGroup) {
+      groups.push(currentGroup);
+    }
+
+    return {
+      contextSteps: filtered,
+      contextGroups: groups,
+      mainSteps: main,
+      subagentSteps: subagent,
+    };
   }, [steps]);
 
   // Scales
@@ -67,39 +107,132 @@ export function ContextLengthChart({
         ))}
 
         {/* Bars */}
-        {contextSteps.map((step) => {
+        {contextSteps.map((step, index) => {
           const barWidth = xScale(step.accumulatedContext || 0);
           const barY = yScale(step.id) || 0;
           const barHeight = yScale.bandwidth();
 
-          // Gradient color based on percentage
+          // Check if this is a subagent step
+          const isSubagent = step.context === 'subagent' || step.type === 'subagent' || step.agentId;
+
+          // Find which group this step belongs to
+          const group = contextGroups.find(g => g.steps.includes(step));
+          const isGrouped = group && group.steps.length > 1;
+          const isFirstInGroup = group && group.steps[0] === step;
+          const isLastInGroup = group && group.steps[group.steps.length - 1] === step;
+
+          // Color scheme: different for subagent vs main
           const percentage = (step.accumulatedContext || 0) / MAX_CONTEXT;
-          const color = percentage > 0.8 ? '#ef4444' : // red at 80%+
-                       percentage > 0.5 ? '#f59e0b' : // amber at 50%+
-                       '#10b981'; // green below 50%
+          let color: string;
+          if (isSubagent) {
+            // Subagent context: blue/indigo spectrum (cool colors)
+            color = percentage > 0.8 ? '#6366f1' : // indigo at 80%+
+                   percentage > 0.5 ? '#3b82f6' : // blue at 50%+
+                   '#60a5fa'; // light blue below 50%
+          } else {
+            // Main context: green/emerald spectrum (warm but distinct)
+            color = percentage > 0.8 ? '#ef4444' : // red at 80%+
+                   percentage > 0.5 ? '#10b981' : // green at 50%+
+                   '#22c55e'; // emerald below 50%
+          }
+
+          // Different opacity for grouped steps
+          const opacity = isGrouped ? 0.5 : (isSubagent ? 0.8 : 0.7);
 
           return (
             <g key={step.id}>
+              {/* Background highlight for subagent steps */}
+              {isSubagent && (
+                <rect
+                  x={-5}
+                  y={barY - 2}
+                  width={innerWidth + 10}
+                  height={barHeight + 4}
+                  fill={color}
+                  opacity={0.1}
+                  rx={4}
+                />
+              )}
+
               <Bar
                 x={0}
                 y={barY}
                 width={Math.max(barWidth, 2)}
                 height={barHeight}
                 fill={color}
-                opacity={0.7}
+                opacity={opacity}
                 rx={4}
+                stroke={isSubagent ? color : 'none'}
+                strokeWidth={isSubagent ? 1.5 : 0}
+                strokeOpacity={0.5}
               />
 
-              {/* Label on right */}
-              <text
-                x={barWidth + 10}
-                y={barY + barHeight / 2 + 4}
-                fill="#d1d5db"
-                fontSize={11}
-              >
-                {((step.accumulatedContext || 0) / 1000).toFixed(1)}k
-                ({(percentage * 100).toFixed(0)}%)
-              </text>
+              {/* Show label only on first step of a group, or if not grouped */}
+              {(isFirstInGroup || !isGrouped) && (
+                <g>
+                  {/* Main token count label */}
+                  <text
+                    x={barWidth + 10}
+                    y={barY + barHeight / 2 - (isSubagent ? 6 : 0)}
+                    fill={isSubagent ? color : '#d1d5db'}
+                    fontSize={11}
+                    fontWeight={isGrouped || isSubagent ? 'bold' : 'normal'}
+                  >
+                    {((step.accumulatedContext || 0) / 1000).toFixed(1)}k
+                    ({(percentage * 100).toFixed(0)}%)
+                    {isGrouped && ` [${group!.steps.length} steps]`}
+                  </text>
+                  {/* Subagent indicator badge - on separate line to avoid overlap */}
+                  {isSubagent && (
+                    <text
+                      x={barWidth + 10}
+                      y={barY + barHeight / 2 + 10}
+                      fill={color}
+                      fontSize={9}
+                      fontWeight="bold"
+                      opacity={0.9}
+                    >
+                      [Subagent Context]
+                    </text>
+                  )}
+                </g>
+              )}
+
+              {/* Group bracket connecting steps with same context */}
+              {isGrouped && isFirstInGroup && group!.steps.length > 1 && (
+                <g>
+                  {/* Vertical line on the right */}
+                  <line
+                    x1={barWidth + 5}
+                    x2={barWidth + 5}
+                    y1={barY}
+                    y2={(yScale(group!.steps[group!.steps.length - 1].id) || 0) + yScale.bandwidth()}
+                    stroke={color}
+                    strokeWidth={1.5}
+                    opacity={0.6}
+                  />
+                  {/* Top bracket */}
+                  <line
+                    x1={barWidth}
+                    x2={barWidth + 5}
+                    y1={barY}
+                    y2={barY}
+                    stroke={color}
+                    strokeWidth={1.5}
+                    opacity={0.6}
+                  />
+                  {/* Bottom bracket */}
+                  <line
+                    x1={barWidth}
+                    x2={barWidth + 5}
+                    y1={(yScale(group!.steps[group!.steps.length - 1].id) || 0) + yScale.bandwidth()}
+                    y2={(yScale(group!.steps[group!.steps.length - 1].id) || 0) + yScale.bandwidth()}
+                    stroke={color}
+                    strokeWidth={1.5}
+                    opacity={0.6}
+                  />
+                </g>
+              )}
             </g>
           );
         })}
@@ -108,18 +241,33 @@ export function ContextLengthChart({
         <Group left={-10}>
           {contextSteps.map(step => {
             const y = (yScale(step.id) || 0) + yScale.bandwidth() / 2;
+            const isSubagent = step.context === 'subagent' || step.type === 'subagent' || step.agentId;
 
             return (
-              <text
-                key={`label-${step.id}`}
-                x={0}
-                y={y + 4}
-                fill="#d1d5db"
-                fontSize={12}
-                textAnchor="end"
-              >
-                {getStepLabel(step)}
-              </text>
+              <g key={`label-${step.id}`}>
+                <text
+                  x={0}
+                  y={y + 4}
+                  fill={isSubagent ? '#3b82f6' : '#d1d5db'}
+                  fontSize={12}
+                  fontWeight={isSubagent ? 'bold' : 'normal'}
+                  textAnchor="end"
+                >
+                  {getStepLabel(step)}
+                </text>
+                {/* Subagent icon indicator */}
+                {isSubagent && (
+                  <text
+                    x={-15}
+                    y={y + 4}
+                    fill="#3b82f6"
+                    fontSize={10}
+                    textAnchor="end"
+                  >
+                    🔷
+                  </text>
+                )}
+              </g>
             );
           })}
         </Group>

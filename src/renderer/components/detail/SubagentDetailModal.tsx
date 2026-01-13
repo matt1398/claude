@@ -1,9 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
 import { GanttChart } from './GanttChart';
-import { SemanticStep } from '../../types/data';
-import { GanttTask } from '../../types/gantt';
+import { groupIntoSegments } from '../../utils/segmentGrouping';
 
 export const SubagentDetailModal: React.FC = () => {
   const {
@@ -50,42 +49,25 @@ export const SubagentDetailModal: React.FC = () => {
     };
   }, [isVisible, closeSubagentModal]);
 
+  // Create segments from all chunks for the timeline view
+  const segments = useMemo(() => {
+    if (!currentSubagentDetail || !currentSubagentDetail.chunks) return [];
+
+    // Combine all chunks' steps into a single timeline
+    const allSteps = currentSubagentDetail.chunks.flatMap(c => c.semanticSteps);
+
+    // Create a mock chunk for grouping
+    const mockChunk = {
+      ...currentSubagentDetail.chunks[0],
+      semanticSteps: allSteps,
+      subagents: currentSubagentDetail.chunks.flatMap(c => c.subagents),
+      toolExecutions: currentSubagentDetail.chunks.flatMap(c => c.toolExecutions),
+    };
+
+    return groupIntoSegments(allSteps, mockChunk);
+  }, [currentSubagentDetail]);
+
   if (!isVisible) return null;
-
-  // Helper function to convert SemanticStep[] to GanttTask[]
-  const toGanttTasks = (steps: SemanticStep[]): GanttTask[] => {
-    return steps.map((step) => ({
-      id: step.id,
-      name: getStepLabel(step),
-      start: step.startTime,
-      end: step.endTime || new Date(step.startTime.getTime() + step.durationMs),
-      custom_class: `gantt-${step.type}`,
-      metadata: {
-        stepType: step.type,
-        tokens: step.tokens || { input: 0, output: 0 },
-        context: step.context,
-        isParallel: step.isParallel,
-      },
-    }));
-  };
-
-  // Helper to get step label
-  const getStepLabel = (step: SemanticStep): string => {
-    switch (step.type) {
-      case 'thinking':
-        return 'Thinking';
-      case 'tool_call':
-        return step.content.toolName || 'Tool Call';
-      case 'tool_result':
-        return `Result: ${step.content.isError ? '❌' : '✓'}`;
-      case 'subagent':
-        return step.content.subagentDescription || 'Subagent';
-      case 'output':
-        return 'Output';
-      case 'interruption':
-        return 'Interruption';
-    }
-  };
 
   const formatTokens = (inputTokens: number, outputTokens: number, cached?: number) => {
     const total = inputTokens + outputTokens;
@@ -200,14 +182,12 @@ export const SubagentDetailModal: React.FC = () => {
               </div>
 
               {/* Gantt Chart Overview */}
-              {currentSubagentDetail.semanticStepGroups && currentSubagentDetail.semanticStepGroups.length > 0 && (
+              {segments.length > 0 && (
                 <div className="bg-gray-800/30 rounded-lg p-4">
                   <div className="text-sm font-medium text-gray-300 mb-3">Execution Timeline</div>
                   <GanttChart
-                    tasks={toGanttTasks(currentSubagentDetail.chunks.flatMap(c => c.semanticSteps))}
-                    height={Math.max(300, currentSubagentDetail.semanticStepGroups.length * 40)}
-                    groups={currentSubagentDetail.semanticStepGroups}
-                    collapsedGroups={new Set()}
+                    segments={segments}
+                    height={Math.max(300, segments.length * 40)}
                   />
                 </div>
               )}

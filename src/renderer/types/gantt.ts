@@ -3,7 +3,7 @@
  * Used to transform semantic steps into Gantt-compatible data structures.
  */
 
-import type { SemanticStepType } from './data';
+import type { SemanticStep, SemanticStepType } from './data';
 
 // Re-export SemanticStepType for convenience
 export type { SemanticStepType };
@@ -43,5 +43,34 @@ export interface GanttTask {
     isParallel?: boolean;
     /** Whether this task's timing was gap-filled */
     isGapFilled?: boolean;
+  };
+}
+
+/**
+ * A segment groups related semantic steps into a single Gantt chart row.
+ * Segments can be either:
+ * 1. Task+Subagent pairs (Task tool call + its subagent execution)
+ * 2. Grouped consecutive steps (thinking, output, other tool calls)
+ */
+export interface TaskSegment {
+  /** Unique segment identifier */
+  id: string;
+  /** Segment type */
+  type: 'task-with-subagent' | 'grouped-steps';
+  /** Display label for the segment row */
+  label: string;
+  /** All steps in this segment */
+  steps: SemanticStep[];
+  /** Segment start time (earliest step) */
+  start: Date;
+  /** Segment end time (latest step) */
+  end: Date;
+  /** Total duration */
+  durationMs: number;
+  /** Total tokens for this segment */
+  totalTokens: {
+    input: number;
+    output: number;
+    cached: number;
   };
 }

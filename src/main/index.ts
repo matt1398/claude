@@ -41,7 +41,8 @@ function initializeServices(): void {
   sessionParser = new SessionParser(projectScanner);
   subagentResolver = new SubagentResolver(projectScanner);
   chunkBuilder = new ChunkBuilder();
-  dataCache = new DataCache(50, 10); // Max 50 sessions, 10 minute TTL
+  // Disable caching by default (set to true to enable)
+  dataCache = new DataCache(50, 10, false); // Max 50 sessions, 10 minute TTL, disabled
 
   console.log(`Projects directory: ${projectScanner.getProjectsDir()}`);
 

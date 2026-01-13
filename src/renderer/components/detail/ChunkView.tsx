@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Chunk, ContentBlock, EnhancedChunk, SemanticStep } from '../../types/data';
-import { GanttTask } from '../../types/gantt';
 import { GanttChart } from './GanttChart';
 import { SemanticStepView } from './SemanticStepView';
 import { DebugSidebar } from './DebugSidebar';
 import { ContextLengthChart } from './ContextLengthChart';
+import { groupIntoSegments } from '../../utils/segmentGrouping';
 
 interface ChunkViewProps {
   chunk: Chunk | EnhancedChunk;
@@ -22,34 +22,15 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
   const [isExpanded, setIsExpanded] = useState(false);
   const [showToolResults, setShowToolResults] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
-  const [collapsedGroups] = useState<Set<string>>(() => {
-    // Start with all groups collapsed by default
-    if (isEnhancedChunk(chunk) && chunk.semanticStepGroups) {
-      return new Set(chunk.semanticStepGroups.map(g => g.id));
-    }
-    return new Set();
-  });
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugData, setDebugData] = useState<{ data: unknown; title: string } | null>(null);
   const [chartMode, setChartMode] = useState<'timeline' | 'context'>('timeline');
 
-  // Helper function to convert SemanticStep[] to GanttTask[]
-  const toGanttTasks = (steps: SemanticStep[]): GanttTask[] => {
-    return steps.map((step) => ({
-      id: step.id,
-      name: getStepLabel(step),
-      start: step.startTime,
-      end: step.effectiveEndTime || step.endTime || new Date(step.startTime.getTime() + step.durationMs),
-      custom_class: `gantt-${step.type}`,
-      metadata: {
-        stepType: step.type,
-        tokens: step.tokens || { input: 0, output: 0 },
-        context: step.context,
-        isParallel: step.isParallel,
-        isGapFilled: step.isGapFilled,
-      },
-    }));
-  };
+  // Group semantic steps into segments for visualization
+  const segments = useMemo(() => {
+    if (!isEnhancedChunk(chunk)) return [];
+    return groupIntoSegments(chunk.semanticSteps, chunk);
+  }, [chunk]);
 
   // Helper to get step label
   const getStepLabel = (step: SemanticStep): string => {
@@ -216,10 +197,8 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
             </div>
             {chartMode === 'timeline' ? (
               <GanttChart
-                tasks={toGanttTasks(chunk.semanticSteps)}
-                height={Math.max(200, (chunk.semanticStepGroups?.length || chunk.semanticSteps.length) * 40)}
-                groups={chunk.semanticStepGroups}
-                collapsedGroups={collapsedGroups}
+                segments={segments}
+                height={Math.max(200, segments.length * 40)}
               />
             ) : (
               <ContextLengthChart steps={chunk.semanticSteps} />

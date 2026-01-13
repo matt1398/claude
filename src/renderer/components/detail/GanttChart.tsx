@@ -1,69 +1,137 @@
 import { useMemo } from 'react';
 import { scaleTime, scaleBand } from '@visx/scale';
 import { Group } from '@visx/group';
-import { Bar } from '@visx/shape';
 import { AxisBottom } from '@visx/axis';
 import { useTooltip, TooltipWithBounds } from '@visx/tooltip';
 import { ParentSize } from '@visx/responsive';
-import type { SemanticStepGroup } from '../../types/data';
-import type { GanttTask } from '../../types/gantt';
+import type { TaskSegment } from '../../types/gantt';
+import type { SemanticStep } from '../../types/data';
 import { STEP_ICON_PATHS, STEP_COLORS } from '../icons/StepIcons';
 
 interface GanttChartProps {
-  tasks: GanttTask[];
-  onTaskClick?: (task: GanttTask) => void;
+  segments: TaskSegment[];
+  onSegmentClick?: (segment: TaskSegment) => void;
   height?: number;
-  groups?: SemanticStepGroup[];
-  collapsedGroups?: Set<string>;
+}
+
+interface TooltipData {
+  segment: TaskSegment;
+  step?: SemanticStep;
 }
 
 const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
-  tasks, onTaskClick, width, height = 300, groups, collapsedGroups
+  segments,
+  onSegmentClick,
+  width,
+  height = 300,
 }) => {
-  const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } = useTooltip<GanttTask>();
+  const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } =
+    useTooltip<TooltipData>();
 
   const margin = { top: 20, right: 20, bottom: 40, left: 200 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
-  // Filter tasks based on collapsed groups
-  const visibleTasks = useMemo(() => {
-    if (!groups || !collapsedGroups || collapsedGroups.size === 0) {
-      return tasks;
-    }
-
-    // Build a map of step IDs to their group IDs
-    const stepToGroup = new Map<string, string>();
-    for (const group of groups) {
-      for (const step of group.steps) {
-        stepToGroup.set(step.id, group.id);
-      }
-    }
-
-    // Filter tasks: show only if their group is not collapsed
-    return tasks.filter(task => {
-      const groupId = stepToGroup.get(task.id);
-      if (!groupId) return true; // Show tasks not in any group
-      return !collapsedGroups.has(groupId); // Show if group is expanded
-    });
-  }, [tasks, groups, collapsedGroups]);
-
   // Time scale (X axis)
   const timeScale = useMemo(() => {
-    const minTime = Math.min(...tasks.map(t => t.start.getTime()));
-    const maxTime = Math.max(...tasks.map(t => t.end.getTime()));
+    if (segments.length === 0) {
+      return scaleTime({
+        domain: [new Date(), new Date()],
+        range: [0, innerWidth],
+      });
+    }
+    const minTime = Math.min(...segments.map((s) => s.start.getTime()));
+    const maxTime = Math.max(...segments.map((s) => s.end.getTime()));
     return scaleTime({
       domain: [new Date(minTime), new Date(maxTime)],
       range: [0, innerWidth],
     });
-  }, [tasks, innerWidth]);
+  }, [segments, innerWidth]);
 
-  // Band scale (Y axis - one row per visible task)
-  const bandScale = useMemo(() => scaleBand({
-    domain: visibleTasks.map(t => t.id),
-    range: [0, innerHeight],
-    padding: 0.2,
-  }), [visibleTasks, innerHeight]);
+  // Band scale (Y axis - one row per segment)
+  const bandScale = useMemo(
+    () =>
+      scaleBand({
+        domain: segments.map((s) => s.id),
+        range: [0, innerHeight],
+        padding: 0.2,
+      }),
+    [segments, innerHeight]
+  );
+
+  // Early return if no width
+  if (width === 0) {
+    return <div className="text-gray-500 text-sm">Measuring...</div>;
+  }
+
+  // Early return if no segments
+  if (segments.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-32 text-gray-500 text-sm">
+        No timeline data available
+      </div>
+    );
+  }
+
+  /**
+   * Get color for a step type with subtle variations for similar types
+   */
+  const getStepColor = (step: SemanticStep): string => {
+    const baseColor = STEP_COLORS[step.type] || STEP_COLORS.output;
+
+    // For tool calls, create subtle variations based on tool name
+    if (step.type === 'tool_call' && step.content.toolName) {
+      const toolName = step.content.toolName;
+      const hash = toolName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const variation = hash % 3;
+
+      // Create subtle variations of the base orange color
+      const toolColors = {
+        0: '#d97706', // Base
+        1: '#ea580c', // Slightly more red
+        2: '#c2410c', // Darker
+      };
+      return toolColors[variation as keyof typeof toolColors] || baseColor;
+    }
+
+    return baseColor;
+  };
+
+  /**
+   * Get label for a step
+   */
+  const getStepLabel = (step: SemanticStep): string => {
+    switch (step.type) {
+      case 'thinking':
+        return 'Thinking';
+      case 'tool_call':
+        return step.content.toolName || 'Tool';
+      case 'tool_result':
+        return step.content.isError ? '✗' : '✓';
+      case 'subagent':
+        return step.content.subagentDescription || 'Subagent';
+      case 'output':
+        return 'Output';
+      case 'interruption':
+        return 'Interruption';
+    }
+  };
+
+  /**
+   * Get icon type for segment label
+   */
+  const getSegmentIconType = (segment: TaskSegment): keyof typeof STEP_ICON_PATHS => {
+    if (segment.type === 'task-with-subagent') {
+      return 'subagent';
+    }
+
+    // Use the first significant step type
+    const firstStep = segment.steps[0];
+    if (firstStep.type === 'tool_call') {
+      return 'tool_call';
+    }
+    return firstStep.type;
+  };
 
   return (
     <div className="relative">
@@ -82,54 +150,80 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
             />
           ))}
 
-          {/* Task bars */}
-          {visibleTasks.map((task, idx) => {
-            const barX = timeScale(task.start);
-            const barWidth = timeScale(task.end) - timeScale(task.start);
-            const barY = bandScale(task.id) || 0;
-            const barHeight = bandScale.bandwidth();
-            const color = STEP_COLORS[task.metadata?.stepType || 'output'];
+          {/* Segment rows */}
+          {segments.map((segment, segmentIdx) => {
+            const rowY = bandScale(segment.id) || 0;
+            const rowHeight = bandScale.bandwidth();
 
             return (
-              <Group key={task.id}>
+              <Group key={segment.id}>
                 {/* Background row */}
                 <rect
                   x={0}
-                  y={barY}
+                  y={rowY}
                   width={innerWidth}
-                  height={barHeight}
-                  fill={idx % 2 === 0 ? '#1f2937' : '#111827'}
+                  height={rowHeight}
+                  fill={segmentIdx % 2 === 0 ? '#1f2937' : '#111827'}
                 />
-                {/* Task bar */}
-                <Bar
-                  x={barX}
-                  y={barY + 2}
-                  width={Math.max(barWidth, 4)}
-                  height={barHeight - 4}
-                  fill={color}
-                  opacity={task.metadata?.isGapFilled ? 0.5 : 0.8}
-                  rx={4}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => onTaskClick?.(task)}
-                  onMouseMove={(e) => showTooltip({
-                    tooltipData: task,
-                    tooltipLeft: e.clientX,
-                    tooltipTop: e.clientY,
-                  })}
-                  onMouseLeave={hideTooltip}
-                />
-                {/* Token label on bar */}
-                {barWidth > 60 && task.metadata?.tokens && (
-                  <text
-                    x={barX + barWidth / 2}
-                    y={barY + barHeight / 2 + 4}
-                    fill="#fff"
-                    fontSize={11}
-                    textAnchor="middle"
-                  >
-                    {task.metadata.tokens.output.toLocaleString()} tok
-                  </text>
-                )}
+
+                {/* Render each step as a colored block within the row */}
+                {segment.steps.map((step) => {
+                  const stepStart = step.startTime;
+                  const stepEnd =
+                    step.effectiveEndTime ||
+                    step.endTime ||
+                    new Date(step.startTime.getTime() + step.durationMs);
+
+                  const blockX = timeScale(stepStart);
+                  const blockWidth = Math.max(timeScale(stepEnd) - blockX, 4);
+                  const blockY = rowY + 2;
+                  const blockHeight = rowHeight - 4;
+
+                  const color = getStepColor(step);
+                  const opacity = step.isGapFilled ? 0.5 : 0.8;
+
+                  // Only show label if block is wide enough
+                  const showLabel = blockWidth > 60;
+                  const label = getStepLabel(step);
+
+                  return (
+                    <Group key={step.id}>
+                      <rect
+                        x={blockX}
+                        y={blockY}
+                        width={blockWidth}
+                        height={blockHeight}
+                        fill={color}
+                        opacity={opacity}
+                        rx={4}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => onSegmentClick?.(segment)}
+                        onMouseMove={(e) =>
+                          showTooltip({
+                            tooltipData: { segment, step },
+                            tooltipLeft: e.clientX,
+                            tooltipTop: e.clientY,
+                          })
+                        }
+                        onMouseLeave={hideTooltip}
+                      />
+
+                      {/* Label inside block */}
+                      {showLabel && (
+                        <text
+                          x={blockX + blockWidth / 2}
+                          y={blockY + blockHeight / 2 + 4}
+                          fill="#fff"
+                          fontSize={10}
+                          textAnchor="middle"
+                          pointerEvents="none"
+                        >
+                          {label}
+                        </text>
+                      )}
+                    </Group>
+                  );
+                })}
               </Group>
             );
           })}
@@ -150,22 +244,21 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
 
         {/* Left labels */}
         <Group left={10} top={margin.top}>
-          {visibleTasks.map((task) => {
-            const yPos = (bandScale(task.id) || 0) + bandScale.bandwidth() / 2;
+          {segments.map((segment) => {
+            const yPos = (bandScale(segment.id) || 0) + bandScale.bandwidth() / 2;
+            const iconType = getSegmentIconType(segment);
+
             return (
-              <Group key={task.id}>
+              <Group key={segment.id}>
                 <path
-                  d={STEP_ICON_PATHS[task.metadata?.stepType || 'output']}
-                  fill={STEP_COLORS[task.metadata?.stepType || 'output']}
+                  d={STEP_ICON_PATHS[iconType]}
+                  fill={STEP_COLORS[iconType]}
                   transform={`translate(5, ${yPos - 8}) scale(0.6)`}
                 />
-                <text
-                  x={30}
-                  y={yPos + 4}
-                  fill="#d1d5db"
-                  fontSize={12}
-                >
-                  {task.name.length > 20 ? task.name.slice(0, 20) + '...' : task.name}
+                <text x={30} y={yPos + 4} fill="#d1d5db" fontSize={12}>
+                  {segment.label.length > 20
+                    ? segment.label.slice(0, 20) + '...'
+                    : segment.label}
                 </text>
               </Group>
             );
@@ -177,12 +270,24 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
       {tooltipData && (
         <TooltipWithBounds left={tooltipLeft} top={tooltipTop}>
           <div className="bg-gray-800 text-white p-2 rounded shadow-lg text-xs">
-            <div className="font-medium">{tooltipData.name}</div>
-            <div className="text-gray-400">
-              {tooltipData.metadata?.tokens?.output.toLocaleString()} output tokens
-            </div>
-            <div className="text-gray-400">
-              {((tooltipData.end.getTime() - tooltipData.start.getTime()) / 1000).toFixed(2)}s
+            <div className="font-medium">{tooltipData.segment.label}</div>
+            {tooltipData.step && (
+              <>
+                <div className="text-gray-400 mt-1">
+                  {getStepLabel(tooltipData.step)}
+                </div>
+                {tooltipData.step.tokens && (
+                  <div className="text-gray-400">
+                    {tooltipData.step.tokens.output.toLocaleString()} output tokens
+                  </div>
+                )}
+                <div className="text-gray-400">
+                  {(tooltipData.step.durationMs / 1000).toFixed(2)}s
+                </div>
+              </>
+            )}
+            <div className="text-gray-400 mt-1">
+              Total: {tooltipData.segment.totalTokens.output.toLocaleString()} tokens
             </div>
           </div>
         </TooltipWithBounds>
@@ -193,7 +298,9 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
 
 // Responsive wrapper
 export const GanttChart: React.FC<GanttChartProps> = (props) => (
-  <ParentSize>
-    {({ width }) => <GanttChartInner {...props} width={width} />}
-  </ParentSize>
+  <div style={{ width: '100%', minHeight: props.height || 300 }}>
+    <ParentSize>
+      {({ width }) => <GanttChartInner {...props} width={width} />}
+    </ParentSize>
+  </div>
 );

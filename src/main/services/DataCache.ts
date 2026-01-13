@@ -23,12 +23,32 @@ export class DataCache {
   private cache: Map<string, CacheEntry<CachedValue>>;
   private maxSize: number;
   private ttl: number; // Time-to-live in milliseconds
+  private enabled: boolean; // Whether caching is enabled
   private static readonly CURRENT_VERSION = 2; // Increment when cache structure changes
 
-  constructor(maxSize: number = 50, ttlMinutes: number = 10) {
+  constructor(maxSize: number = 50, ttlMinutes: number = 10, enabled: boolean = true) {
     this.cache = new Map();
     this.maxSize = maxSize;
     this.ttl = ttlMinutes * 60 * 1000;
+    this.enabled = enabled;
+  }
+
+  /**
+   * Enable or disable caching.
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) {
+      // Clear cache when disabling
+      this.cache.clear();
+    }
+  }
+
+  /**
+   * Check if caching is enabled.
+   */
+  isEnabled(): boolean {
+    return this.enabled;
   }
 
   // ===========================================================================
@@ -41,6 +61,10 @@ export class DataCache {
    * @returns The cached SessionDetail, or undefined if not found or expired
    */
   get(key: string): SessionDetail | undefined {
+    if (!this.enabled) {
+      return undefined;
+    }
+
     const entry = this.cache.get(key);
 
     if (!entry) {
@@ -74,6 +98,10 @@ export class DataCache {
    * @returns The cached SubagentDetail, or undefined if not found or expired
    */
   getSubagent(key: string): SubagentDetail | undefined {
+    if (!this.enabled) {
+      return undefined;
+    }
+
     const entry = this.cache.get(key);
 
     if (!entry) {
@@ -107,6 +135,10 @@ export class DataCache {
    * @param value - The SessionDetail to cache
    */
   set(key: string, value: SessionDetail): void {
+    if (!this.enabled) {
+      return;
+    }
+
     // If at max size, remove least recently used (first entry)
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
@@ -128,6 +160,10 @@ export class DataCache {
    * @param value - The SubagentDetail to cache
    */
   setSubagent(key: string, value: SubagentDetail): void {
+    if (!this.enabled) {
+      return;
+    }
+
     // If at max size, remove least recently used (first entry)
     if (this.cache.size >= this.maxSize) {
       const firstKey = this.cache.keys().next().value;
