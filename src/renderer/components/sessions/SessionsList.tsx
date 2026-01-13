@@ -11,14 +11,7 @@ export const SessionsList: React.FC = () => {
     selectSession
   } = useStore();
 
-  console.log('[SessionsList] Render - selectedProjectId:', selectedProjectId);
-  console.log('[SessionsList] Render - sessions:', sessions);
-  console.log('[SessionsList] Render - sessions.length:', sessions.length);
-  console.log('[SessionsList] Render - sessionsLoading:', sessionsLoading);
-  console.log('[SessionsList] Render - sessionsError:', sessionsError);
-
   if (!selectedProjectId) {
-    console.log('[SessionsList] Returning: No project selected');
     return (
       <div className="p-4">
         <div className="text-gray-400 text-sm text-center py-8">
@@ -29,7 +22,6 @@ export const SessionsList: React.FC = () => {
   }
 
   if (sessionsLoading) {
-    console.log('[SessionsList] Returning: Loading skeleton');
     return (
       <div className="p-4">
         <div className="space-y-3">
@@ -45,7 +37,6 @@ export const SessionsList: React.FC = () => {
   }
 
   if (sessionsError) {
-    console.log('[SessionsList] Returning: Error state -', sessionsError);
     return (
       <div className="p-4">
         <div className="bg-red-900/20 border border-red-500 rounded-lg p-3 text-red-400 text-sm">
@@ -57,7 +48,6 @@ export const SessionsList: React.FC = () => {
   }
 
   if (sessions.length === 0) {
-    console.log('[SessionsList] Returning: Empty sessions list');
     return (
       <div className="p-4">
         <div className="text-gray-400 text-sm text-center py-8">
@@ -70,7 +60,6 @@ export const SessionsList: React.FC = () => {
     );
   }
 
-  console.log('[SessionsList] Returning: Sessions list with', sessions.length, 'sessions');
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-800">

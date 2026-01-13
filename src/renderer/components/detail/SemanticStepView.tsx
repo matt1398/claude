@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SemanticStep } from '../../types/data';
+import { STEP_ICONS, STEP_COLORS } from '../icons/StepIcons';
 
 interface SemanticStepViewProps {
   step: SemanticStep;
@@ -16,14 +17,9 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
   onSelect,
   onSubagentClick
 }) => {
-  const icons: Record<SemanticStep['type'], string> = {
-    thinking: '🧠',
-    tool_call: '🔧',
-    tool_result: '📤',
-    subagent: '🤖',
-    output: '💬',
-    interruption: '⚡',
-  };
+  // Get the icon component and color for this step type
+  const Icon = STEP_ICONS[step.type];
+  const iconColor = STEP_COLORS[step.type];
 
   const colors: Record<SemanticStep['type'], string> = {
     thinking: 'bg-purple-900/40 text-purple-300',
@@ -57,7 +53,7 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
         }`}
       >
         <div className="flex items-center gap-2">
-          <span>{icons[step.type]}</span>
+          <Icon size={16} color={iconColor} className="mt-0.5 flex-shrink-0" />
           <span className="font-medium capitalize">{step.type.replace('_', ' ')}</span>
           {step.content.toolName && (
             <code className="text-xs bg-gray-800 px-1 rounded">

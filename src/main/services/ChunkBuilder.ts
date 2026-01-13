@@ -30,6 +30,8 @@ import {
   isTextContent,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
+import { fillTimelineGaps } from '../utils/timelineGapFilling';
+import { calculateAccumulatedContext } from '../utils/contextAccumulator';
 
 let chunkIdCounter = 0;
 
@@ -118,6 +120,14 @@ export class ChunkBuilder {
     // Extract semantic steps for each chunk (now that subagents are linked)
     for (const chunk of chunks) {
       chunk.semanticSteps = this.extractSemanticSteps(chunk);
+
+      // Apply timeline gap filling
+      chunk.semanticSteps = fillTimelineGaps({
+        steps: chunk.semanticSteps,
+        chunkStartTime: chunk.startTime,
+        chunkEndTime: chunk.endTime,
+      });
+
       chunk.semanticStepGroups = this.buildSemanticStepGroups(chunk.semanticSteps);
     }
 
@@ -555,6 +565,26 @@ export class ChunkBuilder {
     // Build chunks
     const chunks = this.buildChunks(messages, subagents);
 
+    // Calculate context accumulation across all chunks
+    let allSteps: SemanticStep[] = [];
+    for (const chunk of chunks) {
+      allSteps = allSteps.concat(chunk.semanticSteps);
+    }
+
+    // Apply context accumulation (session-wide)
+    allSteps = calculateAccumulatedContext({
+      steps: allSteps,
+      messages,
+      isSubagent: false,
+    });
+
+    // Update chunks with accumulated steps
+    let stepIndex = 0;
+    for (const chunk of chunks) {
+      chunk.semanticSteps = allSteps.slice(stepIndex, stepIndex + chunk.semanticSteps.length);
+      stepIndex += chunk.semanticSteps.length;
+    }
+
     // Calculate overall metrics
     const metrics = calculateMetrics(messages);
 
@@ -814,6 +844,25 @@ export class ChunkBuilder {
 
       // Build chunks with semantic steps
       const chunks = this.buildChunks(parsedSession.messages, nestedSubagents);
+
+      // Apply context accumulation for subagent (resets to 10k)
+      let allSteps: SemanticStep[] = [];
+      for (const chunk of chunks) {
+        allSteps = allSteps.concat(chunk.semanticSteps);
+      }
+
+      allSteps = calculateAccumulatedContext({
+        steps: allSteps,
+        messages: parsedSession.messages,
+        isSubagent: true, // Resets context to 10k
+      });
+
+      // Update chunks
+      let stepIndex = 0;
+      for (const chunk of chunks) {
+        chunk.semanticSteps = allSteps.slice(stepIndex, stepIndex + chunk.semanticSteps.length);
+        stepIndex += chunk.semanticSteps.length;
+      }
 
       // Extract description (try to get from first user message)
       let description = 'Subagent';

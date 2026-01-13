@@ -5,17 +5,9 @@ import { Bar } from '@visx/shape';
 import { AxisBottom } from '@visx/axis';
 import { useTooltip, TooltipWithBounds } from '@visx/tooltip';
 import { ParentSize } from '@visx/responsive';
-import type { SemanticStepType, SemanticStepGroup } from '../../types/data';
+import type { SemanticStepGroup } from '../../types/data';
 import type { GanttTask } from '../../types/gantt';
-
-const STEP_COLORS: Record<SemanticStepType, string> = {
-  thinking: '#8b5cf6',    // Purple
-  tool_call: '#f59e0b',   // Amber
-  tool_result: '#d97706', // Amber darker
-  subagent: '#10b981',    // Green
-  output: '#3b82f6',      // Blue
-  interruption: '#ef4444', // Red
-};
+import { STEP_ICON_PATHS, STEP_COLORS } from '../icons/StepIcons';
 
 interface GanttChartProps {
   tasks: GanttTask[];
@@ -30,7 +22,7 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
 }) => {
   const { showTooltip, hideTooltip, tooltipData, tooltipLeft, tooltipTop } = useTooltip<GanttTask>();
 
-  const margin = { top: 20, right: 20, bottom: 40, left: 180 };
+  const margin = { top: 20, right: 20, bottom: 40, left: 200 };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
@@ -115,6 +107,7 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
                   width={Math.max(barWidth, 4)}
                   height={barHeight - 4}
                   fill={color}
+                  opacity={task.metadata?.isGapFilled ? 0.5 : 0.8}
                   rx={4}
                   style={{ cursor: 'pointer' }}
                   onClick={() => onTaskClick?.(task)}
@@ -157,16 +150,26 @@ const GanttChartInner: React.FC<GanttChartProps & { width: number }> = ({
 
         {/* Left labels */}
         <Group left={10} top={margin.top}>
-          {visibleTasks.map((task) => (
-            <text
-              key={task.id}
-              y={(bandScale(task.id) || 0) + bandScale.bandwidth() / 2 + 4}
-              fill="#d1d5db"
-              fontSize={12}
-            >
-              {task.name.length > 20 ? task.name.slice(0, 20) + '...' : task.name}
-            </text>
-          ))}
+          {visibleTasks.map((task) => {
+            const yPos = (bandScale(task.id) || 0) + bandScale.bandwidth() / 2;
+            return (
+              <Group key={task.id}>
+                <path
+                  d={STEP_ICON_PATHS[task.metadata?.stepType || 'output']}
+                  fill={STEP_COLORS[task.metadata?.stepType || 'output']}
+                  transform={`translate(5, ${yPos - 8}) scale(0.6)`}
+                />
+                <text
+                  x={30}
+                  y={yPos + 4}
+                  fill="#d1d5db"
+                  fontSize={12}
+                >
+                  {task.name.length > 20 ? task.name.slice(0, 20) + '...' : task.name}
+                </text>
+              </Group>
+            );
+          })}
         </Group>
       </svg>
 

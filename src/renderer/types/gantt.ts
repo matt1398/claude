@@ -41,5 +41,7 @@ export interface GanttTask {
     context: 'main' | 'subagent';
     /** Whether executed in parallel */
     isParallel?: boolean;
+    /** Whether this task's timing was gap-filled */
+    isGapFilled?: boolean;
   };
 }

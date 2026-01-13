@@ -13,6 +13,7 @@ import { SessionDetail, SubagentDetail } from '../types/claude';
 interface CacheEntry<T> {
   value: T;
   timestamp: number;
+  version: number; // Cache schema version
 }
 
 // Union type for cached values
@@ -22,6 +23,7 @@ export class DataCache {
   private cache: Map<string, CacheEntry<CachedValue>>;
   private maxSize: number;
   private ttl: number; // Time-to-live in milliseconds
+  private static readonly CURRENT_VERSION = 2; // Increment when cache structure changes
 
   constructor(maxSize: number = 50, ttlMinutes: number = 10) {
     this.cache = new Map();
@@ -42,6 +44,13 @@ export class DataCache {
     const entry = this.cache.get(key);
 
     if (!entry) {
+      return undefined;
+    }
+
+    // Check if entry version is outdated
+    if (entry.version !== DataCache.CURRENT_VERSION) {
+      console.log(`DataCache: Invalidating outdated cache entry (v${entry.version}): ${key}`);
+      this.cache.delete(key);
       return undefined;
     }
 
@@ -68,6 +77,13 @@ export class DataCache {
     const entry = this.cache.get(key);
 
     if (!entry) {
+      return undefined;
+    }
+
+    // Check if entry version is outdated
+    if (entry.version !== DataCache.CURRENT_VERSION) {
+      console.log(`DataCache: Invalidating outdated subagent cache entry (v${entry.version}): ${key}`);
+      this.cache.delete(key);
       return undefined;
     }
 
@@ -102,6 +118,7 @@ export class DataCache {
     this.cache.set(key, {
       value,
       timestamp: Date.now(),
+      version: DataCache.CURRENT_VERSION,
     });
   }
 
@@ -122,6 +139,7 @@ export class DataCache {
     this.cache.set(key, {
       value,
       timestamp: Date.now(),
+      version: DataCache.CURRENT_VERSION,
     });
   }
 
@@ -229,7 +247,7 @@ export class DataCache {
   }
 
   /**
-   * Removes expired entries from the cache.
+   * Removes expired and outdated entries from the cache.
    * Should be called periodically to prevent memory bloat.
    */
   cleanExpired(): number {
@@ -237,7 +255,8 @@ export class DataCache {
     const keysToDelete: string[] = [];
 
     for (const [key, entry] of this.cache.entries()) {
-      if (now - entry.timestamp > this.ttl) {
+      // Remove if expired OR outdated version
+      if (now - entry.timestamp > this.ttl || entry.version !== DataCache.CURRENT_VERSION) {
         keysToDelete.push(key);
       }
     }
@@ -247,7 +266,7 @@ export class DataCache {
     }
 
     if (keysToDelete.length > 0) {
-      console.log(`DataCache: Cleaned ${keysToDelete.length} expired entries`);
+      console.log(`DataCache: Cleaned ${keysToDelete.length} expired/outdated entries`);
     }
 
     return keysToDelete.length;

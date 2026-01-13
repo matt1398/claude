@@ -783,6 +783,29 @@ export interface SemanticStep {
 
   /** Source message UUID (for grouping steps by assistant message) */
   sourceMessageId?: string;
+
+  /** Effective end time after gap filling (extends to next step or chunk end) */
+  effectiveEndTime?: Date;
+
+  /** Effective duration including waiting time until next step */
+  effectiveDurationMs?: number;
+
+  /** Whether timing was gap-filled vs having original endTime */
+  isGapFilled?: boolean;
+
+  /** Context tokens for this step (cache_read + cache_creation + input) */
+  contextTokens?: number;
+
+  /** Cumulative context up to this step (session-wide accumulation) */
+  accumulatedContext?: number;
+
+  /** Token breakdown for step-level estimation */
+  tokenBreakdown?: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheCreation: number;
+  };
 }
 
 /**
