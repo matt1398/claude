@@ -17,31 +17,9 @@ export function calculateStepContext(steps: SemanticStep[], messages: ParsedMess
 
       // Context = input tokens sent to API (cache_read + cache_creation + regular input)
       step.accumulatedContext = inputTokens + cacheRead + cacheCreation;
-
-      // DEBUG: Log context calculation for first 5 steps
-      if (steps.indexOf(step) < 5) {
-        console.log(`[DEBUG] Step ${steps.indexOf(step)} - ${step.type} (${step.id.substring(0, 20)}...):`, {
-          sourceMessageId: step.sourceMessageId?.substring(0, 20),
-          foundMessage: !!msg,
-          messageType: msg?.type,
-          inputTokens,
-          cacheRead,
-          cacheCreation,
-          total: step.accumulatedContext
-        });
-      }
     } else if (step.tokens) {
       // For steps that already have token info (like subagents)
       step.accumulatedContext = (step.tokens.input || 0) + (step.tokens.cached || 0);
-
-      // DEBUG: Log subagent context
-      if (steps.indexOf(step) < 5) {
-        console.log(`[DEBUG] Subagent step ${steps.indexOf(step)}:`, {
-          input: step.tokens.input,
-          cached: step.tokens.cached,
-          total: step.accumulatedContext
-        });
-      }
     }
 
     // Individual step doesn't contribute tokens (message-level tracking)
