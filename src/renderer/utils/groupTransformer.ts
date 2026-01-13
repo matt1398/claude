@@ -267,125 +267,68 @@ function extractFileReferences(text: string): FileReference[] {
 // =============================================================================
 
 /**
- * Splits chunk responses into AIGroups at assistant message boundaries.
+ * Creates ONE AIGroup per chunk containing ALL semantic steps.
  *
- * Each assistant message creates a new AIGroup. This handles cases where
- * the user interrupts mid-response, creating multiple AI response cycles.
+ * Previously, this function grouped steps by sourceMessageId, which caused
+ * multiple AIGroups when tool_result or subagent steps lacked sourceMessageId.
+ * Now we create exactly ONE AIGroup per chunk to match the conversation model
+ * where each user request gets a single AI response toggle.
  *
- * @param chunk - The enhanced chunk to split
+ * @param chunk - The enhanced chunk to process
  * @param userGroupId - ID of the parent UserGroup
  * @param allSubagents - All subagents in the session
- * @returns Array of AIGroup objects
+ * @returns Array containing exactly ONE AIGroup
  */
 export function splitIntoAIGroups(
   chunk: EnhancedChunk,
   userGroupId: string,
   allSubagents: Subagent[]
 ): AIGroup[] {
-  const aiGroups: AIGroup[] = [];
+  const steps = chunk.semanticSteps;
 
-  // Group semantic steps by their source assistant message
-  const stepsByMessageId = new Map<string, SemanticStep[]>();
-
-  for (const step of chunk.semanticSteps) {
-    const messageId = step.sourceMessageId || 'unknown';
-    if (!stepsByMessageId.has(messageId)) {
-      stepsByMessageId.set(messageId, []);
-    }
-    stepsByMessageId.get(messageId)!.push(step);
+  // If no semantic steps, return empty array
+  if (steps.length === 0) {
+    return [];
   }
 
-  // Create an AIGroup for each assistant message
-  let responseIndex = 0;
+  // Calculate timing from all steps
+  const startTime = steps[0].startTime;
+  const endTime = steps[steps.length - 1].endTime || steps[steps.length - 1].startTime;
+  const durationMs = endTime.getTime() - startTime.getTime();
 
-  for (const [messageId, steps] of stepsByMessageId.entries()) {
-    if (steps.length === 0) continue;
+  // Find any source assistant message for token calculation
+  const sourceMessage = chunk.responses.find(msg => isAssistantMessage(msg)) || null;
 
-    // Find the source assistant message
-    const sourceMessage = chunk.responses.find(
-      msg => msg.uuid === messageId && isAssistantMessage(msg)
-    );
+  // Calculate tokens from all steps
+  const tokens = calculateTokensFromSteps(steps, sourceMessage);
 
-    if (!sourceMessage && messageId !== 'unknown') {
-      // Skip if we can't find the source message (unless it's orphaned steps)
-      continue;
-    }
+  // Generate summary from all steps
+  const summary = computeAIGroupSummary(steps);
 
-    // Calculate timing
-    const startTime = steps[0].startTime;
-    const endTime = steps[steps.length - 1].endTime || steps[steps.length - 1].startTime;
-    const durationMs = endTime.getTime() - startTime.getTime();
+  // Determine status from all steps
+  const status = determineAIGroupStatus(steps);
 
-    // Calculate tokens
-    const tokens = calculateTokensFromSteps(steps, sourceMessage);
+  // Link subagents by timing
+  const linkedSubagents = linkSubagentsToAIGroup(startTime, endTime, allSubagents);
 
-    // Generate summary
-    const summary = computeAIGroupSummary(steps);
+  // Create single AIGroup with all steps
+  const aiGroup: AIGroup = {
+    id: `ai-${chunk.id}`,
+    userGroupId,
+    responseIndex: 0,
+    startTime,
+    endTime,
+    durationMs,
+    steps,
+    tokens,
+    summary,
+    status,
+    subagents: linkedSubagents,
+    chunkId: chunk.id,
+    metrics: chunk.metrics,
+  };
 
-    // Determine status
-    const status = determineAIGroupStatus(steps);
-
-    // Link subagents by timing
-    const linkedSubagents = linkSubagentsToAIGroup(startTime, endTime, allSubagents);
-
-    // Create metrics from source message
-    const metrics: SessionMetrics = sourceMessage
-      ? {
-          durationMs,
-          totalTokens: (sourceMessage.usage?.input_tokens || 0) + (sourceMessage.usage?.output_tokens || 0),
-          inputTokens: sourceMessage.usage?.input_tokens || 0,
-          outputTokens: sourceMessage.usage?.output_tokens || 0,
-          cacheReadTokens: sourceMessage.usage?.cache_read_input_tokens || 0,
-          cacheCreationTokens: sourceMessage.usage?.cache_creation_input_tokens || 0,
-          messageCount: 1,
-        }
-      : chunk.metrics;
-
-    const aiGroup: AIGroup = {
-      id: `ai-${chunk.id}-${responseIndex}`,
-      userGroupId,
-      responseIndex,
-      startTime,
-      endTime,
-      durationMs,
-      steps,
-      tokens,
-      summary,
-      status,
-      subagents: linkedSubagents,
-      chunkId: chunk.id,
-      metrics,
-    };
-
-    aiGroups.push(aiGroup);
-    responseIndex++;
-  }
-
-  // If no AI groups were created but we have semantic steps, create a fallback group
-  if (aiGroups.length === 0 && chunk.semanticSteps.length > 0) {
-    const steps = chunk.semanticSteps;
-    const startTime = steps[0].startTime;
-    const endTime = steps[steps.length - 1].endTime || steps[steps.length - 1].startTime;
-    const durationMs = endTime.getTime() - startTime.getTime();
-
-    aiGroups.push({
-      id: `ai-${chunk.id}-0`,
-      userGroupId,
-      responseIndex: 0,
-      startTime,
-      endTime,
-      durationMs,
-      steps,
-      tokens: calculateTokensFromSteps(steps, null),
-      summary: computeAIGroupSummary(steps),
-      status: determineAIGroupStatus(steps),
-      subagents: linkSubagentsToAIGroup(startTime, endTime, allSubagents),
-      chunkId: chunk.id,
-      metrics: chunk.metrics,
-    });
-  }
-
-  return aiGroups;
+  return [aiGroup];
 }
 
 /**
