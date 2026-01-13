@@ -38,12 +38,7 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
 
   return (
     <div className="mb-4">
-      {/* Last Output - always visible */}
-      <div className="mb-2">
-        <LastOutputDisplay lastOutput={enhanced.lastOutput} />
-      </div>
-
-      {/* Collapsed Toggle - show if there are items to display */}
+      {/* Toggle at TOP */}
       {hasToggleContent && (
         <div className="mb-2">
           <CollapsedToggle
@@ -54,9 +49,9 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
         </div>
       )}
 
-      {/* Display Items - show when expanded */}
+      {/* Items shown when expanded */}
       {hasToggleContent && isExpanded && (
-        <div>
+        <div className="mb-2">
           <DisplayItemList
             items={enhanced.displayItems}
             onItemClick={handleItemClick}
@@ -64,6 +59,9 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
           />
         </div>
       )}
+
+      {/* Final output at BOTTOM - always visible */}
+      <LastOutputDisplay lastOutput={enhanced.lastOutput} />
     </div>
   );
 }

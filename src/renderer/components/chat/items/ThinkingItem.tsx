@@ -9,44 +9,32 @@ interface ThinkingItemProps {
   isExpanded: boolean;
 }
 
-/**
- * Formats a timestamp for display.
- * Examples: "2:34 PM", "10:05 AM"
- */
-function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
 export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onClick, isExpanded }) => {
   const fullContent = step.content.thinkingText || preview;
+  // Truncate preview to ~60 chars for collapsed one-liner
+  const truncatedPreview = preview.length > 60 ? preview.slice(0, 60) + '...' : preview;
 
   return (
-    <div
-      onClick={onClick}
-      className="flex items-start gap-2 px-3 py-2 rounded-lg border border-purple-800/40 bg-purple-900/20 text-purple-300 hover:bg-purple-900/30 transition-colors cursor-pointer"
-    >
-      <Brain size={16} className="mt-0.5 flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium text-xs">Thinking</span>
-          <span className="text-xs text-purple-300/60">
-            {formatTimestamp(step.startTime)}
-          </span>
-        </div>
-        {isExpanded ? (
+    <div>
+      {/* Collapsed: simple one-line row */}
+      <div
+        onClick={onClick}
+        className="flex items-center gap-2 px-2 py-1 hover:bg-purple-900/30 cursor-pointer rounded"
+      >
+        <Brain className="w-4 h-4 text-purple-400 flex-shrink-0" />
+        <span className="text-sm text-purple-300 truncate">
+          Thinking: "{truncatedPreview}"
+        </span>
+      </div>
+
+      {/* Expanded: full content below */}
+      {isExpanded && (
+        <div className="border-l-2 border-purple-500 pl-3 ml-3 mt-1 mb-2">
           <div className="text-xs text-purple-200/90 whitespace-pre-wrap">
             {fullContent}
           </div>
-        ) : (
-          <p className="text-xs text-purple-200/80 line-clamp-2 italic">
-            {preview}
-          </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

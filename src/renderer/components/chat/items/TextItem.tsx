@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import type { SemanticStep } from '../../../types/data';
 
 interface TextItemProps {
@@ -9,44 +9,32 @@ interface TextItemProps {
   isExpanded: boolean;
 }
 
-/**
- * Formats a timestamp for display.
- * Examples: "2:34 PM", "10:05 AM"
- */
-function formatTimestamp(date: Date): string {
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
 export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isExpanded }) => {
   const fullContent = step.content.outputText || preview;
+  // Truncate preview to ~60 chars for collapsed one-liner
+  const truncatedPreview = preview.length > 60 ? preview.slice(0, 60) + '...' : preview;
 
   return (
-    <div
-      onClick={onClick}
-      className="flex items-start gap-2 px-3 py-2 rounded-lg border border-claude-dark-border bg-claude-dark-surface text-claude-dark-text hover:bg-gray-700/50 transition-colors cursor-pointer"
-    >
-      <Terminal size={16} className="mt-0.5 flex-shrink-0 text-claude-dark-text-secondary" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium text-xs text-claude-dark-text-secondary">Output</span>
-          <span className="text-xs text-claude-dark-text-secondary/60">
-            {formatTimestamp(step.startTime)}
-          </span>
-        </div>
-        {isExpanded ? (
+    <div>
+      {/* Collapsed: simple one-line row */}
+      <div
+        onClick={onClick}
+        className="flex items-center gap-2 px-2 py-1 hover:bg-claude-dark-surface/50 cursor-pointer rounded"
+      >
+        <MessageSquare className="w-4 h-4 text-claude-dark-text-secondary flex-shrink-0" />
+        <span className="text-sm text-claude-dark-text-secondary truncate">
+          "{truncatedPreview}"
+        </span>
+      </div>
+
+      {/* Expanded: full content below */}
+      {isExpanded && (
+        <div className="border-l-2 border-claude-dark-border pl-3 ml-3 mt-1 mb-2">
           <div className="text-xs text-claude-dark-text whitespace-pre-wrap">
             {fullContent}
           </div>
-        ) : (
-          <p className="text-xs text-claude-dark-text line-clamp-2">
-            {preview}
-          </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

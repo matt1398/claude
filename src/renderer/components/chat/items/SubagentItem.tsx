@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, Zap, Clock, Code } from 'lucide-react';
+import { Bot, Clock, Code } from 'lucide-react';
 import type { SemanticStep, Subagent } from '../../../types/data';
 
 interface SubagentItemProps {
@@ -58,121 +58,77 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
   const inputTokens = subagent.metrics.inputTokens || 0;
   const outputTokens = subagent.metrics.outputTokens || 0;
 
+  // Truncate description for one-liner
+  const truncatedDesc = description.length > 50 ? description.slice(0, 50) + '...' : description;
+
   return (
-    <div
-      onClick={onClick}
-      className="flex items-start gap-2 px-3 py-2 rounded-lg border border-blue-800/40 bg-blue-900/20 text-blue-300 hover:bg-blue-900/30 transition-colors cursor-pointer"
-    >
-      <Bot size={16} className="mt-0.5 flex-shrink-0 text-blue-400" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className="font-medium text-xs">Subagent</span>
+    <div>
+      {/* Collapsed: simple one-line row */}
+      <div
+        onClick={onClick}
+        className="flex items-center gap-2 px-2 py-1 hover:bg-blue-900/30 cursor-pointer rounded"
+      >
+        <Bot className="w-4 h-4 text-blue-400 flex-shrink-0" />
+        <span className="text-sm text-blue-300 truncate">
+          {subagentType}: {truncatedDesc}
+        </span>
+        <span className="text-xs text-blue-300/60 flex-shrink-0">
+          (ok {formatDuration(subagent.durationMs)})
+        </span>
+      </div>
 
-          {/* Subagent type badge */}
-          <span className="text-xs bg-blue-950/50 px-1.5 py-0.5 rounded border border-blue-700/30">
-            {subagentType}
-          </span>
+      {/* Expanded: full content below */}
+      {isExpanded && (
+        <div className="border-l-2 border-blue-500 pl-3 ml-3 mt-1 mb-2 space-y-2">
+          {/* Full description */}
+          <div className="text-xs text-blue-200/90 whitespace-pre-wrap">
+            {description}
+          </div>
 
-          {/* Parallel indicator */}
-          {step.isParallel && (
-            <span className="inline-flex items-center gap-1 text-xs bg-blue-950/50 px-1.5 py-0.5 rounded border border-blue-700/30">
-              <Zap size={10} />
-              parallel
-            </span>
-          )}
-
-          {/* Timestamp */}
-          <span className="text-xs text-blue-300/60">
-            {formatTimestamp(subagent.startTime)}
-          </span>
-        </div>
-
-        {isExpanded ? (
-          <>
-            {/* Full description */}
-            <div className="text-xs text-blue-200/90 mb-3 whitespace-pre-wrap">
-              {description}
+          {/* Detailed metrics */}
+          <div className="space-y-2 text-xs text-blue-200/80">
+            {/* Duration */}
+            <div className="flex items-center gap-2">
+              <Clock size={14} className="text-blue-400" />
+              <span className="font-medium">Duration:</span>
+              <span>{formatDuration(subagent.durationMs)}</span>
             </div>
 
-            {/* Detailed metrics */}
-            <div className="space-y-2 text-xs text-blue-200/80">
-              {/* Duration */}
-              <div className="flex items-center gap-2">
-                <Clock size={14} className="text-blue-400" />
-                <span className="font-medium">Duration:</span>
-                <span>{formatDuration(subagent.durationMs)}</span>
-              </div>
+            {/* Tokens breakdown */}
+            <div className="flex items-center gap-2">
+              <Code size={14} className="text-blue-400" />
+              <span className="font-medium">Tokens:</span>
+              <span>{formatTokens(totalTokens)} total</span>
+              <span className="opacity-70">
+                ({formatTokens(inputTokens)} in / {formatTokens(outputTokens)} out)
+              </span>
+            </div>
 
-              {/* Tokens breakdown */}
+            {/* Messages */}
+            {subagent.messages.length > 0 && (
               <div className="flex items-center gap-2">
                 <Code size={14} className="text-blue-400" />
-                <span className="font-medium">Tokens:</span>
-                <span>{formatTokens(totalTokens)} total</span>
-                <span className="opacity-70">
-                  ({formatTokens(inputTokens)} in / {formatTokens(outputTokens)} out)
-                </span>
+                <span className="font-medium">Messages:</span>
+                <span>{subagent.messages.length} message{subagent.messages.length !== 1 ? 's' : ''}</span>
               </div>
+            )}
 
-              {/* Messages */}
-              {subagent.messages.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <Code size={14} className="text-blue-400" />
-                  <span className="font-medium">Messages:</span>
-                  <span>{subagent.messages.length} message{subagent.messages.length !== 1 ? 's' : ''}</span>
-                </div>
-              )}
-
-              {/* Timing */}
-              <div className="opacity-70 space-y-0.5 mt-2">
-                <div>Started: {formatTimestamp(subagent.startTime)}</div>
-                <div>Ended: {formatTimestamp(subagent.endTime)}</div>
-              </div>
-
-              {/* Subagent ID */}
-              {subagent.id && (
-                <div className="opacity-70 mt-2">
-                  <span className="font-medium">ID:</span>{' '}
-                  <code className="text-xs bg-black/30 px-1 py-0.5 rounded">{subagent.id}</code>
-                </div>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Description */}
-            <p className="text-xs text-blue-200/80 mb-2 line-clamp-2">
-              {description}
-            </p>
-
-            {/* Metrics row */}
-            <div className="flex items-center gap-3 text-xs text-blue-200/70">
-              {/* Duration */}
-              <div className="inline-flex items-center gap-1">
-                <Clock size={12} />
-                <span>{formatDuration(subagent.durationMs)}</span>
-              </div>
-
-              {/* Tokens */}
-              <div className="inline-flex items-center gap-1">
-                <Code size={12} />
-                <span>{formatTokens(totalTokens)} tokens</span>
-              </div>
-
-              {/* Message count */}
-              {subagent.messages.length > 0 && (
-                <div className="text-xs opacity-70">
-                  {subagent.messages.length} msg{subagent.messages.length !== 1 ? 's' : ''}
-                </div>
-              )}
+            {/* Timing */}
+            <div className="text-claude-dark-text-secondary space-y-0.5 mt-2">
+              <div>Started: {formatTimestamp(subagent.startTime)}</div>
+              <div>Ended: {formatTimestamp(subagent.endTime)}</div>
             </div>
 
-            {/* Click indicator */}
-            <div className="text-xs text-blue-400/70 mt-1 italic">
-              Click to view details
-            </div>
-          </>
-        )}
-      </div>
+            {/* Subagent ID */}
+            {subagent.id && (
+              <div className="text-claude-dark-text-secondary mt-2">
+                <span className="font-medium">ID:</span>{' '}
+                <code className="text-xs bg-black/30 px-1 py-0.5 rounded">{subagent.id}</code>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
