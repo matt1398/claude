@@ -310,9 +310,59 @@ export interface ToolExecution {
 }
 
 /**
- * A chunk represents one user message and all subsequent assistant responses.
+ * Base chunk properties shared by all chunk types.
  */
-export interface Chunk {
+export interface BaseChunk {
+  /** Unique chunk identifier */
+  id: string;
+  /** When the chunk started */
+  startTime: Date;
+  /** When the chunk ended */
+  endTime: Date;
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Aggregated metrics for the chunk */
+  metrics: SessionMetrics;
+}
+
+/**
+ * User chunk - represents a single user input message.
+ */
+export interface UserChunk extends BaseChunk {
+  /** Discriminator for chunk type */
+  chunkType: 'user';
+  /** The user message */
+  userMessage: ParsedMessage;
+}
+
+/**
+ * AI chunk - represents all assistant responses to a user message.
+ */
+export interface AIChunk extends BaseChunk {
+  /** Discriminator for chunk type */
+  chunkType: 'ai';
+  /** Reference to the parent user chunk ID */
+  userChunkId: string;
+  /** All assistant responses and internal messages */
+  responses: ParsedMessage[];
+  /** Subagents spawned during this chunk */
+  subagents: Subagent[];
+  /** Sidechain messages within this chunk */
+  sidechainMessages: ParsedMessage[];
+  /** Tool executions in this chunk */
+  toolExecutions: ToolExecution[];
+}
+
+/**
+ * A chunk can be either a user input or AI response.
+ */
+export type Chunk = UserChunk | AIChunk;
+
+/**
+ * Legacy combined chunk interface for backwards compatibility.
+ * @deprecated Prefer using separate UserChunk and AIChunk types.
+ */
+export interface LegacyChunk {
   /** Unique chunk identifier */
   id: string;
   /** The user message that started this chunk */
@@ -521,15 +571,87 @@ export interface SemanticStepGroup {
 }
 
 /**
- * Enhanced chunk with semantic step breakdown.
+ * Enhanced AI chunk with semantic step breakdown.
  */
-export interface EnhancedChunk extends Chunk {
+export interface EnhancedAIChunk extends AIChunk {
   /** Semantic steps extracted from messages */
   semanticSteps: SemanticStep[];
   /** Semantic steps grouped for collapsible UI */
   semanticStepGroups?: SemanticStepGroup[];
   /** Raw messages for debug sidebar */
   rawMessages: ParsedMessage[];
+}
+
+/**
+ * Enhanced user chunk with additional metadata.
+ */
+export interface EnhancedUserChunk extends UserChunk {
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+/**
+ * Enhanced chunk can be either user or AI type.
+ */
+export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk;
+
+/**
+ * Legacy enhanced chunk for backwards compatibility.
+ * @deprecated Prefer using EnhancedUserChunk and EnhancedAIChunk.
+ */
+export interface LegacyEnhancedChunk extends LegacyChunk {
+  /** Semantic steps extracted from messages */
+  semanticSteps: SemanticStep[];
+  /** Semantic steps grouped for collapsible UI */
+  semanticStepGroups?: SemanticStepGroup[];
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+// =============================================================================
+// Chunk Type Guards
+// =============================================================================
+
+/**
+ * Type guard to check if a chunk is a UserChunk.
+ */
+export function isUserChunk(chunk: Chunk | EnhancedChunk | LegacyChunk | LegacyEnhancedChunk): chunk is UserChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'user';
+}
+
+/**
+ * Type guard to check if a chunk is an AIChunk.
+ */
+export function isAIChunk(chunk: Chunk | EnhancedChunk | LegacyChunk | LegacyEnhancedChunk): chunk is AIChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'ai';
+}
+
+/**
+ * Type guard to check if a chunk is an EnhancedUserChunk.
+ */
+export function isEnhancedUserChunk(chunk: Chunk | EnhancedChunk | LegacyChunk | LegacyEnhancedChunk): chunk is EnhancedUserChunk {
+  return isUserChunk(chunk) && 'rawMessages' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is an EnhancedAIChunk.
+ */
+export function isEnhancedAIChunk(chunk: Chunk | EnhancedChunk | LegacyChunk | LegacyEnhancedChunk): chunk is EnhancedAIChunk {
+  return isAIChunk(chunk) && 'semanticSteps' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is a LegacyChunk (combined user + responses).
+ */
+export function isLegacyChunk(chunk: Chunk | EnhancedChunk | LegacyChunk | LegacyEnhancedChunk): chunk is LegacyChunk {
+  return !('chunkType' in chunk) && 'userMessage' in chunk && 'responses' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is a LegacyEnhancedChunk.
+ */
+export function isLegacyEnhancedChunk(chunk: Chunk | EnhancedChunk | LegacyChunk | LegacyEnhancedChunk): chunk is LegacyEnhancedChunk {
+  return isLegacyChunk(chunk) && 'semanticSteps' in chunk;
 }
 
 // =============================================================================

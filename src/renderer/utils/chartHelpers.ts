@@ -4,7 +4,17 @@
  * Transforms Chunk data into WaterfallData format for D3.js visualization
  */
 
-import { Chunk, WaterfallData, WaterfallItem, TokenUsage, Subagent } from '../types/data';
+import {
+  Chunk,
+  WaterfallData,
+  WaterfallItem,
+  TokenUsage,
+  Subagent,
+  AIChunk,
+  LegacyChunk,
+  isAIChunk,
+  isLegacyChunk,
+} from '../types/data';
 import { detectParallelGroups } from './parallelDetection';
 
 /**
@@ -47,10 +57,10 @@ export function formatDuration(ms: number): string {
  * - Level 0: Main session bar (entire chunk duration)
  * - Level 1: Subagent bars (indented, with parallel grouping)
  *
- * @param chunk Parsed chunk data with subagents
+ * @param chunk Parsed chunk data with subagents (AIChunk or LegacyChunk)
  * @returns Waterfall data ready for D3.js rendering
  */
-export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
+export function chunkToWaterfallData(chunk: Chunk | LegacyChunk): WaterfallData {
   const items: WaterfallItem[] = [];
 
   // 1. Main session bar - spans entire chunk
@@ -71,8 +81,11 @@ export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
   };
   items.push(mainItem);
 
-  // 2. Detect parallel groups among subagents
-  const groups = detectParallelGroups(chunk.subagents);
+  // 2. Get subagents from chunk (only AIChunk and LegacyChunk have subagents)
+  const subagents = (isAIChunk(chunk) || isLegacyChunk(chunk)) ? chunk.subagents : [];
+
+  // 3. Detect parallel groups among subagents
+  const groups = detectParallelGroups(subagents);
 
   // 3. Create waterfall items for each subagent
   groups.forEach((group) => {

@@ -1,13 +1,31 @@
 import { useState, useMemo } from 'react';
-import { Chunk, ContentBlock, EnhancedChunk, SemanticStep, ConversationGroup, ToolResult } from '../../types/data';
+import {
+  Chunk,
+  ContentBlock,
+  EnhancedChunk,
+  EnhancedAIChunk,
+  EnhancedUserChunk,
+  LegacyChunk,
+  LegacyEnhancedChunk,
+  SemanticStep,
+  ConversationGroup,
+  ToolResult,
+  isUserChunk,
+  isAIChunk,
+  isEnhancedAIChunk,
+  isLegacyChunk,
+  isLegacyEnhancedChunk,
+} from '../../types/data';
 import { GanttChart } from './GanttChart';
 import { SemanticStepView } from './SemanticStepView';
 import { DebugSidebar } from './DebugSidebar';
 import { ContextLengthChart } from './ContextLengthChart';
 import { groupIntoSegments } from '../../utils/segmentGrouping';
 
+type ChunkType = Chunk | EnhancedChunk | ConversationGroup | LegacyChunk | LegacyEnhancedChunk;
+
 interface ChunkViewProps {
-  chunk: Chunk | EnhancedChunk | ConversationGroup;
+  chunk: ChunkType;
   index: number;
   onDebugClick?: (data: any, title: string) => void;
   onSubagentClick?: (subagentId: string, description: string) => void;
@@ -15,14 +33,30 @@ interface ChunkViewProps {
 
 export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick, onSubagentClick }) => {
   // Type guard to check if chunk is a ConversationGroup
-  const isConversationGroup = (c: Chunk | EnhancedChunk | ConversationGroup): c is ConversationGroup => {
+  const isConversationGroup = (c: ChunkType): c is ConversationGroup => {
     return 'type' in c && c.type === 'user-ai-exchange' && 'aiResponses' in c;
   };
 
-  // Type guard to check if chunk is an EnhancedChunk
-  const isEnhancedChunk = (c: Chunk | EnhancedChunk | ConversationGroup): c is EnhancedChunk => {
-    if (isConversationGroup(c)) return false;
-    return 'semanticSteps' in c && Array.isArray(c.semanticSteps);
+  // Type guard to check if chunk is an EnhancedAIChunk (new separated chunks)
+  // Uses 'chunkType' discriminator to avoid ConversationGroup confusion
+  const isEnhancedAI = (c: ChunkType): c is EnhancedAIChunk => {
+    return 'chunkType' in c && c.chunkType === 'ai' && 'semanticSteps' in c;
+  };
+
+  // Type guard to check if chunk is an EnhancedUserChunk
+  const isEnhancedUser = (c: ChunkType): c is EnhancedUserChunk => {
+    return 'chunkType' in c && c.chunkType === 'user' && 'userMessage' in c;
+  };
+
+  // Type guard to check if chunk is a legacy enhanced chunk
+  // Legacy chunks have semanticSteps but no chunkType discriminator
+  const isLegacyEnhanced = (c: ChunkType): c is LegacyEnhancedChunk => {
+    return !('chunkType' in c) && 'semanticSteps' in c && 'userMessage' in c && 'responses' in c;
+  };
+
+  // Type guard for any chunk with semantic steps
+  const hasSemanticSteps = (c: ChunkType): c is EnhancedAIChunk | LegacyEnhancedChunk => {
+    return isEnhancedAI(c) || isLegacyEnhanced(c);
   };
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -34,19 +68,62 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
 
   // Group semantic steps into segments for visualization
   const segments = useMemo(() => {
-    if (!isEnhancedChunk(chunk)) return [];
+    if (!hasSemanticSteps(chunk)) return [];
     return groupIntoSegments(chunk.semanticSteps, chunk);
   }, [chunk]);
 
-  // Get responses array (handles both Chunk and ConversationGroup)
+  // Get responses array (handles all chunk types)
   const getResponses = () => {
     if (isConversationGroup(chunk)) {
       return chunk.aiResponses;
     }
-    return chunk.responses;
+    if (isAIChunk(chunk) || isLegacyChunk(chunk)) {
+      return chunk.responses;
+    }
+    return [];
   };
 
   const responses = getResponses();
+
+  // Get subagents array (handles all chunk types)
+  const getSubagents = () => {
+    if (isConversationGroup(chunk)) {
+      return chunk.subagents;
+    }
+    if (isAIChunk(chunk) || isLegacyChunk(chunk)) {
+      return chunk.subagents;
+    }
+    return [];
+  };
+
+  const subagents = getSubagents();
+
+  // Get tool executions array (handles all chunk types)
+  const getToolExecutions = () => {
+    if (isConversationGroup(chunk)) {
+      return chunk.toolExecutions;
+    }
+    if (isAIChunk(chunk) || isLegacyChunk(chunk)) {
+      return chunk.toolExecutions;
+    }
+    return [];
+  };
+
+  // Get user message (if available)
+  const getUserMessage = () => {
+    if (isConversationGroup(chunk)) {
+      return chunk.userMessage;
+    }
+    if (isUserChunk(chunk)) {
+      return chunk.userMessage;
+    }
+    if (isLegacyChunk(chunk)) {
+      return chunk.userMessage;
+    }
+    return null;
+  };
+
+  const userMessage = getUserMessage();
 
   // Helper to get step label
   const getStepLabel = (step: SemanticStep): string => {
@@ -103,18 +180,28 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     return textBlocks || 'No text content';
   };
 
-  const userMessageText = extractTextContent(chunk.userMessage.content);
+  // Get user message text (or empty for AI-only chunks)
+  const userMessageText = userMessage ? extractTextContent(userMessage.content) : '';
 
   // Separate responses into assistant messages and tool results
   const assistantResponses = responses.filter((r: any) => r.type === 'assistant');
   const toolResults = responses.filter((r: any) => r.isMeta === true);
 
-  const hasSubagents = chunk.subagents.length > 0;
-  const parallelSubagents = chunk.subagents.filter((s: any) => s.isParallel);
+  const hasSubagents = subagents.length > 0;
+  const parallelSubagents = subagents.filter((s: any) => s.isParallel);
 
   // Check if this is a ConversationGroup with task executions
   const hasTaskExecutions = isConversationGroup(chunk) && chunk.taskExecutions.length > 0;
   const taskExecutionCount = isConversationGroup(chunk) ? chunk.taskExecutions.length : 0;
+
+  // Determine chunk type label
+  const getChunkTypeLabel = () => {
+    if (isConversationGroup(chunk)) return 'Group';
+    if (isUserChunk(chunk)) return 'User';
+    if (isAIChunk(chunk)) return 'AI';
+    if (isLegacyChunk(chunk)) return 'Chunk';
+    return 'Chunk';
+  };
 
   return (
     <div className="border border-gray-700 rounded-lg overflow-hidden bg-gray-800/30">
@@ -124,11 +211,11 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <h3 className="text-sm font-semibold text-gray-300">
-                {isConversationGroup(chunk) ? 'Group' : 'Chunk'} {index + 1}
+                {getChunkTypeLabel()} {index + 1}
               </h3>
               {hasSubagents && (
                 <span className="text-xs bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded">
-                  {chunk.subagents.length} subagent{chunk.subagents.length !== 1 ? 's' : ''}
+                  {subagents.length} subagent{subagents.length !== 1 ? 's' : ''}
                 </span>
               )}
               {parallelSubagents.length > 0 && (
@@ -142,7 +229,12 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-400 line-clamp-2">{userMessageText}</p>
+            {userMessageText && (
+              <p className="text-sm text-gray-400 line-clamp-2">{userMessageText}</p>
+            )}
+            {isEnhancedAI(chunk) && !userMessageText && (
+              <p className="text-sm text-gray-400 line-clamp-2">AI Response</p>
+            )}
           </div>
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -181,16 +273,16 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
       </div>
 
       {/* Timeline Visualization - Enhanced or Legacy */}
-      {isEnhancedChunk(chunk) && chunk.semanticSteps.length > 0 ? (
+      {hasSemanticSteps(chunk) && chunk.semanticSteps.length > 0 ? (
         <div className="px-4 py-4 bg-gray-900/30 space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-xs text-gray-400">Execution Timeline</div>
             <button
               onClick={() => {
-                const debugData = isEnhancedChunk(chunk) ? chunk.rawMessages : chunk;
+                const debugData = hasSemanticSteps(chunk) ? chunk.rawMessages : chunk;
                 const debugTitle = isConversationGroup(chunk)
                   ? `Group ${index + 1} Data`
-                  : `Chunk ${index + 1} Raw Messages`;
+                  : `${getChunkTypeLabel()} ${index + 1} Raw Messages`;
                 handleDebugSelect(debugData, debugTitle);
               }}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
@@ -271,7 +363,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
           </div>
 
           {/* Subagent bars */}
-          {chunk.subagents.map((subagent: any) => {
+          {subagents.map((subagent: any) => {
             const startOffset =
               ((subagent.startTime.getTime() - chunk.startTime.getTime()) / chunk.durationMs) * 100;
             const width = (subagent.durationMs / chunk.durationMs) * 100;
@@ -307,16 +399,18 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
       {/* Expanded Details */}
       {isExpanded && (
         <div className="px-4 py-4 border-t border-gray-700 space-y-4">
-          {/* User Message */}
-          <div>
-            <h4 className="text-xs font-semibold text-gray-400 mb-2">User Message</h4>
-            <div className="bg-gray-900/50 rounded p-3">
-              <p className="text-sm text-gray-300 whitespace-pre-wrap">{userMessageText}</p>
-              <p className="text-xs text-gray-500 mt-2">
-                {new Date(chunk.userMessage.timestamp).toLocaleString()}
-              </p>
+          {/* User Message - only show if we have a user message (not for AI-only chunks) */}
+          {userMessage && (
+            <div>
+              <h4 className="text-xs font-semibold text-gray-400 mb-2">User Message</h4>
+              <div className="bg-gray-900/50 rounded p-3">
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">{userMessageText}</p>
+                <p className="text-xs text-gray-500 mt-2">
+                  {new Date(userMessage.timestamp).toLocaleString()}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Assistant Responses */}
           {assistantResponses.length > 0 && (
@@ -421,10 +515,10 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
           {hasSubagents && (
             <div>
               <h4 className="text-xs font-semibold text-gray-400 mb-2">
-                Subagents ({chunk.subagents.length})
+                Subagents ({subagents.length})
               </h4>
               <div className="space-y-2">
-                {chunk.subagents.map((subagent: any) => (
+                {subagents.map((subagent: any) => (
                   <div key={subagent.id} className="bg-gray-900/50 rounded p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-gray-300">
