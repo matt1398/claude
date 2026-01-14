@@ -13,6 +13,8 @@ export function useKeyboardShortcuts() {
     openDashboard,
     closeTab,
     setActiveTab,
+    showSearch,
+    getActiveTab,
   } = useStore();
 
   useEffect(() => {
@@ -121,10 +123,14 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+F: Find in session (placeholder for future implementation)
+      // Cmd+F: Find in session
       if (event.key === 'f') {
         event.preventDefault();
-        console.log('Find in session shortcut triggered (not yet implemented)');
+        const activeTab = getActiveTab();
+        // Only enable search in session views, not dashboard
+        if (activeTab?.type === 'session') {
+          showSearch();
+        }
         return;
       }
 
@@ -145,5 +151,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab]);
+  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab]);
 }

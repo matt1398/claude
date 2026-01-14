@@ -25,6 +25,7 @@ import {
   isParsedResponseUserMessage,
   isParsedAssistantMessage,
   isTextContent,
+  isTriggerMessage,
 } from '../types/claude';
 import { sanitizeDisplayContent } from './contentSanitizer';
 
@@ -563,6 +564,40 @@ export async function countMessages(filePath: string): Promise<number> {
   for await (const line of rl) {
     if (line.trim()) {
       count++;
+    }
+  }
+
+  return count;
+}
+
+/**
+ * Count trigger messages (real user inputs that start conversation turns) in a JSONL file.
+ * This matches the ConversationTurn count in the UI.
+ */
+export async function countTriggerMessages(filePath: string): Promise<number> {
+  if (!fs.existsSync(filePath)) {
+    return 0;
+  }
+
+  let count = 0;
+  const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+  const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    try {
+      const entry = JSON.parse(trimmed) as ChatHistoryEntry;
+      if (isTriggerMessage(entry)) {
+        count++;
+      }
+    } catch (error) {
+      // Skip invalid lines
+      continue;
     }
   }
 

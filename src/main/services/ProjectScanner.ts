@@ -25,7 +25,7 @@ import {
   extractSessionId,
   isAmbiguousEncoding,
 } from '../utils/pathDecoder';
-import { extractFirstUserMessage, extractCwd, countMessages } from '../utils/jsonl';
+import { extractFirstUserMessage, extractCwd, countTriggerMessages } from '../utils/jsonl';
 
 export class ProjectScanner {
   private readonly projectsDir: string;
@@ -258,8 +258,8 @@ export class ProjectScanner {
     // Extract first message for preview
     const firstMsgData = await extractFirstUserMessage(filePath);
 
-    // Count messages
-    const messageCount = await countMessages(filePath);
+    // Count conversation turns (trigger messages only)
+    const messageCount = await countTriggerMessages(filePath);
 
     // Check for subagents
     const hasSubagents = this.hasSubagentsSync(projectId, sessionId);
@@ -374,6 +374,7 @@ export class ProjectScanner {
   /**
    * Checks if a session has subagent files (session-specific only).
    * Only checks the NEW structure: {projectId}/{sessionId}/subagents/
+   * Verifies that at least one subagent file has non-empty content.
    */
   hasSubagentsSync(projectId: string, sessionId: string): boolean {
     // Check NEW structure: {projectId}/{sessionId}/subagents/
@@ -381,11 +382,26 @@ export class ProjectScanner {
     if (fs.existsSync(newSubagentsPath)) {
       try {
         const entries = fs.readdirSync(newSubagentsPath);
-        const hasNewFiles = entries.some(
+        const subagentFiles = entries.filter(
           (name) => name.startsWith('agent-') && name.endsWith('.jsonl')
         );
-        if (hasNewFiles) {
-          return true;
+
+        // Check if at least one subagent file has content (not empty)
+        for (const fileName of subagentFiles) {
+          const filePath = path.join(newSubagentsPath, fileName);
+          try {
+            const stats = fs.statSync(filePath);
+            // File must have size > 0 and contain at least one line
+            if (stats.size > 0) {
+              const content = fs.readFileSync(filePath, 'utf8');
+              if (content.trim().length > 0) {
+                return true;
+              }
+            }
+          } catch (error) {
+            // Skip this file if we can't read it
+            continue;
+          }
         }
       } catch (error) {
         // Ignore errors

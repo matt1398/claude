@@ -13,7 +13,6 @@ import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { DashboardView } from '../dashboard/DashboardView';
 import { MiddlePanel } from './MiddlePanel';
-import { RightPanel } from './RightPanel';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
@@ -108,14 +107,9 @@ export function TabbedLayout() {
               </div>
             ) : (
               <>
-                {/* Middle Panel - Chat History */}
-                <div className="flex-1 flex flex-col bg-claude-dark-surface border-r border-claude-dark-border overflow-hidden min-w-0">
+                {/* Middle Panel - Chat History (Full Width) */}
+                <div className="flex-1 flex flex-col bg-claude-dark-surface overflow-hidden min-w-0">
                   <MiddlePanel />
-                </div>
-
-                {/* Right Panel - Gantt Chart (400px) */}
-                <div className="w-[400px] flex-shrink-0 bg-claude-dark-bg flex flex-col overflow-hidden">
-                  <RightPanel />
                 </div>
               </>
             )

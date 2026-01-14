@@ -84,7 +84,7 @@ export function DateGroupedSessions() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="px-4 py-2 flex items-center gap-2">
+      <div className="px-4 py-3 mt-2 flex items-center gap-2">
         <Calendar className="w-4 h-4 text-claude-dark-text-secondary" />
         <h2 className="text-xs uppercase tracking-wider text-claude-dark-text-secondary">Sessions</h2>
         <span className="text-xs text-claude-dark-text-secondary/60">({sessions.length})</span>

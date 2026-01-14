@@ -63,6 +63,12 @@ interface AppState {
   // Project context state (new)
   activeProjectId: string | null;
 
+  // Search state
+  searchQuery: string;
+  searchVisible: boolean;
+  searchResultCount: number;
+  currentSearchIndex: number;
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -96,6 +102,13 @@ interface AppState {
 
   // Project context actions (new)
   setActiveProject: (projectId: string) => void;
+
+  // Search actions
+  setSearchQuery: (query: string) => void;
+  showSearch: () => void;
+  hideSearch: () => void;
+  nextSearchResult: () => void;
+  previousSearchResult: () => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -138,6 +151,12 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Project context state (new)
   activeProjectId: null,
+
+  // Search state (initial values)
+  searchQuery: '',
+  searchVisible: false,
+  searchResultCount: 0,
+  currentSearchIndex: -1,
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -544,5 +563,37 @@ export const useStore = create<AppState>((set, get) => ({
     // Also update selectedProjectId for compatibility with existing code
     // and fetch sessions
     get().selectProject(projectId);
+  },
+
+  // Search actions
+
+  setSearchQuery: (query: string) => {
+    set({ searchQuery: query, currentSearchIndex: query ? 0 : -1 });
+    // TODO: Calculate searchResultCount based on actual search results
+  },
+
+  showSearch: () => {
+    set({ searchVisible: true });
+  },
+
+  hideSearch: () => {
+    set({ searchVisible: false, searchQuery: '', searchResultCount: 0, currentSearchIndex: -1 });
+  },
+
+  nextSearchResult: () => {
+    const state = get();
+    if (state.searchResultCount > 0) {
+      const nextIndex = (state.currentSearchIndex + 1) % state.searchResultCount;
+      set({ currentSearchIndex: nextIndex });
+    }
+  },
+
+  previousSearchResult: () => {
+    const state = get();
+    if (state.searchResultCount > 0) {
+      const prevIndex = state.currentSearchIndex - 1;
+      const newIndex = prevIndex < 0 ? state.searchResultCount - 1 : prevIndex;
+      set({ currentSearchIndex: newIndex });
+    }
   },
 }));
