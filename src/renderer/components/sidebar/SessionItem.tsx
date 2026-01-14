@@ -57,7 +57,7 @@ export function SessionItem({ session, isActive }: SessionItemProps) {
         {session.hasSubagents && (
           <span className="text-xs text-claude-dark-text-secondary bg-claude-dark-border px-2 py-0.5 rounded flex-shrink-0 flex items-center gap-1">
             <Bot className="w-3 h-3" />
-            <span>Agents</span>
+            <span>Subagents</span>
           </span>
         )}
       </div>

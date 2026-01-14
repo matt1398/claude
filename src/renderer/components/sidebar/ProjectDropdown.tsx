@@ -50,6 +50,7 @@ export function ProjectDropdown() {
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center gap-2 w-full px-3 py-1.5 rounded-md hover:bg-claude-dark-surface transition-colors"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+        title={activeProject?.path || 'Select a project'}
       >
         <FolderGit2 className="w-4 h-4 text-claude-dark-text-secondary flex-shrink-0" />
         <span className="text-sm font-medium text-claude-dark-text truncate flex-1 text-left">

@@ -14,6 +14,8 @@ import { TabBar } from './TabBar';
 import { DashboardView } from '../dashboard/DashboardView';
 import { MiddlePanel } from './MiddlePanel';
 import { RightPanel } from './RightPanel';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 export function TabbedLayout() {
   const {
@@ -22,7 +24,13 @@ export function TabbedLayout() {
     getActiveTab,
     selectedSessionId,
     fetchSessionDetail,
+    sessionDetailError,
+    sessionDetailLoading,
+    closeTab,
   } = useStore();
+
+  // Enable keyboard shortcuts
+  useKeyboardShortcuts();
 
   const activeTab = getActiveTab();
   const showDashboard = !activeTabId || activeTab?.type === 'dashboard';
@@ -58,17 +66,59 @@ export function TabbedLayout() {
           {showDashboard ? (
             <DashboardView />
           ) : showSessionContent ? (
-            <>
-              {/* Middle Panel - Chat History */}
-              <div className="flex-1 flex flex-col bg-claude-dark-surface border-r border-claude-dark-border overflow-hidden min-w-0">
-                <MiddlePanel />
+            sessionDetailError ? (
+              // Error state for session loading failure (e.g., deleted file)
+              <div className="flex-1 flex items-center justify-center bg-claude-dark-bg">
+                <div className="text-center p-8">
+                  <AlertCircle className="w-12 h-12 text-red-500/70 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-claude-dark-text mb-2">
+                    Failed to load session
+                  </h3>
+                  <p className="text-sm text-claude-dark-text-secondary mb-4 max-w-md">
+                    {sessionDetailError}
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => {
+                        if (activeTab?.projectId && activeTab?.sessionId) {
+                          fetchSessionDetail(activeTab.projectId, activeTab.sessionId);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-claude-dark-surface border border-claude-dark-border rounded-md hover:bg-claude-dark-border transition-colors text-sm"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Retry
+                    </button>
+                    <button
+                      onClick={() => activeTabId && closeTab(activeTabId)}
+                      className="px-4 py-2 text-claude-dark-text-secondary hover:text-claude-dark-text transition-colors text-sm"
+                    >
+                      Close tab
+                    </button>
+                  </div>
+                </div>
               </div>
+            ) : sessionDetailLoading ? (
+              // Loading state
+              <div className="flex-1 flex items-center justify-center bg-claude-dark-bg">
+                <div className="text-center">
+                  <div className="w-8 h-8 border-2 border-claude-dark-text-secondary border-t-claude-dark-text rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-sm text-claude-dark-text-secondary">Loading session...</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Middle Panel - Chat History */}
+                <div className="flex-1 flex flex-col bg-claude-dark-surface border-r border-claude-dark-border overflow-hidden min-w-0">
+                  <MiddlePanel />
+                </div>
 
-              {/* Right Panel - Gantt Chart (400px) */}
-              <div className="w-[400px] flex-shrink-0 bg-claude-dark-bg flex flex-col overflow-hidden">
-                <RightPanel />
-              </div>
-            </>
+                {/* Right Panel - Gantt Chart (400px) */}
+                <div className="w-[400px] flex-shrink-0 bg-claude-dark-bg flex flex-col overflow-hidden">
+                  <RightPanel />
+                </div>
+              </>
+            )
           ) : (
             // Fallback to dashboard if tab state is invalid
             <DashboardView />

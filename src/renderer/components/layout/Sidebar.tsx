@@ -6,7 +6,7 @@
 import { useEffect } from 'react';
 import { useStore } from '../../store';
 import { SidebarHeader } from './SidebarHeader';
-import { SessionsList } from '../sessions/SessionsList';
+import { DateGroupedSessions } from '../sidebar/DateGroupedSessions';
 
 export function Sidebar() {
   const { projects, projectsLoading, fetchProjects } = useStore();
@@ -23,9 +23,9 @@ export function Sidebar() {
       {/* Sidebar header with project dropdown */}
       <SidebarHeader />
 
-      {/* Session list */}
+      {/* Date-grouped session list */}
       <div className="flex-1 overflow-hidden">
-        <SessionsList />
+        <DateGroupedSessions />
       </div>
     </div>
   );

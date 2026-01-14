@@ -372,7 +372,8 @@ export class ProjectScanner {
   }
 
   /**
-   * Checks if a session has subagent files in either NEW or OLD structure (sync).
+   * Checks if a session has subagent files (session-specific only).
+   * Only checks the NEW structure: {projectId}/{sessionId}/subagents/
    */
   hasSubagentsSync(projectId: string, sessionId: string): boolean {
     // Check NEW structure: {projectId}/{sessionId}/subagents/
@@ -387,19 +388,8 @@ export class ProjectScanner {
           return true;
         }
       } catch (error) {
-        // Continue to check OLD structure
+        // Ignore errors
       }
-    }
-
-    // Check OLD structure: {projectId}/agent-*.jsonl
-    try {
-      const projectPath = path.join(this.projectsDir, projectId);
-      if (fs.existsSync(projectPath)) {
-        const entries = fs.readdirSync(projectPath);
-        return entries.some((name) => name.startsWith('agent-') && name.endsWith('.jsonl'));
-      }
-    } catch (error) {
-      // Ignore errors
     }
 
     return false;

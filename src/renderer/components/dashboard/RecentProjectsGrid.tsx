@@ -23,15 +23,15 @@ function ProjectCard({ name, path, lastOpened, onClick }: ProjectCardProps) {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col p-4 bg-claude-dark-surface border border-claude-dark-border rounded-lg hover:border-claude-dark-text-secondary/50 transition-colors text-left group"
+      className="flex flex-col p-4 bg-claude-dark-surface border border-claude-dark-border rounded-lg hover:border-claude-dark-text-secondary/50 transition-colors text-left group min-w-0 overflow-hidden"
     >
-      <div className="flex items-center gap-2 mb-2">
-        <FolderGit2 className="w-4 h-4 text-claude-dark-text-secondary" />
-        <span className="text-sm font-medium text-claude-dark-text truncate">
+      <div className="flex items-center gap-2 mb-2 min-w-0">
+        <FolderGit2 className="w-4 h-4 text-claude-dark-text-secondary flex-shrink-0" />
+        <span className="text-sm font-medium text-claude-dark-text truncate min-w-0">
           {name}
         </span>
       </div>
-      <span className="text-xs text-claude-dark-text-secondary truncate mb-2" title={path}>
+      <span className="text-xs text-claude-dark-text-secondary mb-2 min-w-0 block break-all line-clamp-2" title={path}>
         {path}
       </span>
       <span className="text-xs text-claude-dark-text-secondary/70">
@@ -92,7 +92,7 @@ export function RecentProjectsGrid({ maxProjects = 6 }: RecentProjectsGridProps)
       <h2 className="text-sm font-medium text-claude-dark-text-secondary mb-4">
         Recent Projects
       </h2>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 auto-rows-fr">
         {recentProjects.map((project) => (
           <ProjectCard
             key={project.id}

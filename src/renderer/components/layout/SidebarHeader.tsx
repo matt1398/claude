@@ -10,7 +10,7 @@ export function SidebarHeader() {
     <div
       className="h-[52px] flex items-center border-b border-claude-dark-border sidebar-header"
       style={{
-        paddingLeft: '70px', // Reserve space for macOS traffic lights
+        paddingLeft: '90px', // Reserve space for macOS traffic lights
         paddingRight: '12px',
         WebkitAppRegion: 'drag',
       } as React.CSSProperties}

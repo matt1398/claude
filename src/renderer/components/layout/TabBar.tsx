@@ -17,8 +17,8 @@ export function TabBar() {
 
   return (
     <div className="h-10 flex items-center border-b border-claude-dark-border bg-claude-dark-bg px-2">
-      {/* Tab list with horizontal scroll */}
-      <div className="flex-1 flex items-center gap-1 overflow-x-auto scrollbar-none">
+      {/* Tab list with horizontal scroll and new tab button */}
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const Icon = tab.type === 'dashboard' ? LayoutDashboard : FileText;
@@ -51,16 +51,16 @@ export function TabBar() {
             </div>
           );
         })}
-      </div>
 
-      {/* New tab button */}
-      <button
-        className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-claude-dark-surface text-claude-dark-text-secondary hover:text-claude-dark-text transition-colors flex-shrink-0"
-        onClick={openDashboard}
-        title="New tab (Dashboard)"
-      >
-        <Plus className="w-4 h-4" />
-      </button>
+        {/* New tab button - right after last tab */}
+        <button
+          className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-claude-dark-surface text-claude-dark-text-secondary hover:text-claude-dark-text transition-colors flex-shrink-0"
+          onClick={openDashboard}
+          title="New tab (Dashboard)"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
