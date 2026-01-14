@@ -83,7 +83,7 @@ ParsedMessage[] + Subagent[]
     ↓
 ChunkBuilder.buildChunks() (src/main/services/ChunkBuilder.ts)
     ↓
-EnhancedChunk[] (with SemanticSteps)
+EnhancedChunk[] (separated: EnhancedUserChunk + EnhancedAIChunk pairs)
     ↓
 groupTransformer.transformChunksToConversation() (src/renderer/utils/groupTransformer.ts)
     ↓
@@ -93,6 +93,60 @@ Zustand Store (src/renderer/store/index.ts)
     ↓
 ChatHistory → UserChatGroup + AIChatGroup
 ```
+
+### Chunk Separation Model
+
+The ChunkBuilder produces **separated chunks** where user input and AI responses are distinct entities:
+
+```typescript
+// UserChunk - Contains only user input (no AI responses)
+interface UserChunk {
+  chunkType: 'user';
+  id: string;
+  userMessage: ParsedMessage;
+  startTime: Date;
+  endTime: Date;
+  durationMs: number;
+  metrics: SessionMetrics;
+}
+
+// AIChunk - Contains only AI responses (linked to UserChunk)
+interface AIChunk {
+  chunkType: 'ai';
+  id: string;
+  userChunkId: string;        // Links to parent UserChunk
+  responses: ParsedMessage[];
+  subagents: Subagent[];
+  sidechainMessages: ParsedMessage[];
+  toolExecutions: ToolExecution[];
+  startTime: Date;
+  endTime: Date;
+  durationMs: number;
+  metrics: SessionMetrics;
+}
+
+// EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk
+// - EnhancedAIChunk adds: semanticSteps, rawMessages
+// - EnhancedUserChunk adds: rawMessages
+```
+
+### Backward Compatibility
+
+For legacy data or compatibility, **LegacyChunk** combines user message + responses:
+
+```typescript
+interface LegacyChunk {
+  id: string;
+  userMessage: ParsedMessage;
+  responses: ParsedMessage[];
+  subagents: Subagent[];
+  // ... no chunkType discriminator
+}
+```
+
+The `groupTransformer` auto-detects chunk format and handles both:
+- New format: Pairs UserChunks with AIChunks via `userChunkId`
+- Legacy format: Uses combined chunks directly
 
 ## Key Files
 
@@ -113,9 +167,10 @@ ChatHistory → UserChatGroup + AIChatGroup
 
 ### Core Rules
 1. **One AIGroup per user message** - Each user request gets exactly one toggleable AI response
-2. **Trigger messages start groups** - Only `isTriggerMessage()` messages create new groups
-3. **Internal messages are responses** - `isMeta: true` messages belong to the previous group
+2. **Trigger messages start groups** - Only `isTriggerMessage()` messages create new UserChunks
+3. **Internal messages are responses** - `isMeta: true` messages belong to the AIChunk
 4. **Last output always visible** - The final text or tool result is never hidden
+5. **Separated chunks** - UserChunk contains only user input; AIChunk contains only AI responses
 
 ### Message Classification
 
@@ -131,10 +186,20 @@ ChatHistory → UserChatGroup + AIChatGroup
 ```
 
 ### Type Guards (from `src/main/types/claude.ts`)
+
+**Message Type Guards:**
 - `isTriggerMessage(msg)` - Real user input that starts a new group
 - `isRealUserMessage(msg)` - isMeta: false, string content
 - `isInternalUserMessage(msg)` - isMeta: true, tool results
 - `isParsedNoiseMessage(msg)` - System metadata to filter out
+
+**Chunk Type Guards:**
+- `isUserChunk(chunk)` - UserChunk with `chunkType: 'user'`
+- `isAIChunk(chunk)` - AIChunk with `chunkType: 'ai'`
+- `isEnhancedUserChunk(chunk)` - EnhancedUserChunk (has semanticSteps: never)
+- `isEnhancedAIChunk(chunk)` - EnhancedAIChunk (has semanticSteps)
+- `isLegacyChunk(chunk)` - Legacy combined chunk (no chunkType discriminator)
+- `isLegacyEnhancedChunk(chunk)` - Legacy enhanced chunk with semanticSteps
 
 ## Display Items (Expanded View)
 

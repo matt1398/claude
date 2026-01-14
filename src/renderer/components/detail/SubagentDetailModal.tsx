@@ -3,6 +3,7 @@ import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
 import { GanttChart } from './GanttChart';
 import { groupIntoSegments } from '../../utils/segmentGrouping';
+import { isEnhancedAIChunk, EnhancedAIChunk } from '../../types/data';
 
 export const SubagentDetailModal: React.FC = () => {
   const {
@@ -53,15 +54,22 @@ export const SubagentDetailModal: React.FC = () => {
   const segments = useMemo(() => {
     if (!currentSubagentDetail || !currentSubagentDetail.chunks) return [];
 
-    // Combine all chunks' steps into a single timeline
-    const allSteps = currentSubagentDetail.chunks.flatMap(c => c.semanticSteps);
+    // Filter to only AI chunks (which have semanticSteps, subagents, toolExecutions)
+    const aiChunks = currentSubagentDetail.chunks.filter(
+      (c): c is EnhancedAIChunk => isEnhancedAIChunk(c)
+    );
+
+    if (aiChunks.length === 0) return [];
+
+    // Combine all AI chunks' steps into a single timeline
+    const allSteps = aiChunks.flatMap(c => c.semanticSteps);
 
     // Create a mock chunk for grouping
     const mockChunk = {
-      ...currentSubagentDetail.chunks[0],
+      ...aiChunks[0],
       semanticSteps: allSteps,
-      subagents: currentSubagentDetail.chunks.flatMap(c => c.subagents),
-      toolExecutions: currentSubagentDetail.chunks.flatMap(c => c.toolExecutions),
+      subagents: aiChunks.flatMap(c => c.subagents),
+      toolExecutions: aiChunks.flatMap(c => c.toolExecutions),
     };
 
     return groupIntoSegments(allSteps, mockChunk);
