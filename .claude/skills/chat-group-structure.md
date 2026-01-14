@@ -130,24 +130,6 @@ interface AIChunk {
 // - EnhancedUserChunk adds: rawMessages
 ```
 
-### Backward Compatibility
-
-For legacy data or compatibility, **LegacyChunk** combines user message + responses:
-
-```typescript
-interface LegacyChunk {
-  id: string;
-  userMessage: ParsedMessage;
-  responses: ParsedMessage[];
-  subagents: Subagent[];
-  // ... no chunkType discriminator
-}
-```
-
-The `groupTransformer` auto-detects chunk format and handles both:
-- New format: Pairs UserChunks with AIChunks via `userChunkId`
-- Legacy format: Uses combined chunks directly
-
 ## Key Files
 
 | File | Role |
@@ -196,10 +178,8 @@ The `groupTransformer` auto-detects chunk format and handles both:
 **Chunk Type Guards:**
 - `isUserChunk(chunk)` - UserChunk with `chunkType: 'user'`
 - `isAIChunk(chunk)` - AIChunk with `chunkType: 'ai'`
-- `isEnhancedUserChunk(chunk)` - EnhancedUserChunk (has semanticSteps: never)
+- `isEnhancedUserChunk(chunk)` - EnhancedUserChunk (has rawMessages)
 - `isEnhancedAIChunk(chunk)` - EnhancedAIChunk (has semanticSteps)
-- `isLegacyChunk(chunk)` - Legacy combined chunk (no chunkType discriminator)
-- `isLegacyEnhancedChunk(chunk)` - Legacy enhanced chunk with semanticSteps
 
 ## Display Items (Expanded View)
 

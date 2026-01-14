@@ -24,7 +24,6 @@ import type {
   EnhancedChunk,
   EnhancedUserChunk,
   EnhancedAIChunk,
-  LegacyEnhancedChunk,
   ParsedMessage,
   Subagent,
   SemanticStep,
@@ -35,7 +34,6 @@ import {
   isRealUserMessage,
   isEnhancedUserChunk,
   isEnhancedAIChunk,
-  isLegacyEnhancedChunk,
 } from '../types/data';
 import { sanitizeDisplayContent, isCommandContent } from './contentSanitizer';
 
@@ -67,7 +65,7 @@ const SUBAGENT_LINK_WINDOW_MS = 100;
 /**
  * Transforms EnhancedChunk[] into SessionConversation.
  *
- * Handles both new separated chunks (UserChunk + AIChunk pairs) and legacy chunks.
+ * Processes separated chunks (UserChunk + AIChunk pairs) into conversation turns.
  *
  * @param chunks - Array of enhanced chunks with semantic steps
  * @param subagents - Array of all subagents in the session
@@ -86,15 +84,7 @@ export function transformChunksToConversation(
     };
   }
 
-  // Detect chunk format: new separated chunks vs legacy chunks
-  const hasNewFormat = chunks.some(c => isEnhancedUserChunk(c) || isEnhancedAIChunk(c));
-
-  if (hasNewFormat) {
-    return transformSeparatedChunks(chunks, subagents);
-  } else {
-    // Safe cast: if not new format, chunks must be legacy format
-    return transformLegacyChunks(chunks as unknown as LegacyEnhancedChunk[], subagents);
-  }
+  return transformSeparatedChunks(chunks, subagents);
 }
 
 /**
@@ -166,55 +156,6 @@ function transformSeparatedChunks(
   };
 }
 
-/**
- * Transforms legacy chunks (combined user+response) into SessionConversation.
- *
- * @param chunks - Array of legacy enhanced chunks
- * @param subagents - Array of all subagents in the session
- * @returns SessionConversation structure
- */
-function transformLegacyChunks(
-  chunks: LegacyEnhancedChunk[],
-  subagents: Subagent[]
-): SessionConversation {
-  const turns: ConversationTurn[] = [];
-  let totalAIGroupCount = 0;
-
-  // Process each chunk into a conversation turn
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-
-    try {
-      // Create UserGroup from the chunk's user message
-      const userGroup = createUserGroup(chunk.userMessage, i);
-
-      // Split chunk responses into AIGroups
-      const aiGroups = splitIntoAIGroupsFromLegacyChunk(chunk, userGroup.id, subagents);
-      totalAIGroupCount += aiGroups.length;
-
-      // Create conversation turn
-      const turn: ConversationTurn = {
-        id: `turn-${i}`,
-        userGroup,
-        aiGroups,
-        startTime: chunk.startTime,
-        endTime: chunk.endTime,
-      };
-
-      turns.push(turn);
-    } catch (error) {
-      console.error(`Error processing chunk ${i}:`, error);
-      // Continue with other chunks even if one fails
-    }
-  }
-
-  return {
-    sessionId: chunks[0]?.id.split('-')[0] || '',
-    turns,
-    totalUserGroups: chunks.length,
-    totalAIGroups: totalAIGroupCount,
-  };
-}
 
 // =============================================================================
 // UserGroup Creation
@@ -457,73 +398,11 @@ function splitIntoAIGroupsFromAIChunk(
   return [aiGroup];
 }
 
-/**
- * Creates ONE AIGroup from a legacy combined chunk.
- *
- * @param chunk - The legacy enhanced chunk to process
- * @param userGroupId - ID of the parent UserGroup
- * @param allSubagents - All subagents in the session
- * @returns Array containing exactly ONE AIGroup
- */
-function splitIntoAIGroupsFromLegacyChunk(
-  chunk: LegacyEnhancedChunk,
-  userGroupId: string,
-  allSubagents: Subagent[]
-): AIGroup[] {
-  const steps = chunk.semanticSteps;
-
-  // If no semantic steps, return empty array
-  if (steps.length === 0) {
-    return [];
-  }
-
-  // Calculate timing from all steps
-  const startTime = steps[0].startTime;
-  const endTime = steps[steps.length - 1].endTime || steps[steps.length - 1].startTime;
-  const durationMs = endTime.getTime() - startTime.getTime();
-
-  // Find any source assistant message for token calculation
-  const sourceMessage = chunk.responses.find(msg => isAssistantMessage(msg)) || null;
-
-  // Calculate tokens from all steps
-  const tokens = calculateTokensFromSteps(steps, sourceMessage);
-
-  // Generate summary from all steps
-  const summary = computeAIGroupSummary(steps);
-
-  // Determine status from all steps
-  const status = determineAIGroupStatus(steps);
-
-  // Use subagents from the chunk or link by timing
-  const linkedSubagents = chunk.subagents.length > 0
-    ? chunk.subagents
-    : linkSubagentsToAIGroup(startTime, endTime, allSubagents);
-
-  // Create single AIGroup with all steps
-  const aiGroup: AIGroup = {
-    id: `ai-${chunk.id}`,
-    userGroupId,
-    responseIndex: 0,
-    startTime,
-    endTime,
-    durationMs,
-    steps,
-    tokens,
-    summary,
-    status,
-    subagents: linkedSubagents,
-    chunkId: chunk.id,
-    metrics: chunk.metrics,
-  };
-
-  return [aiGroup];
-}
 
 /**
  * Creates ONE AIGroup per chunk containing ALL semantic steps.
- * This is a generic wrapper that dispatches to the appropriate handler.
  *
- * @param chunk - The enhanced chunk to process (new or legacy format)
+ * @param chunk - The enhanced AI chunk to process
  * @param userGroupId - ID of the parent UserGroup
  * @param allSubagents - All subagents in the session
  * @returns Array containing exactly ONE AIGroup
@@ -535,8 +414,6 @@ export function splitIntoAIGroups(
 ): AIGroup[] {
   if (isEnhancedAIChunk(chunk)) {
     return splitIntoAIGroupsFromAIChunk(chunk, userGroupId, allSubagents);
-  } else if (isLegacyEnhancedChunk(chunk)) {
-    return splitIntoAIGroupsFromLegacyChunk(chunk, userGroupId, allSubagents);
   }
   // UserChunks don't have AI responses
   return [];
