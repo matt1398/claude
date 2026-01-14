@@ -8,9 +8,266 @@ interface LinkedToolItemProps {
   isExpanded: boolean;
 }
 
+// =============================================================================
+// Status Types and Components
+// =============================================================================
+
+type ToolStatus = 'ok' | 'error' | 'orphaned';
+
+/**
+ * Small status dot indicator.
+ */
+const StatusDot: React.FC<{ status: ToolStatus }> = ({ status }) => {
+  const colors: Record<ToolStatus, string> = {
+    ok: 'bg-green-500',
+    error: 'bg-red-500',
+    orphaned: 'bg-zinc-500'
+  };
+  return <span className={`w-1.5 h-1.5 rounded-full inline-block ${colors[status]}`} />;
+};
+
+/**
+ * Gets the status of a tool execution.
+ */
+function getToolStatus(linkedTool: LinkedToolItemType): ToolStatus {
+  if (linkedTool.isOrphaned) return 'orphaned';
+  if (linkedTool.result?.isError) return 'error';
+  return 'ok';
+}
+
+// =============================================================================
+// Tool Summary Helpers
+// =============================================================================
+
+/**
+ * Extracts filename from a file path.
+ */
+function getFileName(filePath: string): string {
+  const parts = filePath.split('/');
+  return parts[parts.length - 1] || filePath;
+}
+
+/**
+ * Truncates a string to a maximum length with ellipsis.
+ */
+function truncate(str: string, maxLength: number): string {
+  if (str.length <= maxLength) return str;
+  return str.slice(0, maxLength) + '...';
+}
+
+/**
+ * Generates a human-readable summary for a tool call.
+ */
+function getToolSummary(toolName: string, input: Record<string, unknown>): string {
+  switch (toolName) {
+    case 'Edit': {
+      const filePath = input.file_path as string | undefined;
+      const oldString = input.old_string as string | undefined;
+      const newString = input.new_string as string | undefined;
+
+      if (!filePath) return 'Edit';
+
+      const fileName = getFileName(filePath);
+
+      // Count line changes if we have old/new strings
+      if (oldString && newString) {
+        const oldLines = oldString.split('\n').length;
+        const newLines = newString.split('\n').length;
+        if (oldLines === newLines) {
+          return `${fileName} - ${oldLines} line${oldLines > 1 ? 's' : ''}`;
+        }
+        return `${fileName} - ${oldLines} -> ${newLines} lines`;
+      }
+
+      return fileName;
+    }
+
+    case 'Read': {
+      const filePath = input.file_path as string | undefined;
+      const limit = input.limit as number | undefined;
+      const offset = input.offset as number | undefined;
+
+      if (!filePath) return 'Read';
+
+      const fileName = getFileName(filePath);
+
+      if (limit) {
+        const start = offset ?? 1;
+        return `${fileName} - lines ${start}-${start + limit - 1}`;
+      }
+
+      return fileName;
+    }
+
+    case 'Write': {
+      const filePath = input.file_path as string | undefined;
+      const content = input.content as string | undefined;
+
+      if (!filePath) return 'Write';
+
+      const fileName = getFileName(filePath);
+
+      if (content) {
+        const lineCount = content.split('\n').length;
+        return `${fileName} - ${lineCount} lines`;
+      }
+
+      return fileName;
+    }
+
+    case 'Bash': {
+      const command = input.command as string | undefined;
+      const description = input.description as string | undefined;
+
+      // Prefer description if available
+      if (description) {
+        return truncate(description, 50);
+      }
+
+      if (command) {
+        return truncate(command, 50);
+      }
+
+      return 'Bash';
+    }
+
+    case 'Grep': {
+      const pattern = input.pattern as string | undefined;
+      const path = input.path as string | undefined;
+      const glob = input.glob as string | undefined;
+
+      if (!pattern) return 'Grep';
+
+      const patternStr = `"${truncate(pattern, 30)}"`;
+
+      if (glob) {
+        return `${patternStr} in ${glob}`;
+      }
+      if (path) {
+        return `${patternStr} in ${getFileName(path)}`;
+      }
+
+      return patternStr;
+    }
+
+    case 'Glob': {
+      const pattern = input.pattern as string | undefined;
+      const path = input.path as string | undefined;
+
+      if (!pattern) return 'Glob';
+
+      const patternStr = `"${truncate(pattern, 30)}"`;
+
+      if (path) {
+        return `${patternStr} in ${getFileName(path)}`;
+      }
+
+      return patternStr;
+    }
+
+    case 'Task': {
+      const prompt = input.prompt as string | undefined;
+      const subagentType = input.subagentType as string | undefined;
+      const description = input.description as string | undefined;
+
+      const desc = description || prompt;
+      const typeStr = subagentType ? `${subagentType} - ` : '';
+
+      if (desc) {
+        return `${typeStr}${truncate(desc, 40)}`;
+      }
+
+      return subagentType || 'Task';
+    }
+
+    case 'LSP': {
+      const operation = input.operation as string | undefined;
+      const filePath = input.filePath as string | undefined;
+
+      if (!operation) return 'LSP';
+
+      if (filePath) {
+        return `${operation} - ${getFileName(filePath)}`;
+      }
+
+      return operation;
+    }
+
+    case 'WebFetch': {
+      const url = input.url as string | undefined;
+
+      if (url) {
+        try {
+          const urlObj = new URL(url);
+          return truncate(urlObj.hostname + urlObj.pathname, 50);
+        } catch {
+          return truncate(url, 50);
+        }
+      }
+
+      return 'WebFetch';
+    }
+
+    case 'WebSearch': {
+      const query = input.query as string | undefined;
+
+      if (query) {
+        return `"${truncate(query, 40)}"`;
+      }
+
+      return 'WebSearch';
+    }
+
+    case 'TodoWrite': {
+      const todos = input.todos as unknown[] | undefined;
+
+      if (todos && Array.isArray(todos)) {
+        return `${todos.length} item${todos.length !== 1 ? 's' : ''}`;
+      }
+
+      return 'TodoWrite';
+    }
+
+    case 'NotebookEdit': {
+      const notebookPath = input.notebook_path as string | undefined;
+      const editMode = input.edit_mode as string | undefined;
+
+      if (notebookPath) {
+        const fileName = getFileName(notebookPath);
+        return editMode ? `${editMode} - ${fileName}` : fileName;
+      }
+
+      return 'NotebookEdit';
+    }
+
+    default: {
+      // For unknown tools, try to extract a meaningful summary
+      const keys = Object.keys(input);
+      if (keys.length === 0) return toolName;
+
+      // Try common parameter names
+      const nameField = input.name || input.path || input.file || input.query || input.command;
+      if (typeof nameField === 'string') {
+        return truncate(nameField, 50);
+      }
+
+      // Fallback to showing first parameter
+      const firstValue = input[keys[0]];
+      if (typeof firstValue === 'string') {
+        return truncate(firstValue, 40);
+      }
+
+      return toolName;
+    }
+  }
+}
+
+// =============================================================================
+// Duration Formatter
+// =============================================================================
+
 /**
  * Formats duration in milliseconds to a human-readable string.
- * Examples: "123ms", "1.2s", "45.3s"
  */
 function formatDuration(ms: number | undefined): string {
   if (ms === undefined) return '...';
@@ -23,115 +280,170 @@ function formatDuration(ms: number | undefined): string {
   return `${seconds.toFixed(1)}s`;
 }
 
+// =============================================================================
+// Expanded View Renderers
+// =============================================================================
+
 /**
- * Gets icon color based on tool result state.
+ * Renders the input section based on tool type.
  */
-function getIconColor(linkedTool: LinkedToolItemType): string {
-  if (linkedTool.isOrphaned) return 'text-amber-400';
-  if (linkedTool.result?.isError) return 'text-red-400';
-  return 'text-green-400';
+function renderInput(toolName: string, input: Record<string, unknown>): React.ReactNode {
+  // Special rendering for Edit tool - show diff-like format
+  if (toolName === 'Edit') {
+    const filePath = input.file_path as string | undefined;
+    const oldString = input.old_string as string | undefined;
+    const newString = input.new_string as string | undefined;
+    const replaceAll = input.replace_all as boolean | undefined;
+
+    return (
+      <div className="space-y-2">
+        {filePath && (
+          <div className="text-zinc-400 text-xs mb-2">
+            {filePath}
+            {replaceAll && <span className="ml-2 text-zinc-500">(replace all)</span>}
+          </div>
+        )}
+        {oldString && (
+          <div className="text-red-400/80 whitespace-pre-wrap break-all">
+            {oldString.split('\n').map((line, i) => (
+              <div key={i}>- {line}</div>
+            ))}
+          </div>
+        )}
+        {newString && (
+          <div className="text-green-400/80 whitespace-pre-wrap break-all">
+            {newString.split('\n').map((line, i) => (
+              <div key={i}>+ {line}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Special rendering for Bash tool
+  if (toolName === 'Bash') {
+    const command = input.command as string | undefined;
+    const description = input.description as string | undefined;
+
+    return (
+      <div className="space-y-2">
+        {description && (
+          <div className="text-zinc-400 text-xs mb-1">{description}</div>
+        )}
+        {command && (
+          <code className="text-zinc-300 whitespace-pre-wrap break-all">{command}</code>
+        )}
+      </div>
+    );
+  }
+
+  // Special rendering for Read tool
+  if (toolName === 'Read') {
+    const filePath = input.file_path as string | undefined;
+    const offset = input.offset as number | undefined;
+    const limit = input.limit as number | undefined;
+
+    return (
+      <div className="text-zinc-300">
+        <div>{filePath}</div>
+        {(offset !== undefined || limit !== undefined) && (
+          <div className="text-zinc-500 text-xs mt-1">
+            {offset !== undefined && `offset: ${offset}`}
+            {offset !== undefined && limit !== undefined && ', '}
+            {limit !== undefined && `limit: ${limit}`}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Default: JSON format
+  return (
+    <pre className="whitespace-pre-wrap break-all">
+      {JSON.stringify(input, null, 2)}
+    </pre>
+  );
 }
 
 /**
- * Gets status indicator for one-liner.
+ * Renders the output section.
  */
-function getStatusIndicator(linkedTool: LinkedToolItemType): string {
-  if (linkedTool.isOrphaned) return '?';
-  if (linkedTool.result?.isError) return 'x';
-  return 'ok';
+function renderOutput(content: string | unknown[]): React.ReactNode {
+  if (typeof content === 'string') {
+    return <pre className="whitespace-pre-wrap break-all">{content}</pre>;
+  }
+
+  return <pre className="whitespace-pre-wrap break-all">{JSON.stringify(content, null, 2)}</pre>;
 }
 
-/**
- * Gets border color for expanded content.
- */
-function getBorderColor(linkedTool: LinkedToolItemType): string {
-  if (linkedTool.isOrphaned) return 'border-amber-500';
-  if (linkedTool.result?.isError) return 'border-red-500';
-  return 'border-green-500';
-}
+// =============================================================================
+// Main Component
+// =============================================================================
 
 export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick, isExpanded }) => {
-  const iconColor = getIconColor(linkedTool);
-  const statusIndicator = getStatusIndicator(linkedTool);
-  const borderColor = getBorderColor(linkedTool);
-
-  // Format input for display
-  const formatInput = (input: unknown): string => {
-    if (typeof input === 'string') {
-      return input;
-    }
-    return JSON.stringify(input, null, 2);
-  };
-
-  // Truncate input preview for one-liner
-  const inputPreview = linkedTool.inputPreview.length > 40
-    ? linkedTool.inputPreview.slice(0, 40) + '...'
-    : linkedTool.inputPreview;
+  const status = getToolStatus(linkedTool);
+  const summary = getToolSummary(linkedTool.name, linkedTool.input);
 
   return (
     <div>
-      {/* Collapsed: simple one-line row */}
+      {/* Collapsed: One-liner view */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 px-2 py-1 hover:bg-claude-dark-surface/50 cursor-pointer rounded"
+        className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800/50 cursor-pointer rounded group"
       >
-        <Wrench className={`w-4 h-4 ${iconColor} flex-shrink-0`} />
-        <span className="text-sm text-claude-dark-text truncate">
-          {linkedTool.name}: {inputPreview}
+        <Wrench className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+        <span className="font-mono text-sm text-zinc-200">
+          {linkedTool.name}
         </span>
-        <span className="text-xs text-claude-dark-text-secondary flex-shrink-0">
-          ({statusIndicator} {formatDuration(linkedTool.durationMs)})
+        <span className="text-zinc-500 text-sm">-</span>
+        <span className="text-sm text-zinc-400 truncate flex-1">
+          {summary}
+        </span>
+        <StatusDot status={status} />
+        <span className="text-xs text-zinc-500 flex-shrink-0">
+          {formatDuration(linkedTool.durationMs)}
         </span>
       </div>
 
-      {/* Expanded: full content below */}
+      {/* Expanded: Full content */}
       {isExpanded && (
-        <div className={`border-l-2 ${borderColor} pl-3 ml-3 mt-1 mb-2 space-y-2`}>
-          {/* Full input */}
-          <div className="text-xs">
-            <span className="font-medium text-claude-dark-text-secondary block mb-1">Input:</span>
-            <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs text-claude-dark-text">
-              {formatInput(linkedTool.input)}
-            </pre>
+        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-2 space-y-3">
+          {/* Input Section */}
+          <div>
+            <div className="text-xs text-zinc-500 mb-1">Input</div>
+            <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-96 overflow-y-auto">
+              {renderInput(linkedTool.name, linkedTool.input)}
+            </div>
           </div>
 
-          {/* Full output */}
+          {/* Output Section */}
           {!linkedTool.isOrphaned && linkedTool.result && (
-            <div className="text-xs">
-              <span className="font-medium text-claude-dark-text-secondary block mb-1">Output:</span>
-              {linkedTool.result.isError ? (
-                <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs text-red-300">
-                  {typeof linkedTool.result.content === 'string'
-                    ? linkedTool.result.content
-                    : JSON.stringify(linkedTool.result.content, null, 2)}
-                </pre>
-              ) : typeof linkedTool.result.content === 'string' ? (
-                <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs whitespace-pre-wrap text-claude-dark-text">
-                  {linkedTool.result.content}
-                </pre>
-              ) : (
-                <pre className="bg-black/30 p-2 rounded overflow-x-auto text-xs text-claude-dark-text">
-                  {JSON.stringify(linkedTool.result.content, null, 2)}
-                </pre>
-              )}
+            <div>
+              <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+                Output
+                <StatusDot status={status} />
+              </div>
+              <div className={`bg-zinc-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto ${
+                status === 'error' ? 'text-red-400' : 'text-zinc-300'
+              }`}>
+                {renderOutput(linkedTool.result.content)}
+              </div>
             </div>
           )}
-
-          {/* Timing info */}
-          <div className="text-xs text-claude-dark-text-secondary space-y-0.5">
-            <div>Started: {linkedTool.startTime.toLocaleTimeString()}</div>
-            {linkedTool.endTime && (
-              <div>Completed: {linkedTool.endTime.toLocaleTimeString()}</div>
-            )}
-            <div>Duration: {formatDuration(linkedTool.durationMs)}</div>
-          </div>
 
           {/* Orphaned indicator */}
           {linkedTool.isOrphaned && (
-            <div className="text-xs text-amber-400 italic">
+            <div className="text-xs text-zinc-500 italic flex items-center gap-2">
+              <StatusDot status="orphaned" />
               No result received
             </div>
           )}
+
+          {/* Timing */}
+          <div className="text-xs text-zinc-500">
+            Duration: {formatDuration(linkedTool.durationMs)}
+          </div>
         </div>
       )}
     </div>

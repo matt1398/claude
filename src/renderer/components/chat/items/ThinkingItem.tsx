@@ -1,5 +1,5 @@
 import React from 'react';
-import { Brain } from 'lucide-react';
+import { Brain, ChevronRight } from 'lucide-react';
 import type { SemanticStep } from '../../../types/data';
 
 interface ThinkingItemProps {
@@ -16,21 +16,22 @@ export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onCli
 
   return (
     <div>
-      {/* Collapsed: simple one-line row */}
+      {/* Clickable Header */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 px-2 py-1 hover:bg-purple-900/30 cursor-pointer rounded"
+        className="flex items-center gap-2 py-1.5 px-2 hover:bg-zinc-800/50 rounded cursor-pointer"
       >
-        <Brain className="w-4 h-4 text-purple-400 flex-shrink-0" />
-        <span className="text-sm text-purple-300 truncate">
-          Thinking: "{truncatedPreview}"
-        </span>
+        <Brain className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+        <span className="font-medium text-zinc-300">Thinking</span>
+        <span className="text-zinc-600">·</span>
+        <span className="text-zinc-500 truncate flex-1">{truncatedPreview}</span>
+        <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
       </div>
 
-      {/* Expanded: full content below */}
+      {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-l-2 border-purple-500 pl-3 ml-3 mt-1 mb-2">
-          <div className="text-xs text-purple-200/90 whitespace-pre-wrap">
+        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-1 mb-2">
+          <div className="text-zinc-300 text-sm whitespace-pre-wrap">
             {fullContent}
           </div>
         </div>

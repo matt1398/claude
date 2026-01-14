@@ -1,8 +1,8 @@
 import { useState } from 'react';
+import { Bot, ChevronDown } from 'lucide-react';
 import type { AIGroup, EnhancedAIGroup } from '../../types/groups';
 import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
-import { CollapsedToggle } from './CollapsedToggle';
 import { DisplayItemList } from './DisplayItemList';
 
 interface AIChatGroupProps {
@@ -10,11 +10,12 @@ interface AIChatGroupProps {
 }
 
 /**
- * AIChatGroup displays an AI response using the new structure.
+ * AIChatGroup displays an AI response using a clean, minimal card-based design.
  *
  * Features:
+ * - Card container with subtle zinc styling
+ * - Clickable header with Bot icon, "Claude" label, and items summary
  * - LastOutputDisplay: Always visible last output (text or tool result)
- * - CollapsedToggle: Toggle for collapsed content (if hasToggleContent)
  * - DisplayItemList: Shows items when expanded with inline expansion support
  * - Manages local expansion state and inline item expansion
  */
@@ -37,21 +38,28 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
   };
 
   return (
-    <div className="mb-4">
-      {/* Toggle at TOP */}
+    <div className="mb-4 border border-zinc-700/50 bg-zinc-900/50 rounded-lg overflow-hidden border-l-2 border-l-zinc-600">
+      {/* Clickable Header */}
       {hasToggleContent && (
-        <div className="mb-2">
-          <CollapsedToggle
-            summary={enhanced.itemsSummary}
-            isExpanded={isExpanded}
-            onToggle={() => setIsExpanded(!isExpanded)}
+        <div
+          className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+          onClick={() => setIsExpanded(!isExpanded)}
+        >
+          <div className="flex items-center gap-2 text-xs">
+            <Bot className="w-4 h-4 text-zinc-400" />
+            <span className="font-medium text-zinc-300">Claude</span>
+            <span className="text-zinc-500">·</span>
+            <span className="text-zinc-500">{enhanced.itemsSummary}</span>
+          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
           />
         </div>
       )}
 
-      {/* Items shown when expanded */}
+      {/* Expandable Content */}
       {hasToggleContent && isExpanded && (
-        <div className="mb-2">
+        <div className="border-t border-zinc-800 p-4">
           <DisplayItemList
             items={enhanced.displayItems}
             onItemClick={handleItemClick}
@@ -60,8 +68,10 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
         </div>
       )}
 
-      {/* Final output at BOTTOM - always visible */}
-      <LastOutputDisplay lastOutput={enhanced.lastOutput} />
+      {/* Always-visible Output */}
+      <div className={`${hasToggleContent ? 'border-t border-zinc-800' : ''} p-4`}>
+        <LastOutputDisplay lastOutput={enhanced.lastOutput} />
+      </div>
     </div>
   );
 }

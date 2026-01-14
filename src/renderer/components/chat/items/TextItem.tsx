@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, ChevronRight } from 'lucide-react';
 import type { SemanticStep } from '../../../types/data';
 
 interface TextItemProps {
@@ -16,21 +16,22 @@ export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isEx
 
   return (
     <div>
-      {/* Collapsed: simple one-line row */}
+      {/* Clickable Header */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 px-2 py-1 hover:bg-claude-dark-surface/50 cursor-pointer rounded"
+        className="flex items-center gap-2 py-1.5 px-2 hover:bg-zinc-800/50 rounded cursor-pointer"
       >
-        <MessageSquare className="w-4 h-4 text-claude-dark-text-secondary flex-shrink-0" />
-        <span className="text-sm text-claude-dark-text-secondary truncate">
-          "{truncatedPreview}"
-        </span>
+        <MessageSquare className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+        <span className="font-medium text-zinc-300">Output</span>
+        <span className="text-zinc-600">·</span>
+        <span className="text-zinc-500 truncate flex-1">{truncatedPreview}</span>
+        <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
       </div>
 
-      {/* Expanded: full content below */}
+      {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-l-2 border-claude-dark-border pl-3 ml-3 mt-1 mb-2">
-          <div className="text-xs text-claude-dark-text whitespace-pre-wrap">
+        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-1 mb-2">
+          <div className="text-zinc-200 whitespace-pre-wrap">
             {fullContent}
           </div>
         </div>

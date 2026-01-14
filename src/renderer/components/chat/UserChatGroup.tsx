@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
+import { User } from 'lucide-react';
 import type { UserGroup } from '../../types/groups';
 import { CommandBadge } from './CommandBadge';
 
@@ -8,13 +9,13 @@ interface UserChatGroupProps {
 }
 
 /**
- * UserChatGroup displays a user's input message.
+ * UserChatGroup displays a user's input message as an Event Card.
  * Features:
- * - Shows timestamp
+ * - Full-width card layout with subtle styling
+ * - Header with user icon, label, and timestamp
  * - Displays text content with optional toggle for long content (>500 chars)
- * - Shows command badges
- * - Shows image count
- * - Chat bubble styling aligned to right
+ * - Shows command badges in header area
+ * - Shows image count indicator
  */
 export function UserChatGroup({ userGroup }: UserChatGroupProps) {
   const { content, timestamp } = userGroup;
@@ -31,46 +32,48 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
     : textContent;
 
   return (
-    <div className="flex justify-end mb-4">
-      <div className="max-w-[80%] bg-blue-600/20 border border-blue-500/30 rounded-2xl rounded-br-sm px-4 py-3">
-        {/* Timestamp */}
-        <div className="text-xs text-gray-400 mb-2">
-          {format(timestamp, 'h:mm:ss a')}
+    <div className="border border-zinc-700/50 bg-zinc-800/30 rounded-lg p-4 space-y-2 mb-4">
+      {/* Header */}
+      <div className="flex items-center justify-between text-xs text-zinc-400">
+        <div className="flex items-center gap-2">
+          <User className="w-3.5 h-3.5" />
+          <span className="font-medium text-zinc-300">User</span>
+          <span>·</span>
+          <span>{format(timestamp, 'h:mm:ss a')}</span>
         </div>
-
-        {/* Text content */}
-        {textContent && (
-          <div className="mb-2">
-            <div className="text-gray-100 whitespace-pre-wrap break-words">
-              {displayText}
-            </div>
-            {isLongContent && (
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="text-xs text-blue-400 hover:text-blue-300 mt-1 underline"
-              >
-                {isExpanded ? 'Show less' : 'Show more'}
-              </button>
-            )}
-          </div>
-        )}
-
         {/* Command badges */}
         {hasCommands && (
-          <div className="flex flex-wrap gap-2 mb-2">
+          <div className="flex flex-wrap gap-2">
             {content.commands.map((cmd, idx) => (
               <CommandBadge key={idx} command={cmd.name} args={cmd.args} />
             ))}
           </div>
         )}
-
-        {/* Images indicator */}
-        {hasImages && (
-          <div className="text-xs text-gray-400">
-            {content.images.length} image{content.images.length > 1 ? 's' : ''} attached
-          </div>
-        )}
       </div>
+
+      {/* Content */}
+      {textContent && (
+        <div>
+          <div className="text-zinc-100 text-sm whitespace-pre-wrap break-words">
+            {displayText}
+          </div>
+          {isLongContent && (
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="text-xs text-zinc-400 hover:text-zinc-300 mt-1 underline"
+            >
+              {isExpanded ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Images indicator */}
+      {hasImages && (
+        <div className="text-xs text-zinc-400">
+          {content.images.length} image{content.images.length > 1 ? 's' : ''} attached
+        </div>
+      )}
     </div>
   );
 }
