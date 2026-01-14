@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { Project, Session, SessionDetail, SubagentDetail } from '../types/data';
 import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
 import { transformChunksToConversation } from '../utils/groupTransformer';
+import type { Tab, TabInput } from '../types/tabs';
+import { isSessionOpenInTabs, findTabBySession, truncateLabel } from '../types/tabs';
 
 interface BreadcrumbItem {
   id: string;
@@ -54,6 +56,13 @@ interface AppState {
     type: 'thinking' | 'text' | 'linked-tool' | 'subagent';
   } | null;
 
+  // Tab state (new)
+  openTabs: Tab[];
+  activeTabId: string | null;
+
+  // Project context state (new)
+  activeProjectId: string | null;
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -76,6 +85,17 @@ interface AppState {
   // Detail popover actions
   showDetailPopover: (aiGroupId: string, itemId: string, type: 'thinking' | 'text' | 'linked-tool' | 'subagent') => void;
   hideDetailPopover: () => void;
+
+  // Tab actions (new)
+  openTab: (tab: TabInput) => void;
+  closeTab: (tabId: string) => void;
+  setActiveTab: (tabId: string) => void;
+  openDashboard: () => void;
+  getActiveTab: () => Tab | null;
+  isSessionOpen: (sessionId: string) => boolean;
+
+  // Project context actions (new)
+  setActiveProject: (projectId: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -111,6 +131,13 @@ export const useStore = create<AppState>((set, get) => ({
   ganttChartMode: 'timeline',
 
   activeDetailItem: null,
+
+  // Tab state (new)
+  openTabs: [],
+  activeTabId: null,
+
+  // Project context state (new)
+  activeProjectId: null,
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -407,5 +434,115 @@ export const useStore = create<AppState>((set, get) => ({
   // Hide detail popover
   hideDetailPopover: () => {
     set({ activeDetailItem: null });
-  }
+  },
+
+  // Tab actions (new)
+
+  // Open a tab or focus existing if sessionId matches
+  openTab: (tab: TabInput) => {
+    const state = get();
+
+    // If opening a session tab, check for duplicates
+    if (tab.type === 'session' && tab.sessionId) {
+      const existing = findTabBySession(state.openTabs, tab.sessionId);
+      if (existing) {
+        // Focus existing tab instead of creating duplicate
+        set({ activeTabId: existing.id });
+        return;
+      }
+    }
+
+    // Create new tab with generated id and timestamp
+    const newTab: Tab = {
+      ...tab,
+      id: crypto.randomUUID(),
+      label: truncateLabel(tab.label),
+      createdAt: Date.now(),
+    };
+
+    set({
+      openTabs: [...state.openTabs, newTab],
+      activeTabId: newTab.id,
+    });
+  },
+
+  // Close a tab by ID, auto-focus adjacent tab
+  closeTab: (tabId: string) => {
+    const state = get();
+    const index = state.openTabs.findIndex(t => t.id === tabId);
+    if (index === -1) return;
+
+    const newTabs = state.openTabs.filter(t => t.id !== tabId);
+
+    // Determine new active tab
+    let newActiveId = state.activeTabId;
+    if (state.activeTabId === tabId) {
+      // Closed tab was active, focus adjacent
+      // Try next tab first, then previous, then null (dashboard)
+      newActiveId = newTabs[index]?.id ?? newTabs[index - 1]?.id ?? null;
+    }
+
+    set({
+      openTabs: newTabs,
+      activeTabId: newActiveId,
+    });
+  },
+
+  // Switch focus to an existing tab
+  setActiveTab: (tabId: string) => {
+    const state = get();
+    const exists = state.openTabs.some(t => t.id === tabId);
+    if (exists) {
+      set({ activeTabId: tabId });
+    }
+  },
+
+  // Open or focus the dashboard
+  openDashboard: () => {
+    const state = get();
+
+    // Check if dashboard tab already exists
+    const dashboardTab = state.openTabs.find(t => t.type === 'dashboard');
+    if (dashboardTab) {
+      set({ activeTabId: dashboardTab.id });
+      return;
+    }
+
+    // Create new dashboard tab
+    const newTab: Tab = {
+      id: crypto.randomUUID(),
+      type: 'dashboard',
+      label: 'Dashboard',
+      createdAt: Date.now(),
+    };
+
+    set({
+      openTabs: [...state.openTabs, newTab],
+      activeTabId: newTab.id,
+    });
+  },
+
+  // Get the currently active tab
+  getActiveTab: () => {
+    const state = get();
+    if (!state.activeTabId) return null;
+    return state.openTabs.find(t => t.id === state.activeTabId) ?? null;
+  },
+
+  // Check if a session is already open
+  isSessionOpen: (sessionId: string) => {
+    const state = get();
+    return isSessionOpenInTabs(state.openTabs, sessionId);
+  },
+
+  // Project context actions (new)
+
+  // Set active project and fetch its sessions
+  setActiveProject: (projectId: string) => {
+    set({ activeProjectId: projectId });
+
+    // Also update selectedProjectId for compatibility with existing code
+    // and fetch sessions
+    get().selectProject(projectId);
+  },
 }));

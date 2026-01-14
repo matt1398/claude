@@ -23,3 +23,25 @@ body {
   height: 100vh;
   overflow: hidden;
 }
+
+/* macOS window integration */
+.sidebar-header {
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
+}
+
+.sidebar-header button,
+.sidebar-header input,
+.sidebar-header .no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Hide horizontal scrollbar in tab bar */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
