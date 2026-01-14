@@ -203,17 +203,44 @@ export type ChatHistoryEntry = UserEntry | AssistantEntry | SystemEntry | Summar
 
 /**
  * Real user message - starts a new chunk/group.
- * Must be: type='user' AND isMeta!=true AND content is string
+ * Must be: type='user' AND isMeta!=true AND (string content OR array with text/image blocks)
  *
  * This is the PRIMARY classifier for conversation group boundaries.
  * All real user messages (not noise) should start new groups.
  *
+ * Accepts both formats:
+ * - Older sessions: content as string
+ * - Newer sessions: content as array with text/image blocks
+ *
  * Note: For chunk creation, prefer `isTriggerMessage()` which also filters noise messages.
  */
 export function isRealUserMessage(entry: ChatHistoryEntry): entry is UserEntry {
-  return entry.type === 'user'
-    && entry.isMeta !== true
-    && typeof (entry as UserEntry).message?.content === 'string';
+  if (entry.type !== 'user') return false;
+  if (entry.isMeta === true) return false;
+
+  const userEntry = entry as UserEntry;
+  const content = userEntry.message?.content;
+
+  // String content format (older sessions)
+  if (typeof content === 'string') return true;
+
+  // Array content format (newer sessions)
+  if (Array.isArray(content)) {
+    // Filter out system-generated interruption messages
+    if (content.length === 1 &&
+        content[0].type === 'text' &&
+        content[0].text === '[Request interrupted by user for tool use]') {
+      return false;
+    }
+
+    // Check if it contains text or image blocks (real user input)
+    // Exclude arrays with only tool_result blocks (those are internal messages)
+    return content.some(block =>
+      block.type === 'text' || block.type === 'image'
+    );
+  }
+
+  return false;
 }
 
 /**
@@ -1114,11 +1141,37 @@ export const EMPTY_TOKEN_USAGE: TokenUsage = {
 /**
  * Type guard to check if a ParsedMessage is a real user message.
  * This wraps the spec's type guard but works with ParsedMessage instead of UserEntry.
+ *
+ * Accepts both formats:
+ * - Older sessions: content as string
+ * - Newer sessions: content as array with text/image blocks
  */
 export function isParsedRealUserMessage(msg: ParsedMessage): boolean {
-  return msg.type === 'user'
-    && !msg.isMeta
-    && typeof msg.content === 'string';
+  if (msg.type !== 'user') return false;
+  if (msg.isMeta) return false;
+
+  const content = msg.content;
+
+  // String content format (older sessions)
+  if (typeof content === 'string') return true;
+
+  // Array content format (newer sessions)
+  if (Array.isArray(content)) {
+    // Filter out system-generated interruption messages
+    if (content.length === 1 &&
+        content[0].type === 'text' &&
+        content[0].text === '[Request interrupted by user for tool use]') {
+      return false;
+    }
+
+    // Check if it contains text or image blocks (real user input)
+    // Exclude arrays with only tool_result blocks (those are internal messages)
+    return content.some(block =>
+      block.type === 'text' || block.type === 'image'
+    );
+  }
+
+  return false;
 }
 
 /**

@@ -361,3 +361,10 @@ npm run typecheck
 
 ### Test Failures
 Check for changes in message parsing or chunk building logic. See test output for specific failures.
+
+## Active Technologies
+- TypeScript 5.5, React 18.3, Node.js (Electron 28.x main process) + Zustand 4.5 (state), React 18.3 (UI), Tailwind CSS 3.4 (styling), Lucide React (icons), date-fns 3.6 (date grouping) (001-tabbed-layout-dashboard)
+- N/A (state is in-memory via Zustand; session data comes from existing IPC handlers) (001-tabbed-layout-dashboard)
+
+## Recent Changes
+- 001-tabbed-layout-dashboard: Added TypeScript 5.5, React 18.3, Node.js (Electron 28.x main process) + Zustand 4.5 (state), React 18.3 (UI), Tailwind CSS 3.4 (styling), Lucide React (icons), date-fns 3.6 (date grouping)

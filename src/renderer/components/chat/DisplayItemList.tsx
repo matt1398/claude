@@ -106,7 +106,8 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
           }
 
           case 'tool': {
-            const itemId = `tool-${item.tool.id}`;
+            // Use index to ensure uniqueness within this list
+            const itemId = `tool-${item.tool.id}-${index}`;
             const handleClick = () => onItemClick(itemId);
             const isExpanded = expandedItemId === itemId;
 
@@ -122,7 +123,8 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
 
           case 'subagent': {
             // Create a synthetic SemanticStep for SubagentItem
-            const itemId = `subagent-${item.subagent.id}`;
+            // Use index to ensure uniqueness within this list
+            const itemId = `subagent-${item.subagent.id}-${index}`;
             const subagentStep = {
               id: itemId,
               type: 'subagent' as const,

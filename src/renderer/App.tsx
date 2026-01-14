@@ -1,7 +1,7 @@
-import { ThreePanelLayout } from './components/layout/ThreePanelLayout';
+import { TabbedLayout } from './components/layout/TabbedLayout';
 
 function App() {
-  return <ThreePanelLayout />;
+  return <TabbedLayout />;
 }
 
 export default App;
