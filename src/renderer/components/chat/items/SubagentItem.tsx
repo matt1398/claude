@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Bot, ChevronRight, ChevronDown } from 'lucide-react';
+import { Bot, ChevronRight, ChevronDown, Code } from 'lucide-react';
 import type { SemanticStep, Process, ContentBlock } from '../../../types/data';
 import type { AIGroupDisplayItem } from '../../../types/groups';
 import { ThinkingItem } from './ThinkingItem';
@@ -206,12 +206,13 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
       {/* Clickable Header */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 py-1.5 px-2 hover:bg-zinc-800/50 rounded cursor-pointer"
+        className="flex items-center gap-2 py-1.5 px-2 hover:bg-zinc-800/50 rounded cursor-pointer border-l-4 border-blue-500/60 bg-zinc-900/30"
       >
-        <Bot className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-        <span className="font-medium text-zinc-300">{subagentType}</span>
-        <span className="text-zinc-600">·</span>
+        <Bot className="w-4 h-4 text-cyan-400 flex-shrink-0" />
+        <span className="inline-block px-2 py-0.5 rounded-full bg-zinc-800 text-xs font-medium text-cyan-300">{subagentType}</span>
+        <span className="text-zinc-600">→</span>
         <span className="text-zinc-500 truncate flex-1">{truncatedDesc}</span>
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 flex-shrink-0"></span>
         <span className="text-zinc-600 text-xs flex-shrink-0">{formatDuration(subagent.durationMs)}</span>
         <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
       </div>
@@ -224,23 +225,26 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
             {description}
           </div>
 
-          {/* Metrics grid */}
-          <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-            <div>
-              <span className="text-zinc-500">Type:</span>{' '}
-              <span className="text-zinc-300">{subagentType}</span>
-            </div>
-            <div>
-              <span className="text-zinc-500">Duration:</span>{' '}
-              <span className="text-zinc-300">{formatDuration(subagent.durationMs)}</span>
-            </div>
-            <div>
-              <span className="text-zinc-500">Tokens:</span>{' '}
-              <span className="text-zinc-300">{formatTokens(totalTokens)}</span>
-            </div>
-            <div>
-              <span className="text-zinc-500">ID:</span>{' '}
-              <span className="text-zinc-300 font-mono">{subagent.id || 'N/A'}</span>
+          {/* Metrics card */}
+          <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800/50 mb-3">
+            <div className="text-xs text-zinc-500 mb-2 font-medium">Metrics</div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-zinc-500">Type:</span>{' '}
+                <span className="text-zinc-300">{subagentType}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Duration:</span>{' '}
+                <span className="text-zinc-300">{formatDuration(subagent.durationMs)}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">Tokens:</span>{' '}
+                <span className="text-zinc-300">{formatTokens(totalTokens)}</span>
+              </div>
+              <div>
+                <span className="text-zinc-500">ID:</span>{' '}
+                <span className="text-zinc-300 font-mono">{subagent.id || 'N/A'}</span>
+              </div>
             </div>
           </div>
 
@@ -256,6 +260,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
                 ) : (
                   <ChevronRight className="w-3 h-3" />
                 )}
+                <Code className="w-3.5 h-3.5 text-zinc-500" />
                 <span>Execution trace</span>
                 <span className="text-zinc-600">·</span>
                 <span className="text-zinc-500">{itemsSummary}</span>
@@ -263,7 +268,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
 
               {/* Execution trace content */}
               {showTrace && (
-                <div className="pl-2 border-l border-zinc-700 bg-zinc-900/30 rounded-r py-2">
+                <div className="pl-2 bg-zinc-900/50 border border-zinc-800/40 rounded-lg py-2">
                   <ExecutionTrace items={displayItems} />
                 </div>
               )}
