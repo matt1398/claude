@@ -41,7 +41,8 @@
       "Bash([ -f /Users/bskim/ClaudeContext/eslint.config.js ])",
       "Bash(then echo \"ESLint config found\")",
       "Bash(else echo \"No ESLint config\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(xargs -I {} sh -c 'echo \"\"\"\"Read tool ID: {}\"\"\"\"; grep -o \"\"\"\"\\\\\"\"\"\"tool_use_id\\\\\"\"\"\":\\\\\"\"\"\"{}\\\\\"\"\"\"\"\"\"\" \"\"\"\"/Users/bskim/ClaudeContext/example_jsonl/agent/example_3.jsonl\"\"\"\" | head -2')"
     ]
   }
 }

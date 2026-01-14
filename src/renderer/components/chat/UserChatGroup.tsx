@@ -2,28 +2,33 @@ import { useState } from 'react';
 import { format } from 'date-fns';
 import { User } from 'lucide-react';
 import type { UserGroup } from '../../types/groups';
-import { CommandBadge } from './CommandBadge';
+import { HighlightedText } from './HighlightedText';
+import { useStore } from '../../store';
 
 interface UserChatGroupProps {
   userGroup: UserGroup;
 }
 
 /**
- * UserChatGroup displays a user's input message as an Event Card.
+ * UserChatGroup displays a user's input message.
  * Features:
- * - Full-width card layout with subtle styling
+ * - Right-aligned bubble layout with subtle blue styling
  * - Header with user icon, label, and timestamp
- * - Displays text content with optional toggle for long content (>500 chars)
- * - Shows command badges in header area
+ * - Displays text content with inline highlighted mentions (@paths, /commands)
+ * - Toggle for long content (>500 chars)
  * - Shows image count indicator
  */
 export function UserChatGroup({ userGroup }: UserChatGroupProps) {
   const { content, timestamp } = userGroup;
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Get projectPath from store for path validation in HighlightedText
+  const sessionDetail = useStore((s) => s.sessionDetail);
+  const projectPath = sessionDetail?.session?.projectPath;
+
   const hasImages = content.images.length > 0;
-  const hasCommands = content.commands.length > 0;
-  const textContent = content.text || '';
+  // Use rawText to preserve /commands inline (HighlightedText will highlight them)
+  const textContent = content.rawText || content.text || '';
   const isLongContent = textContent.length > 500;
 
   // Determine display text
@@ -36,14 +41,6 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
       <div className="max-w-[85%] space-y-2">
         {/* Header - right aligned */}
         <div className="flex items-center justify-end gap-2 text-xs text-zinc-400">
-          {/* Command badges */}
-          {hasCommands && (
-            <div className="flex flex-wrap gap-2">
-              {content.commands.map((cmd, idx) => (
-                <CommandBadge key={idx} command={cmd.name} args={cmd.args} />
-              ))}
-            </div>
-          )}
           <span>{format(timestamp, 'h:mm:ss a')}</span>
           <span>·</span>
           <span className="font-medium text-zinc-300">You</span>
@@ -54,7 +51,7 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
         {textContent && (
           <div className="bg-blue-600/15 rounded-2xl rounded-br-sm px-4 py-3">
             <div className="text-zinc-100 text-sm whitespace-pre-wrap break-words">
-              {displayText}
+              <HighlightedText text={displayText} projectPath={projectPath} />
             </div>
             {isLongContent && (
               <button

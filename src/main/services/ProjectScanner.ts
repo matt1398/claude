@@ -11,7 +11,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { Project, Session } from '../types/claude';
+import * as readline from 'readline';
+import { Project, Session, ChatHistoryEntry, isNoiseMessage } from '../types/claude';
 import {
   decodePath,
   isValidEncodedPath,
@@ -145,7 +146,54 @@ export class ProjectScanner {
   // ===========================================================================
 
   /**
+   * Checks if a session file contains any non-noise messages.
+   * Returns true if the session has at least one meaningful message.
+   *
+   * Noise messages include:
+   * - file-history-snapshot entries
+   * - summary entries
+   * - system entries with local_command subtype
+   * - user messages with system metadata tags (local-command-stdout, etc.)
+   */
+  private async hasNonNoiseMessages(filePath: string): Promise<boolean> {
+    if (!fs.existsSync(filePath)) {
+      return false;
+    }
+
+    const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+
+    try {
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+
+        try {
+          const entry = JSON.parse(line) as ChatHistoryEntry;
+
+          // If we find any non-noise message, return true immediately
+          if (!isNoiseMessage(entry)) {
+            fileStream.destroy();
+            return true;
+          }
+        } catch (error) {
+          // Skip malformed lines
+          continue;
+        }
+      }
+    } catch (error) {
+      console.error(`Error checking noise messages in ${filePath}:`, error);
+    }
+
+    // All messages were noise
+    return false;
+  }
+
+  /**
    * Lists all sessions for a given project with metadata.
+   * Filters out sessions that contain only noise messages.
    */
   async listSessions(projectId: string): Promise<Session[]> {
     try {
@@ -168,14 +216,23 @@ export class ProjectScanner {
           const sessionId = extractSessionId(file.name);
           const filePath = path.join(projectPath, file.name);
 
+          // Check if session has non-noise messages
+          const hasContent = await this.hasNonNoiseMessages(filePath);
+          if (!hasContent) {
+            return null; // Filter out noise-only sessions
+          }
+
           return this.buildSessionMetadata(projectId, sessionId, filePath, decodedPath);
         })
       );
 
-      // Sort by created date (most recent first)
-      sessions.sort((a, b) => b.createdAt - a.createdAt);
+      // Filter out null results (noise-only sessions)
+      const validSessions = sessions.filter((s): s is Session => s !== null);
 
-      return sessions;
+      // Sort by created date (most recent first)
+      validSessions.sort((a, b) => b.createdAt - a.createdAt);
+
+      return validSessions;
     } catch (error) {
       console.error(`Error listing sessions for project ${projectId}:`, error);
       return [];

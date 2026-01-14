@@ -405,6 +405,16 @@ export interface ElectronAPI {
   getWaterfallData: (projectId: string, sessionId: string) => Promise<WaterfallData | null>;
   getSubagentDetail: (projectId: string, sessionId: string, subagentId: string) => Promise<SubagentDetail | null>;
   getSessionGroups: (projectId: string, sessionId: string) => Promise<ConversationGroup[]>;
+
+  // Validation methods
+  validateSkill: (skillName: string, projectPath: string) =>
+    Promise<{ exists: boolean; location?: 'global' | 'project' }>;
+  validatePath: (relativePath: string, projectPath: string) =>
+    Promise<{ exists: boolean; isDirectory?: boolean }>;
+  validateMentions: (
+    mentions: { type: 'skill' | 'path'; value: string }[],
+    projectPath: string
+  ) => Promise<Record<string, boolean>>;
 }
 
 // =============================================================================

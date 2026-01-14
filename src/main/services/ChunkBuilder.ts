@@ -707,8 +707,9 @@ export class ChunkBuilder {
       }
 
       // Tool results from internal user messages
-      if (msg.type === 'user' && msg.isMeta) {
-        for (const result of msg.toolResults || []) {
+      // Note: isMeta can be true or null in JSONL, so check for toolResults presence directly
+      if (msg.type === 'user' && msg.toolResults && msg.toolResults.length > 0) {
+        for (const result of msg.toolResults) {
           steps.push({
             id: result.toolUseId,
             type: 'tool_result',

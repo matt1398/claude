@@ -166,28 +166,42 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Select a session and fetch its detail
   selectSession: (id: string) => {
+    console.log('[Store] selectSession called with id:', id);
     set({
       selectedSessionId: id,
       sessionDetail: null,
       sessionDetailError: null
     });
+    console.log('[Store] selectedSessionId set to:', id);
 
     // Fetch detail for this session
     const projectId = get().selectedProjectId;
+    console.log('[Store] Current selectedProjectId:', projectId);
     if (projectId) {
+      console.log('[Store] Fetching session detail for project:', projectId, 'session:', id);
       get().fetchSessionDetail(projectId, id);
+    } else {
+      console.warn('[Store] Cannot fetch session detail: no project selected');
     }
   },
 
   // Fetch full session detail with chunks and subagents
   fetchSessionDetail: async (projectId: string, sessionId: string) => {
+    console.log('[Store] fetchSessionDetail called for project:', projectId, 'session:', sessionId);
     set({
       sessionDetailLoading: true,
       sessionDetailError: null,
       conversationLoading: true
     });
     try {
+      console.log('[Store] Calling electronAPI.getSessionDetail...');
       const detail = await window.electronAPI.getSessionDetail(projectId, sessionId);
+      console.log('[Store] Received session detail:', detail ? 'SUCCESS' : 'NULL');
+
+      if (detail) {
+        console.log('[Store] Session detail has', detail.chunks?.length, 'chunks');
+        console.log('[Store] Session detail has', detail.subagents?.length, 'subagents');
+      }
 
       // Transform chunks to conversation
       // Note: detail.chunks are actually EnhancedChunk[] at runtime despite type definition
@@ -195,9 +209,15 @@ export const useStore = create<AppState>((set, get) => ({
         ? transformChunksToConversation(detail.chunks as any, detail.subagents)
         : null;
 
+      if (conversation) {
+        console.log('[Store] Transformed to conversation with', conversation.turns.length, 'turns');
+        console.log('[Store] First turn has', conversation.turns[0]?.aiGroups?.length, 'AI groups');
+      }
+
       // Initialize visibleAIGroupId to first AI Group if available
       const firstAIGroupId = conversation?.turns?.[0]?.aiGroups?.[0]?.id ?? null;
       const firstAIGroup = conversation?.turns?.[0]?.aiGroups?.[0] ?? null;
+      console.log('[Store] Setting visibleAIGroupId to:', firstAIGroupId);
 
       set({
         sessionDetail: detail,
@@ -207,7 +227,9 @@ export const useStore = create<AppState>((set, get) => ({
         visibleAIGroupId: firstAIGroupId,
         selectedAIGroup: firstAIGroup
       });
+      console.log('[Store] fetchSessionDetail completed successfully');
     } catch (error) {
+      console.error('[Store] fetchSessionDetail error:', error);
       set({
         sessionDetailError: error instanceof Error ? error.message : 'Failed to fetch session detail',
         sessionDetailLoading: false,

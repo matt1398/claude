@@ -15,12 +15,23 @@ import type {
   LinkedToolItem,
   AIGroupDisplayItem
 } from '../types/groups';
-import type { SemanticStep, Subagent } from '../types/data';
+import type { SemanticStep, Subagent, ParsedMessage, ContentBlock } from '../types/data';
+
+/**
+ * Safely converts a timestamp to a Date object.
+ * Handles both Date objects and ISO string timestamps (from IPC serialization).
+ */
+export function toDate(timestamp: Date | string | number): Date {
+  if (timestamp instanceof Date) {
+    return timestamp;
+  }
+  return new Date(timestamp);
+}
 
 /**
  * Truncates text to a maximum length and adds ellipsis if needed.
  */
-function truncateText(text: string, maxLength: number): string {
+export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
     return text;
   }
@@ -30,7 +41,7 @@ function truncateText(text: string, maxLength: number): string {
 /**
  * Converts tool input object to a preview string.
  */
-function formatToolInput(input: Record<string, unknown>): string {
+export function formatToolInput(input: Record<string, unknown>): string {
   try {
     const json = JSON.stringify(input, null, 2);
     return truncateText(json, 100);
@@ -42,7 +53,7 @@ function formatToolInput(input: Record<string, unknown>): string {
 /**
  * Converts tool result content to a preview string.
  */
-function formatToolResult(content: string | unknown[]): string {
+export function formatToolResult(content: string | unknown[]): string {
   try {
     if (typeof content === 'string') {
       return truncateText(content, 200);
@@ -132,6 +143,10 @@ export function linkToolCallsToResults(steps: SemanticStep[]): Map<string, Linke
     // Tool result steps have their ID set to the tool_use_id (same as call ID)
     const resultStep = resultStepsById.get(toolCallId);
 
+    // Convert timestamps to proper Date objects (handles IPC serialization)
+    const callStartTime = toDate(callStep.startTime);
+    const resultStartTime = resultStep ? toDate(resultStep.startTime) : undefined;
+
     const linkedItem: LinkedToolItem = {
       id: toolCallId,
       name: toolName,
@@ -143,10 +158,10 @@ export function linkToolCallsToResults(steps: SemanticStep[]): Map<string, Linke
       } : undefined,
       inputPreview: formatToolInput(toolInput as Record<string, unknown>),
       outputPreview: resultStep ? formatToolResult(resultStep.content.toolResultContent || '') : undefined,
-      startTime: callStep.startTime,
-      endTime: resultStep?.startTime,
-      durationMs: resultStep
-        ? resultStep.startTime.getTime() - callStep.startTime.getTime()
+      startTime: callStartTime,
+      endTime: resultStartTime,
+      durationMs: resultStartTime
+        ? resultStartTime.getTime() - callStartTime.getTime()
         : undefined,
       isOrphaned: !resultStep,
     };
@@ -206,8 +221,9 @@ export function buildSummary(items: AIGroupDisplayItem[]): string {
  * 1. Skip the step that represents lastOutput (to avoid duplication)
  * 2. For tool_call steps, use the LinkedToolItem (which includes the result)
  * 3. Skip standalone tool_result steps (already linked to calls)
- * 4. Include thinking, subagent, and output steps
- * 5. Return items in chronological order
+ * 4. Skip Task tool_call steps that have associated subagents (avoid duplication)
+ * 5. Include thinking, subagent, and output steps
+ * 6. Return items in chronological order
  *
  * @param steps - Semantic steps from the AI Group
  * @param lastOutput - The last output to skip
@@ -229,6 +245,12 @@ export function buildDisplayItems(
       resultStepIds.add(step.id);
     }
   }
+
+  // Build set of Task IDs that have associated subagents
+  // This prevents duplicate display of Task tool calls when subagents are shown
+  const taskIdsWithSubagents = new Set<string>(
+    subagents.map(s => s.parentTaskId).filter((id): id is string => !!id)
+  );
 
   // Find the step ID of lastOutput to skip it
   let lastOutputStepId: string | undefined;
@@ -267,10 +289,15 @@ export function buildDisplayItems(
       case 'tool_call': {
         const linkedTool = linkedTools.get(step.id);
         if (linkedTool) {
-          displayItems.push({
-            type: 'tool',
-            tool: linkedTool,
-          });
+          // Skip Task tool calls that have associated subagents
+          // The subagent will be shown separately, so showing the Task call is redundant
+          const isTaskWithSubagent = linkedTool.name === 'Task' && taskIdsWithSubagents.has(step.id);
+          if (!isTaskWithSubagent) {
+            displayItems.push({
+              type: 'tool',
+              tool: linkedTool,
+            });
+          }
         }
         break;
       }
@@ -332,4 +359,175 @@ export function enhanceAIGroup(aiGroup: AIGroup): EnhancedAIGroup {
     displayItems,
     itemsSummary: summary,
   };
+}
+
+/**
+ * Build display items from raw ParsedMessages (used by subagents).
+ * This mirrors the logic of buildDisplayItems but works with messages instead of SemanticSteps.
+ *
+ * Strategy:
+ * 1. Extract thinking blocks from assistant messages
+ * 2. Extract tool_use blocks from assistant messages → collect in a Map by ID
+ * 3. Extract text output blocks from assistant messages
+ * 4. Extract tool_result blocks from user messages (isMeta or toolResults exist)
+ * 5. Link tool calls with their results using LinkedToolItem structure
+ * 6. Filter Task tool calls that have matching subagents
+ * 7. Include subagents as separate items
+ * 8. Sort all items chronologically
+ *
+ * @param messages - Raw ParsedMessages to process
+ * @param subagents - Subagents associated with these messages
+ * @returns Flat array of display items
+ */
+export function buildDisplayItemsFromMessages(
+  messages: ParsedMessage[],
+  subagents: Subagent[] = []
+): AIGroupDisplayItem[] {
+  const displayItems: AIGroupDisplayItem[] = [];
+
+  // Maps for tool call/result linking
+  const toolCallsById = new Map<string, {
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    timestamp: Date;
+    sourceMessageId: string;
+  }>();
+
+  const toolResultsById = new Map<string, {
+    content: string | unknown[];
+    isError: boolean;
+    toolUseResult?: Record<string, unknown>;
+    timestamp: Date;
+  }>();
+
+  // Build set of Task IDs that have associated subagents
+  // This prevents duplicate display of Task tool calls when subagents are shown
+  const taskIdsWithSubagents = new Set<string>(
+    subagents.map(s => s.parentTaskId).filter((id): id is string => !!id)
+  );
+
+  // First pass: collect tool calls and tool results from messages
+  for (const msg of messages) {
+    const msgTimestamp = toDate(msg.timestamp);
+
+    if (msg.type === 'assistant' && Array.isArray(msg.content)) {
+      // Process assistant message content blocks
+      for (const block of msg.content as ContentBlock[]) {
+        if (block.type === 'thinking' && block.thinking) {
+          // Add thinking block
+          displayItems.push({
+            type: 'thinking',
+            content: block.thinking,
+            timestamp: msgTimestamp,
+          });
+        } else if (block.type === 'tool_use' && block.id && block.name) {
+          // Collect tool call for later linking
+          toolCallsById.set(block.id, {
+            id: block.id,
+            name: block.name,
+            input: (block.input || {}) as Record<string, unknown>,
+            timestamp: msgTimestamp,
+            sourceMessageId: msg.uuid,
+          });
+        } else if (block.type === 'text' && block.text) {
+          // Add text output
+          displayItems.push({
+            type: 'output',
+            content: block.text,
+            timestamp: msgTimestamp,
+          });
+        }
+      }
+    } else if (msg.type === 'user' && (msg.isMeta || msg.toolResults.length > 0)) {
+      // Process tool results from internal user messages
+      if (Array.isArray(msg.content)) {
+        for (const block of msg.content as ContentBlock[]) {
+          if (block.type === 'tool_result' && block.tool_use_id) {
+            // Collect tool result for linking
+            toolResultsById.set(block.tool_use_id, {
+              content: block.content || '',
+              isError: block.is_error || false,
+              toolUseResult: msg.toolUseResult,
+              timestamp: msgTimestamp,
+            });
+          }
+        }
+      }
+
+      // Also check msg.toolResults array (pre-extracted results)
+      for (const result of msg.toolResults) {
+        if (!toolResultsById.has(result.toolUseId)) {
+          toolResultsById.set(result.toolUseId, {
+            content: result.content,
+            isError: result.isError,
+            toolUseResult: msg.toolUseResult,
+            timestamp: msgTimestamp,
+          });
+        }
+      }
+    }
+  }
+
+  // Second pass: Build LinkedToolItems by matching calls with results
+  for (const [toolId, call] of toolCallsById.entries()) {
+    const result = toolResultsById.get(toolId);
+
+    // Skip Task tool calls that have associated subagents
+    // The subagent will be shown separately, so showing the Task call is redundant
+    const isTaskWithSubagent = call.name === 'Task' && taskIdsWithSubagents.has(toolId);
+    if (isTaskWithSubagent) {
+      continue;
+    }
+
+    const linkedItem: LinkedToolItem = {
+      id: toolId,
+      name: call.name,
+      input: call.input,
+      result: result ? {
+        content: result.content,
+        isError: result.isError,
+        toolUseResult: result.toolUseResult,
+      } : undefined,
+      inputPreview: formatToolInput(call.input),
+      outputPreview: result ? formatToolResult(result.content) : undefined,
+      startTime: call.timestamp,
+      endTime: result?.timestamp,
+      durationMs: result?.timestamp
+        ? result.timestamp.getTime() - call.timestamp.getTime()
+        : undefined,
+      isOrphaned: !result,
+    };
+
+    displayItems.push({
+      type: 'tool',
+      tool: linkedItem,
+    });
+  }
+
+  // Add subagents as display items
+  for (const subagent of subagents) {
+    displayItems.push({
+      type: 'subagent',
+      subagent: subagent,
+    });
+  }
+
+  // Sort all items chronologically
+  displayItems.sort((a, b) => {
+    const getTimestamp = (item: AIGroupDisplayItem): Date => {
+      switch (item.type) {
+        case 'thinking':
+        case 'output':
+          return toDate(item.timestamp);
+        case 'tool':
+          return toDate(item.tool.startTime);
+        case 'subagent':
+          return toDate(item.subagent.startTime);
+      }
+    };
+    return getTimestamp(a).getTime() - getTimestamp(b).getTime();
+  });
+
+  return displayItems;
 }

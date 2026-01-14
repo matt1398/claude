@@ -282,9 +282,14 @@ export function isTaskToolResult(entry: ChatHistoryEntry): entry is UserEntry {
  * - file-history-snapshot entries
  * - system entries with local_command subtype
  * - user messages containing system XML tags:
- *   - <command-name>, <command-message>, <command-args>
- *   - <local-command-stdout>, <local-command-caveat>
- *   - <system-reminder>
+ *   - <local-command-stdout> (command output - not user input)
+ *   - <local-command-caveat> (system metadata)
+ *   - <system-reminder> (system instructions)
+ *
+ * NOT filtered (these are real user commands that should be visible):
+ * - <command-name>, <command-message>, <command-args>
+ *   These represent slash commands the user typed (e.g., /model, /clear)
+ *   They ARE trigger messages that start chunks, even if they have no AI response.
  */
 export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
   // Filter file-history-snapshot entries
@@ -296,22 +301,24 @@ export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
     return systemEntry.subtype === 'local_command' as any;
   }
 
-  // Filter user messages with system XML tags
+  // Filter user messages with system metadata tags
+  // NOTE: <command-name> is NOT filtered - it represents real user commands
   if (entry.type === 'user') {
     const userEntry = entry as UserEntry;
     const content = userEntry.message?.content;
 
     if (typeof content === 'string') {
-      const systemTags = [
-        '<command-name>',
-        '<command-message>',
-        '<command-args>',
+      // These are system-generated, not user input
+      const noiseTags = [
         '<local-command-stdout>',
         '<local-command-caveat>',
         '<system-reminder>'
       ];
 
-      return systemTags.some(tag => content.includes(tag));
+      // Filter if contains noise tags
+      if (noiseTags.some(tag => content.includes(tag))) {
+        return true;
+      }
     }
   }
 
@@ -423,10 +430,15 @@ export function isImageContent(content: ContentBlock): content is ImageContent {
  *    - System-generated metadata
  *    - file-history-snapshot entries
  *    - system entries with local_command subtype
- *    - User messages containing system XML tags:
- *      <command-name>, <command-message>, <command-args>,
+ *    - User messages containing system metadata tags:
  *      <local-command-stdout>, <local-command-caveat>, <system-reminder>
  *    - Detected by: isNoiseMessage() type guard
+ *
+ * 4. COMMAND MESSAGES (special trigger messages):
+ *    - Slash commands the user typed (e.g., /model, /clear)
+ *    - Contain <command-name>, <command-message>, <command-args> tags
+ *    - ARE trigger messages (start chunks), but typically have no AI response
+ *    - Visible in the chat UI as user actions
  *
  * Key Rules:
  * - Trigger messages (genuine user input, not noise) START chunks
@@ -1132,6 +1144,11 @@ export function isParsedAssistantMessage(msg: ParsedMessage): boolean {
 /**
  * Type guard to check if a ParsedMessage is a noise message.
  * This wraps the spec's type guard but works with ParsedMessage instead of ChatHistoryEntry.
+ *
+ * NOT filtered (these are real user commands that should be visible):
+ * - <command-name>, <command-message>, <command-args>
+ *   These represent slash commands the user typed (e.g., /model, /clear)
+ *   They ARE trigger messages that start chunks, even if they have no AI response.
  */
 export function isParsedNoiseMessage(msg: ParsedMessage): boolean {
   // File snapshots are metadata, not messages
@@ -1143,14 +1160,12 @@ export function isParsedNoiseMessage(msg: ParsedMessage): boolean {
   // System messages are metadata
   if (msg.type === 'system') return true;
 
-  // User messages that are local commands or caveats
+  // User messages with system metadata tags (NOT command tags)
   if (msg.type === 'user') {
     const content = msg.content;
     if (typeof content === 'string') {
-      // Check for XML tags indicating system-generated content
-      if (content.includes('<command-name>')) return true;
-      if (content.includes('<command-message>')) return true;
-      if (content.includes('<command-args>')) return true;
+      // These are system-generated metadata, filter them out
+      // NOTE: <command-name> etc. are NOT filtered - they represent real user commands
       if (content.includes('<local-command-caveat>')) return true;
       if (content.includes('<local-command-stdout>')) return true;
       if (content.includes('<system-reminder>')) return true;

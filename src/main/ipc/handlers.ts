@@ -8,8 +8,14 @@
  * - get-session-groups: Get conversation groups for a session (alternative to chunks)
  * - get-session-metrics: Get metrics for a session
  * - get-waterfall-data: Get waterfall chart data for a session
+ * - validate-skill: Validate if a skill exists (global or project-specific)
+ * - validate-path: Validate if a file/directory path exists relative to project
+ * - validate-mentions: Batch validate multiple items (more efficient)
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import {
   Project,
@@ -70,6 +76,11 @@ function registerHandlers(): void {
 
   // Subagent handlers
   ipcMain.handle('get-subagent-detail', handleGetSubagentDetail);
+
+  // Validation handlers
+  ipcMain.handle('validate-skill', handleValidateSkill);
+  ipcMain.handle('validate-path', handleValidatePath);
+  ipcMain.handle('validate-mentions', handleValidateMentions);
 
   console.log('IPC: Handlers registered');
 }
@@ -363,6 +374,85 @@ async function handleGetSubagentDetail(
 }
 
 // =============================================================================
+// Validation Handlers
+// =============================================================================
+
+/**
+ * Handler for 'validate-skill' IPC call.
+ * Validates if a skill exists (global or project-specific).
+ */
+async function handleValidateSkill(
+  _event: IpcMainInvokeEvent,
+  skillName: string,
+  projectPath: string
+): Promise<{ exists: boolean; location?: 'global' | 'project' }> {
+  // Check project-specific first
+  const projectSkillPath = path.join(projectPath, '.claude', 'skills', skillName);
+  if (fs.existsSync(projectSkillPath)) {
+    return { exists: true, location: 'project' };
+  }
+
+  // Check global
+  const globalSkillPath = path.join(os.homedir(), '.claude', 'skills', skillName);
+  if (fs.existsSync(globalSkillPath)) {
+    return { exists: true, location: 'global' };
+  }
+
+  return { exists: false };
+}
+
+/**
+ * Handler for 'validate-path' IPC call.
+ * Validates if a file/directory path exists relative to project.
+ */
+async function handleValidatePath(
+  _event: IpcMainInvokeEvent,
+  relativePath: string,
+  projectPath: string
+): Promise<{ exists: boolean; isDirectory?: boolean }> {
+  try {
+    const fullPath = path.join(projectPath, relativePath);
+
+    if (!fs.existsSync(fullPath)) {
+      return { exists: false };
+    }
+
+    const stats = fs.statSync(fullPath);
+    return {
+      exists: true,
+      isDirectory: stats.isDirectory()
+    };
+  } catch {
+    return { exists: false };
+  }
+}
+
+/**
+ * Handler for 'validate-mentions' IPC call.
+ * Batch validates multiple items (more efficient).
+ */
+async function handleValidateMentions(
+  _event: IpcMainInvokeEvent,
+  mentions: { type: 'skill' | 'path'; value: string }[],
+  projectPath: string
+): Promise<Record<string, boolean>> {
+  const results = new Map<string, boolean>();
+
+  for (const mention of mentions) {
+    if (mention.type === 'skill') {
+      const projectSkillPath = path.join(projectPath, '.claude', 'skills', mention.value);
+      const globalSkillPath = path.join(os.homedir(), '.claude', 'skills', mention.value);
+      results.set(`/${mention.value}`, fs.existsSync(projectSkillPath) || fs.existsSync(globalSkillPath));
+    } else {
+      const fullPath = path.join(projectPath, mention.value);
+      results.set(`@${mention.value}`, fs.existsSync(fullPath));
+    }
+  }
+
+  return Object.fromEntries(results);
+}
+
+// =============================================================================
 // Cleanup
 // =============================================================================
 
@@ -378,5 +468,8 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-session-metrics');
   ipcMain.removeHandler('get-waterfall-data');
   ipcMain.removeHandler('get-subagent-detail');
+  ipcMain.removeHandler('validate-skill');
+  ipcMain.removeHandler('validate-path');
+  ipcMain.removeHandler('validate-mentions');
   console.log('IPC: Handlers removed');
 }

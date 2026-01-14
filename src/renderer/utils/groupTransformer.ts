@@ -25,10 +25,10 @@ import type {
   ParsedMessage,
   Subagent,
   SemanticStep,
-  SessionMetrics,
 } from '../types/data';
 
 import { isAssistantMessage, isRealUserMessage } from '../types/data';
+import { sanitizeDisplayContent, isCommandContent } from './contentSanitizer';
 
 // =============================================================================
 // Constants
@@ -161,21 +161,32 @@ function extractUserGroupContent(message: ParsedMessage): UserGroupContent {
     }
   }
 
-  // Extract commands
-  const commands = extractCommands(rawText);
+  // Sanitize content for display (handles XML tags from command messages)
+  // This converts <command-name>/model</command-name> to "/model"
+  const sanitizedText = sanitizeDisplayContent(rawText);
 
-  // Extract file references (@file.ts)
-  fileReferences.push(...extractFileReferences(rawText));
+  // Check if this is a command message (for special handling)
+  const isCommand = isCommandContent(rawText);
 
-  // Remove commands from display text
-  let displayText = rawText;
-  for (const cmd of commands) {
-    displayText = displayText.replace(cmd.raw, '').trim();
+  // Extract commands from the sanitized text (for inline /commands in regular messages)
+  // For command messages, the command is already extracted as sanitizedText
+  const commands = isCommand ? [] : extractCommands(sanitizedText);
+
+  // Extract file references (@file.ts) from sanitized text
+  fileReferences.push(...extractFileReferences(sanitizedText));
+
+  // For command messages, use the sanitized command as display text
+  // For regular messages, remove inline commands from display
+  let displayText = sanitizedText;
+  if (!isCommand) {
+    for (const cmd of commands) {
+      displayText = displayText.replace(cmd.raw, '').trim();
+    }
   }
 
   return {
     text: displayText || undefined,
-    rawText,
+    rawText: sanitizedText, // Use sanitized version as rawText for display
     commands,
     images,
     fileReferences,
@@ -239,6 +250,20 @@ export function extractImages(): ImageData[] {
 // }
 
 /**
+ * Regex pattern for detecting file/directory references.
+ * Matches @path that looks like a file/directory reference.
+ * Must either:
+ * 1. Start with common directory names: src, app, lib, types, packages, etc.
+ * 2. Contain a forward slash (indicating a path)
+ *
+ * This avoids matching:
+ * - URLs like `example.com/@api`
+ * - Email-like patterns
+ * - Random `@something` without path structure
+ */
+export const FILE_REF_PATTERN = /@((?:src|app|apps|lib|types|packages|components|utils|services|hooks|store|renderer|main|preload|public|assets|config|test|tests|spec|specs|e2e|docs|scripts)(?:\/[^\s,)}\]]+)?|[a-zA-Z0-9._-]+\/[^\s,)}\]]+)/g;
+
+/**
  * Extracts file references (@file.ts) from text.
  *
  * @param text - Text to parse for file references
@@ -248,7 +273,8 @@ function extractFileReferences(text: string): FileReference[] {
   if (!text) return [];
 
   const references: FileReference[] = [];
-  const FILE_REF_PATTERN = /@([^\s]+)/g;
+  // Reset regex state before use
+  FILE_REF_PATTERN.lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = FILE_REF_PATTERN.exec(text)) !== null) {

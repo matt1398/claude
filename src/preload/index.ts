@@ -16,6 +16,16 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke('get-subagent-detail', projectId, sessionId, subagentId),
   getSessionGroups: (projectId: string, sessionId: string) =>
     ipcRenderer.invoke('get-session-groups', projectId, sessionId),
+
+  // Validation methods
+  validateSkill: (skillName: string, projectPath: string) =>
+    ipcRenderer.invoke('validate-skill', skillName, projectPath),
+  validatePath: (relativePath: string, projectPath: string) =>
+    ipcRenderer.invoke('validate-path', relativePath, projectPath),
+  validateMentions: (
+    mentions: { type: 'skill' | 'path'; value: string }[],
+    projectPath: string
+  ) => ipcRenderer.invoke('validate-mentions', mentions, projectPath),
 };
 
 // Use contextBridge to securely expose the API to the renderer process

@@ -1,13 +1,12 @@
 /**
- * Content sanitization utilities for display.
+ * Content sanitization utilities for display in the renderer.
  *
- * Handles conversion of raw JSONL content (with XML tags) into
+ * Handles conversion of raw content (with XML tags) into
  * human-readable format for the UI.
  */
 
 /**
  * Patterns for noise tags that should be completely removed.
- * These are system-generated metadata that provide no value in display.
  */
 const NOISE_TAG_PATTERNS = [
   /<local-command-stdout>[\s\S]*?<\/local-command-stdout>/gi,
@@ -16,7 +15,7 @@ const NOISE_TAG_PATTERNS = [
 ];
 
 /**
- * Extract command info from command XML tags.
+ * Extract command display from command XML tags.
  * Returns the slash command in readable format (e.g., "/model sonnet")
  */
 function extractCommandDisplay(content: string): string | null {
