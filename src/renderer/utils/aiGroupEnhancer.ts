@@ -15,7 +15,7 @@ import type {
   LinkedToolItem,
   AIGroupDisplayItem
 } from '../types/groups';
-import type { SemanticStep, Subagent, ParsedMessage, ContentBlock } from '../types/data';
+import type { SemanticStep, Process, ParsedMessage, ContentBlock } from '../types/data';
 
 /**
  * Safely converts a timestamp to a Date object.
@@ -233,7 +233,7 @@ export function buildSummary(items: AIGroupDisplayItem[]): string {
 export function buildDisplayItems(
   steps: SemanticStep[],
   lastOutput: AIGroupLastOutput | null,
-  subagents: Subagent[]
+  subagents: Process[]
 ): AIGroupDisplayItem[] {
   const displayItems: AIGroupDisplayItem[] = [];
   const linkedTools = linkToolCallsToResults(steps);
@@ -349,7 +349,7 @@ export function buildDisplayItems(
 export function enhanceAIGroup(aiGroup: AIGroup): EnhancedAIGroup {
   const lastOutput = findLastOutput(aiGroup.steps);
   const linkedTools = linkToolCallsToResults(aiGroup.steps);
-  const displayItems = buildDisplayItems(aiGroup.steps, lastOutput, aiGroup.subagents);
+  const displayItems = buildDisplayItems(aiGroup.steps, lastOutput, aiGroup.processes);
   const summary = buildSummary(displayItems);
 
   return {
@@ -381,7 +381,7 @@ export function enhanceAIGroup(aiGroup: AIGroup): EnhancedAIGroup {
  */
 export function buildDisplayItemsFromMessages(
   messages: ParsedMessage[],
-  subagents: Subagent[] = []
+  subagents: Process[] = []
 ): AIGroupDisplayItem[] {
   const displayItems: AIGroupDisplayItem[] = [];
 

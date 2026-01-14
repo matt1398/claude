@@ -3,7 +3,7 @@
  * These types separate user input from AI responses for a chat-style display.
  */
 
-import type { ParsedMessage, SemanticStep, Subagent, SessionMetrics, ToolUseResultData } from './data';
+import type { ParsedMessage, SemanticStep, Process, SessionMetrics, ToolUseResultData } from './data';
 
 // =============================================================================
 // Expansion Levels
@@ -161,7 +161,7 @@ export interface LinkedToolItem {
 export type AIGroupDisplayItem =
   | { type: 'thinking'; content: string; timestamp: Date }
   | { type: 'tool'; tool: LinkedToolItem }
-  | { type: 'subagent'; subagent: Subagent }
+  | { type: 'subagent'; subagent: Process }
   | { type: 'output'; content: string; timestamp: Date };
 
 /**
@@ -238,8 +238,8 @@ export interface AIGroup {
   summary: AIGroupSummary;
   /** Completion status */
   status: AIGroupStatus;
-  /** Associated subagents */
-  subagents: Subagent[];
+  /** Associated processes */
+  processes: Process[];
   /** Source chunk ID */
   chunkId: string;
   /** Metrics for this AI response */

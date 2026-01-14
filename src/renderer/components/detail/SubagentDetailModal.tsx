@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
-import { GanttChart } from './GanttChart';
 import { groupIntoSegments } from '../../utils/segmentGrouping';
 import { isEnhancedAIChunk, EnhancedAIChunk } from '../../types/data';
 
@@ -68,7 +67,7 @@ export const SubagentDetailModal: React.FC = () => {
     const mockChunk = {
       ...aiChunks[0],
       semanticSteps: allSteps,
-      subagents: aiChunks.flatMap(c => c.subagents),
+      subagents: aiChunks.flatMap(c => c.processes),
       toolExecutions: aiChunks.flatMap(c => c.toolExecutions),
     };
 
@@ -188,17 +187,6 @@ export const SubagentDetailModal: React.FC = () => {
                   </p>
                 </div>
               </div>
-
-              {/* Gantt Chart Overview */}
-              {segments.length > 0 && (
-                <div className="bg-gray-800/30 rounded-lg p-4">
-                  <div className="text-sm font-medium text-gray-300 mb-3">Execution Timeline</div>
-                  <GanttChart
-                    segments={segments}
-                    height={Math.max(300, segments.length * 40)}
-                  />
-                </div>
-              )}
 
               {/* Chunks Detail */}
               <div className="space-y-4">

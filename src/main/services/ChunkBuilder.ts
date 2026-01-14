@@ -13,7 +13,7 @@ import {
   UserChunk,
   AIChunk,
   ParsedMessage,
-  Subagent,
+  Process,
   SessionMetrics,
   ToolExecution,
   WaterfallItem,
@@ -63,7 +63,7 @@ export class ChunkBuilder {
    * Noise messages (commands, caveats, snapshots) are filtered out.
    * Returns EnhancedChunks with semantic step breakdown.
    */
-  buildChunks(messages: ParsedMessage[], subagents: Subagent[] = []): EnhancedChunk[] {
+  buildChunks(messages: ParsedMessage[], subagents: Process[] = []): EnhancedChunk[] {
     const chunks: EnhancedChunk[] = [];
 
     // Filter to main thread messages (non-sidechain)
@@ -131,7 +131,7 @@ export class ChunkBuilder {
           endTime,
           durationMs,
           metrics: aiMetrics,
-          subagents: [], // Will be filled by linkSubagents
+          processes: [], // Will be filled by linkProcesses
           sidechainMessages,
           toolExecutions,
           semanticSteps: [], // Will be filled after subagents are linked
@@ -141,8 +141,8 @@ export class ChunkBuilder {
       }
     }
 
-    // Link subagents to AI chunks
-    this.linkSubagentsToChunks(chunks, subagents);
+    // Link processes to AI chunks
+    this.linkProcessesToChunks(chunks, subagents);
 
     // Extract semantic steps for each AI chunk (now that subagents are linked)
     for (const chunk of chunks) {
@@ -180,7 +180,7 @@ export class ChunkBuilder {
    * - Separates Task executions from regular tool executions
    * - Links subagents more explicitly via TaskExecution
    */
-  buildGroups(messages: ParsedMessage[], subagents: Subagent[]): ConversationGroup[] {
+  buildGroups(messages: ParsedMessage[], subagents: Process[]): ConversationGroup[] {
     const groups: ConversationGroup[] = [];
 
     // Step 1: Filter to main thread only (not sidechain)
@@ -213,7 +213,7 @@ export class ChunkBuilder {
         type: 'user-ai-exchange',
         userMessage: userMsg,
         aiResponses,
-        subagents: groupSubagents,
+        processes: groupSubagents,
         toolExecutions: regularToolExecutions,
         taskExecutions,
         startTime,
@@ -261,13 +261,13 @@ export class ChunkBuilder {
    */
   private separateTaskExecutions(
     responses: ParsedMessage[],
-    allSubagents: Subagent[]
+    allSubagents: Process[]
   ): { taskExecutions: TaskExecution[], regularToolExecutions: ToolExecution[] } {
     const taskExecutions: TaskExecution[] = [];
     const regularToolExecutions: ToolExecution[] = [];
 
     // Build map of tool_use_id -> subagent for Task calls
-    const taskIdToSubagent = new Map<string, Subagent>();
+    const taskIdToSubagent = new Map<string, Process>();
     for (const subagent of allSubagents) {
       if (subagent.parentTaskId) {
         taskIdToSubagent.set(subagent.parentTaskId, subagent);
@@ -327,9 +327,9 @@ export class ChunkBuilder {
   private linkSubagentsToGroup(
     userMsg: ParsedMessage,
     nextUserMsg: ParsedMessage | undefined,
-    allSubagents: Subagent[]
-  ): Subagent[] {
-    const groupSubagents: Subagent[] = [];
+    allSubagents: Process[]
+  ): Process[] {
+    const groupSubagents: Process[] = [];
     const startTime = userMsg.timestamp;
     const endTime = nextUserMsg?.timestamp || new Date(Date.now() + 1000 * 60 * 60 * 24); // Far future if no next message
 
@@ -548,26 +548,26 @@ export class ChunkBuilder {
   }
 
   /**
-   * Link subagents to AI chunks based on timing.
-   * Only AIChunks have subagents, UserChunks do not.
+   * Link processes to AI chunks based on timing.
+   * Only AIChunks have processes, UserChunks do not.
    */
-  private linkSubagentsToChunks(chunks: (Chunk | EnhancedChunk)[], subagents: Subagent[]): void {
-    // Get only AI chunks (UserChunks don't have subagents)
+  private linkProcessesToChunks(chunks: (Chunk | EnhancedChunk)[], subagents: Process[]): void {
+    // Get only AI chunks (UserChunks don't have processes)
     const aiChunks = chunks.filter(isAIChunk) as (AIChunk | EnhancedAIChunk)[];
 
     for (const subagent of subagents) {
       // Find the AI chunk that contains this subagent's start time
       for (const chunk of aiChunks) {
         if (subagent.startTime >= chunk.startTime && subagent.startTime <= chunk.endTime) {
-          chunk.subagents.push(subagent);
+          chunk.processes.push(subagent);
           break;
         }
       }
     }
 
-    // Sort subagents within each chunk
+    // Sort processes within each chunk
     for (const chunk of aiChunks) {
-      chunk.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      chunk.processes.sort((a: Process, b: Process) => a.startTime.getTime() - b.startTime.getTime());
     }
   }
 
@@ -697,12 +697,12 @@ export class ChunkBuilder {
     const steps: SemanticStep[] = [];
     let stepIdCounter = 0;
 
-    // Build set of Task IDs that have corresponding subagents
-    // This prevents duplicate entries for Task calls that spawned subagents
-    const taskIdsWithSubagents = new Set<string>(
-      chunk.subagents
-        .filter((s) => s.parentTaskId)
-        .map((s) => s.parentTaskId!)
+    // Build set of Task IDs that have corresponding processes
+    // This prevents duplicate entries for Task calls that spawned processes
+    const taskIdsWithProcesses = new Set<string>(
+      chunk.processes
+        .filter((s: Process) => s.parentTaskId)
+        .map((s: Process) => s.parentTaskId!)
     );
 
     // Process only AI responses (no user message in AIChunk)
@@ -726,11 +726,11 @@ export class ChunkBuilder {
           }
 
           if (block.type === 'tool_use' && block.id && block.name) {
-            // Filter out Task tool calls that have corresponding subagents
+            // Filter out Task tool calls that have corresponding processes
             // Keep orphaned Task calls as fallback
-            const isTaskWithSubagent = this.isTaskToolCall(block) && taskIdsWithSubagents.has(block.id);
+            const isTaskWithProcess = this.isTaskToolCall(block) && taskIdsWithProcesses.has(block.id);
 
-            if (!isTaskWithSubagent) {
+            if (!isTaskWithProcess) {
               steps.push({
                 id: block.id,
                 type: 'tool_call',
@@ -786,26 +786,26 @@ export class ChunkBuilder {
       }
     }
 
-    // Link subagents as steps
-    for (const subagent of chunk.subagents) {
+    // Link processes as steps
+    for (const process of chunk.processes) {
       steps.push({
-        id: subagent.id,
+        id: process.id,
         type: 'subagent',
-        startTime: subagent.startTime,
-        endTime: subagent.endTime,
-        durationMs: subagent.durationMs,
+        startTime: process.startTime,
+        endTime: process.endTime,
+        durationMs: process.durationMs,
         content: {
-          subagentId: subagent.id,
-          subagentDescription: subagent.description,
+          subagentId: process.id,
+          subagentDescription: process.description,
         },
         tokens: {
-          input: subagent.metrics.inputTokens,
-          output: subagent.metrics.outputTokens,
-          cached: subagent.metrics.cacheReadTokens,
+          input: process.metrics.inputTokens,
+          output: process.metrics.outputTokens,
+          cached: process.metrics.cacheReadTokens,
         },
-        isParallel: subagent.isParallel,
+        isParallel: process.isParallel,
         context: 'subagent',
-        agentId: subagent.id,
+        agentId: process.id,
       });
     }
 
@@ -823,7 +823,7 @@ export class ChunkBuilder {
   buildSessionDetail(
     session: Session,
     messages: ParsedMessage[],
-    subagents: Subagent[]
+    subagents: Process[]
   ): SessionDetail {
     // Build chunks
     const chunks = this.buildChunks(messages, subagents);
@@ -835,7 +835,7 @@ export class ChunkBuilder {
       session,
       messages,
       chunks,
-      subagents,
+      processes: subagents,
       metrics,
     };
   }
@@ -865,10 +865,10 @@ export class ChunkBuilder {
     const allTimes: number[] = [];
     for (const chunk of chunks) {
       allTimes.push(chunk.startTime.getTime(), chunk.endTime.getTime());
-      // Only AIChunks have subagents
+      // Only AIChunks have processes
       if (isAIChunk(chunk)) {
-        for (const sub of chunk.subagents) {
-          allTimes.push(sub.startTime.getTime(), sub.endTime.getTime());
+        for (const process of chunk.processes) {
+          allTimes.push(process.startTime.getTime(), process.endTime.getTime());
         }
       }
     }
@@ -899,29 +899,29 @@ export class ChunkBuilder {
         isParallel: false,
       });
 
-      // Only AIChunks have subagents and tool executions
+      // Only AIChunks have processes and tool executions
       if (isAIChunk(chunk)) {
-        // Subagent items
-        for (const subagent of chunk.subagents) {
+        // Process items
+        for (const process of chunk.processes) {
           items.push({
             id: `item-${++itemIdCounter}`,
-            label: subagent.description || subagent.subagentType || subagent.id,
-            startTime: subagent.startTime,
-            endTime: subagent.endTime,
-            durationMs: subagent.durationMs,
+            label: process.description || process.subagentType || process.id,
+            startTime: process.startTime,
+            endTime: process.endTime,
+            durationMs: process.durationMs,
             tokenUsage: {
-              input_tokens: subagent.metrics.inputTokens,
-              output_tokens: subagent.metrics.outputTokens,
-              cache_read_input_tokens: subagent.metrics.cacheReadTokens,
-              cache_creation_input_tokens: subagent.metrics.cacheCreationTokens,
+              input_tokens: process.metrics.inputTokens,
+              output_tokens: process.metrics.outputTokens,
+              cache_read_input_tokens: process.metrics.cacheReadTokens,
+              cache_creation_input_tokens: process.metrics.cacheCreationTokens,
             },
             level: 1,
             type: 'subagent',
-            isParallel: subagent.isParallel,
+            isParallel: process.isParallel,
             parentId: chunkItemId,
             metadata: {
-              subagentType: subagent.subagentType,
-              messageCount: subagent.metrics.messageCount,
+              subagentType: process.subagentType,
+              messageCount: process.metrics.messageCount,
             },
           });
         }
@@ -1052,7 +1052,7 @@ export class ChunkBuilder {
 
   /**
    * Find chunk containing a specific subagent.
-   * Only AIChunks have subagents.
+   * Only AIChunks have processes.
    */
   findChunkBySubagentId(
     chunks: (Chunk | EnhancedChunk)[],
@@ -1060,7 +1060,7 @@ export class ChunkBuilder {
   ): Chunk | EnhancedChunk | undefined {
     return chunks.find((c) => {
       if (isAIChunk(c)) {
-        return c.subagents.some((s) => s.id === subagentId);
+        return c.processes.some((s: Process) => s.id === subagentId);
       }
       return false;
     });

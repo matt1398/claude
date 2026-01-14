@@ -24,7 +24,7 @@ function isConversationGroup(input: Chunk | EnhancedChunk | ConversationGroup): 
  * Type guard to check if chunk has subagents property (AIChunk variants).
  */
 function hasSubagents(input: Chunk | EnhancedChunk | ConversationGroup): input is AIChunk | EnhancedAIChunk {
-  return 'subagents' in input && Array.isArray((input as AIChunk | EnhancedAIChunk).subagents);
+  return 'processes' in input && Array.isArray((input as AIChunk | EnhancedAIChunk).processes);
 }
 
 /**
@@ -62,7 +62,7 @@ export function groupIntoSegments(
     }
   } else if (hasSubagents(chunk)) {
     // For AIChunk/EnhancedAIChunk, use subagents' parentTaskId
-    for (const subagent of chunk.subagents) {
+    for (const subagent of chunk.processes) {
       if (subagent.parentTaskId && subagent.id) {
         subagentToTaskId.set(subagent.id, subagent.parentTaskId);
       }

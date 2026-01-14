@@ -9,7 +9,7 @@ import {
   WaterfallData,
   WaterfallItem,
   TokenUsage,
-  Subagent,
+  Process,
   isAIChunk,
 } from '../types/data';
 import { detectParallelGroups } from './parallelDetection';
@@ -79,14 +79,14 @@ export function chunkToWaterfallData(chunk: Chunk): WaterfallData {
   items.push(mainItem);
 
   // 2. Get subagents from chunk (only AIChunk has subagents)
-  const subagents = isAIChunk(chunk) ? chunk.subagents : [];
+  const subagents = isAIChunk(chunk) ? chunk.processes : [];
 
   // 3. Detect parallel groups among subagents
   const groups = detectParallelGroups(subagents);
 
   // 3. Create waterfall items for each subagent
   groups.forEach((group) => {
-    group.agents.forEach((subagent: Subagent) => {
+    group.agents.forEach((subagent: Process) => {
       const item: WaterfallItem = {
         id: subagent.id,
         label: subagent.description || subagent.subagentType || subagent.id,

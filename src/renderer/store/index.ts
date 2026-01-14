@@ -245,14 +245,17 @@ export const useStore = create<AppState>((set, get) => ({
       console.log('[Store] Received session detail:', detail ? 'SUCCESS' : 'NULL');
 
       if (detail) {
+
+        const subagents = detail.processes.filter((p: any) => p.subagentType);
+        console.log('[Store] Subagents:', subagents);
         console.log('[Store] Session detail has', detail.chunks?.length, 'chunks');
-        console.log('[Store] Session detail has', detail.subagents?.length, 'subagents');
+        console.log('[Store] Session detail has', subagents.length, 'subagents');
       }
 
       // Transform chunks to conversation
       // Note: detail.chunks are actually EnhancedChunk[] at runtime despite type definition
       const conversation: SessionConversation | null = detail
-        ? transformChunksToConversation(detail.chunks as any, detail.subagents)
+        ? transformChunksToConversation(detail.chunks as any, detail.processes)
         : null;
 
       if (conversation) {

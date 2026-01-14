@@ -25,7 +25,7 @@ import type {
   EnhancedUserChunk,
   EnhancedAIChunk,
   ParsedMessage,
-  Subagent,
+  Process,
   SemanticStep,
 } from '../types/data';
 
@@ -73,7 +73,7 @@ const SUBAGENT_LINK_WINDOW_MS = 100;
  */
 export function transformChunksToConversation(
   chunks: EnhancedChunk[],
-  subagents: Subagent[]
+  subagents: Process[]
 ): SessionConversation {
   if (!chunks || chunks.length === 0) {
     return {
@@ -96,7 +96,7 @@ export function transformChunksToConversation(
  */
 function transformSeparatedChunks(
   chunks: EnhancedChunk[],
-  subagents: Subagent[]
+  subagents: Process[]
 ): SessionConversation {
   const turns: ConversationTurn[] = [];
   let totalAIGroupCount = 0;
@@ -346,7 +346,7 @@ function extractFileReferences(text: string): FileReference[] {
 function splitIntoAIGroupsFromAIChunk(
   aiChunk: EnhancedAIChunk,
   userGroupId: string,
-  allSubagents: Subagent[]
+  allSubagents: Process[]
 ): AIGroup[] {
   const steps = aiChunk.semanticSteps;
 
@@ -372,11 +372,11 @@ function splitIntoAIGroupsFromAIChunk(
   // Determine status from all steps
   const status = determineAIGroupStatus(steps);
 
-  // Use subagents from the chunk (already linked by ChunkBuilder)
+  // Use processes from the chunk (already linked by ChunkBuilder)
   // Or link by timing as fallback
-  const linkedSubagents = aiChunk.subagents.length > 0
-    ? aiChunk.subagents
-    : linkSubagentsToAIGroup(startTime, endTime, allSubagents);
+  const linkedProcesses = aiChunk.processes.length > 0
+    ? aiChunk.processes
+    : linkProcessesToAIGroup(startTime, endTime, allSubagents);
 
   // Create single AIGroup with all steps
   const aiGroup: AIGroup = {
@@ -390,7 +390,7 @@ function splitIntoAIGroupsFromAIChunk(
     tokens,
     summary,
     status,
-    subagents: linkedSubagents,
+    processes: linkedProcesses,
     chunkId: aiChunk.id,
     metrics: aiChunk.metrics,
   };
@@ -410,7 +410,7 @@ function splitIntoAIGroupsFromAIChunk(
 export function splitIntoAIGroups(
   chunk: EnhancedChunk,
   userGroupId: string,
-  allSubagents: Subagent[]
+  allSubagents: Process[]
 ): AIGroup[] {
   if (isEnhancedAIChunk(chunk)) {
     return splitIntoAIGroupsFromAIChunk(chunk, userGroupId, allSubagents);
@@ -468,19 +468,19 @@ function calculateTokensFromSteps(
 }
 
 /**
- * Links subagents to an AI Group by timing overlap.
+ * Links processes to an AI Group by timing overlap.
  *
  * @param startTime - AI Group start time
  * @param endTime - AI Group end time
  * @param allSubagents - All subagents in the session
- * @returns Subagents that overlap with this AI Group
+ * @returns Processes that overlap with this AI Group
  */
-function linkSubagentsToAIGroup(
+function linkProcessesToAIGroup(
   startTime: Date,
   endTime: Date,
-  allSubagents: Subagent[]
-): Subagent[] {
-  const linked: Subagent[] = [];
+  allSubagents: Process[]
+): Process[] {
+  const linked: Process[] = [];
 
   for (const subagent of allSubagents) {
     const subStart = subagent.startTime.getTime();

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Bot, ChevronRight, ChevronDown } from 'lucide-react';
-import type { SemanticStep, Subagent, ContentBlock } from '../../../types/data';
+import type { SemanticStep, Process, ContentBlock } from '../../../types/data';
 import type { AIGroupDisplayItem } from '../../../types/groups';
 import { ThinkingItem } from './ThinkingItem';
 import { TextItem } from './TextItem';
@@ -9,7 +9,7 @@ import { buildDisplayItemsFromMessages, buildSummary, truncateText } from '../..
 
 interface SubagentItemProps {
   step: SemanticStep;
-  subagent: Subagent;
+  subagent: Process;
   onClick: () => void;
   isExpanded: boolean;
 }

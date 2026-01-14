@@ -5,13 +5,13 @@
  * Operations that start within 500ms of each other are considered parallel.
  */
 
-import { Subagent } from '../types/data';
+import { Process } from '../types/data';
 
 /**
  * Subagent group with parallel detection.
  */
 export interface SubagentGroup {
-  agents: Subagent[];
+  agents: Process[];
   isParallel: boolean;
   groupId: string;
 }
@@ -27,7 +27,7 @@ export interface SubagentGroup {
  * @param subagents Array of resolved subagent data
  * @returns Array of subagent groups with parallel detection
  */
-export function detectParallelGroups(subagents: Subagent[]): SubagentGroup[] {
+export function detectParallelGroups(subagents: Process[]): SubagentGroup[] {
   if (subagents.length === 0) {
     return [];
   }
@@ -41,7 +41,7 @@ export function detectParallelGroups(subagents: Subagent[]): SubagentGroup[] {
   const PARALLEL_THRESHOLD_MS = 500; // 500ms window for parallel detection
 
   // Group subagents by start time proximity
-  const groupMap = new Map<number, Subagent[]>();
+  const groupMap = new Map<number, Process[]>();
 
   sortedSubagents.forEach((agent) => {
     const startMs = agent.startTime.getTime();

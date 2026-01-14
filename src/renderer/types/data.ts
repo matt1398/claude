@@ -258,13 +258,13 @@ export function isAssistantMessage(msg: ParsedMessage): boolean {
 }
 
 // =============================================================================
-// Subagent Types
+// Process Types
 // =============================================================================
 
 /**
  * Resolved subagent information.
  */
-export interface Subagent {
+export interface Process {
   /** Agent ID extracted from filename */
   id: string;
   /** Path to the subagent JSONL file */
@@ -345,8 +345,8 @@ export interface AIChunk extends BaseChunk {
   userChunkId: string;
   /** All assistant responses and internal messages */
   responses: ParsedMessage[];
-  /** Subagents spawned during this chunk */
-  subagents: Subagent[];
+  /** Processes spawned during this chunk */
+  processes: Process[];
   /** Sidechain messages within this chunk */
   sidechainMessages: ParsedMessage[];
   /** Tool executions in this chunk */
@@ -372,7 +372,7 @@ export interface TaskExecution {
   /** When the Task tool was called */
   taskCallTimestamp: Date;
   /** The linked subagent execution */
-  subagent: Subagent;
+  subagent: Process;
   /** The isMeta:true tool_result message for this Task */
   toolResult: ParsedMessage;
   /** When the tool result was received */
@@ -400,9 +400,9 @@ export interface ConversationGroup {
   userMessage: ParsedMessage;
   /** All AI responses: assistant messages and internal messages (tool results, etc.) */
   aiResponses: ParsedMessage[];
-  /** Subagents spawned during this group */
-  subagents: Subagent[];
-  /** Tool executions (excluding Task tools that have matching subagents) */
+  /** Processes spawned during this group */
+  processes: Process[];
+  /** Tool executions (excluding Task tools that have matching processes) */
   toolExecutions: ToolExecution[];
   /** Task tool calls with their subagent executions */
   taskExecutions: TaskExecution[];
@@ -614,8 +614,8 @@ export interface SessionDetail {
   messages: ParsedMessage[];
   /** Messages grouped into chunks */
   chunks: Chunk[];
-  /** All subagents in the session */
-  subagents: Subagent[];
+  /** All processes in the session */
+  processes: Process[];
   /** Aggregated metrics for the entire session */
   metrics: SessionMetrics;
 }

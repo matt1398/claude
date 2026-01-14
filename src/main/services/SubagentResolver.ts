@@ -10,7 +10,7 @@
  */
 
 import * as path from 'path';
-import { Subagent, ParsedMessage, ToolCall, SessionMetrics } from '../types/claude';
+import { Process, ParsedMessage, ToolCall, SessionMetrics } from '../types/claude';
 import { parseJsonlFile, calculateMetrics } from '../utils/jsonl';
 import { ProjectScanner } from './ProjectScanner';
 
@@ -35,7 +35,7 @@ export class SubagentResolver {
     projectId: string,
     sessionId: string,
     taskCalls: ToolCall[]
-  ): Promise<Subagent[]> {
+  ): Promise<Process[]> {
     // Get subagent files
     const subagentFiles = await this.projectScanner.listSubagentFiles(projectId, sessionId);
 
@@ -49,7 +49,7 @@ export class SubagentResolver {
     );
 
     // Filter out failed parses
-    const validSubagents = subagents.filter((s): s is Subagent => s !== null);
+    const validSubagents = subagents.filter((s): s is Process => s !== null);
 
     // Link to Task calls
     this.linkToTaskCalls(validSubagents, taskCalls);
@@ -70,7 +70,7 @@ export class SubagentResolver {
   /**
    * Parse a single subagent file.
    */
-  private async parseSubagentFile(filePath: string): Promise<Subagent | null> {
+  private async parseSubagentFile(filePath: string): Promise<Process | null> {
     try {
       const messages = await parseJsonlFile(filePath);
 
@@ -142,7 +142,7 @@ export class SubagentResolver {
    *
    * After matching, enriches subagents with Task call metadata (description, subagentType).
    */
-  private linkToTaskCalls(subagents: Subagent[], taskCalls: ToolCall[]): void {
+  private linkToTaskCalls(subagents: Process[], taskCalls: ToolCall[]): void {
     // Filter to only Task calls
     const taskCallsOnly = taskCalls.filter((tc) => tc.isTask);
 
@@ -180,7 +180,7 @@ export class SubagentResolver {
    * Detect parallel execution among subagents.
    * Subagents with start times within PARALLEL_WINDOW_MS are marked as parallel.
    */
-  private detectParallelExecution(subagents: Subagent[]): void {
+  private detectParallelExecution(subagents: Process[]): void {
     if (subagents.length < 2) return;
 
     // Sort by start time
@@ -189,8 +189,8 @@ export class SubagentResolver {
     );
 
     // Group by start time buckets
-    const groups: Subagent[][] = [];
-    let currentGroup: Subagent[] = [];
+    const groups: Process[][] = [];
+    let currentGroup: Process[] = [];
     let groupStartTime = 0;
 
     for (const agent of sorted) {
@@ -233,41 +233,41 @@ export class SubagentResolver {
   // ===========================================================================
 
   /**
-   * Link subagents to chunks based on timing.
-   * A subagent belongs to the chunk whose time range contains its start time.
+   * Link processes to chunks based on timing.
+   * A process belongs to the chunk whose time range contains its start time.
    */
-  linkSubagentsToChunks(
-    chunks: Array<{ startTime: Date; endTime: Date; subagents: Subagent[] }>,
-    subagents: Subagent[]
+  linkProcessesToChunks(
+    chunks: Array<{ startTime: Date; endTime: Date; processes: Process[] }>,
+    subagents: Process[]
   ): void {
     for (const subagent of subagents) {
       // Find the chunk that contains this subagent's start time
       for (const chunk of chunks) {
         if (subagent.startTime >= chunk.startTime && subagent.startTime <= chunk.endTime) {
-          chunk.subagents.push(subagent);
+          chunk.processes.push(subagent);
           break;
         }
       }
     }
 
-    // Sort subagents within each chunk
+    // Sort processes within each chunk
     for (const chunk of chunks) {
-      chunk.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      chunk.processes.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
     }
   }
 
   /**
-   * Link subagents to chunks using Task call timestamps.
+   * Link processes to chunks using Task call timestamps.
    * More accurate than timing-based linking.
    */
-  linkSubagentsToChunksViaTaskCalls(
+  linkProcessesToChunksViaTaskCalls(
     chunks: Array<{
       startTime: Date;
       endTime: Date;
-      subagents: Subagent[];
+      processes: Process[];
       responses: ParsedMessage[];
     }>,
-    subagents: Subagent[]
+    subagents: Process[]
   ): void {
     for (const chunk of chunks) {
       // Get Task calls from this chunk's responses
@@ -283,12 +283,12 @@ export class SubagentResolver {
       // Find subagents linked to these Task calls
       for (const subagent of subagents) {
         if (subagent.parentTaskId && chunkTaskIds.has(subagent.parentTaskId)) {
-          chunk.subagents.push(subagent);
+          chunk.processes.push(subagent);
         }
       }
 
       // Sort by start time
-      chunk.subagents.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+      chunk.processes.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
     }
   }
 
@@ -299,14 +299,14 @@ export class SubagentResolver {
   /**
    * Get subagent by ID.
    */
-  findSubagentById(subagents: Subagent[], id: string): Subagent | undefined {
+  findSubagentById(subagents: Process[], id: string): Process | undefined {
     return subagents.find((s) => s.id === id);
   }
 
   /**
    * Get parallel subagent groups.
    */
-  getParallelGroups(subagents: Subagent[]): Subagent[][] {
+  getParallelGroups(subagents: Process[]): Process[][] {
     const parallelAgents = subagents.filter((s) => s.isParallel);
     if (parallelAgents.length === 0) return [];
 
@@ -315,8 +315,8 @@ export class SubagentResolver {
       (a, b) => a.startTime.getTime() - b.startTime.getTime()
     );
 
-    const groups: Subagent[][] = [];
-    let currentGroup: Subagent[] = [];
+    const groups: Process[][] = [];
+    let currentGroup: Process[] = [];
     let groupStartTime = 0;
 
     for (const agent of sorted) {
@@ -344,7 +344,7 @@ export class SubagentResolver {
   /**
    * Calculate total metrics for all subagents.
    */
-  getTotalSubagentMetrics(subagents: Subagent[]): SessionMetrics {
+  getTotalSubagentMetrics(subagents: Process[]): SessionMetrics {
     if (subagents.length === 0) {
       return {
         durationMs: 0,

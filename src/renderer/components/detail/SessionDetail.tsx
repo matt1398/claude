@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
-import { DebugSidebar } from './DebugSidebar';
 import { SubagentDetailModal } from './SubagentDetailModal';
 
 export const SessionDetail: React.FC = () => {
@@ -13,9 +12,6 @@ export const SessionDetail: React.FC = () => {
     sessionDetailError,
     drillDownSubagent
   } = useStore();
-
-  const [debugOpen, setDebugOpen] = useState(false);
-  const [debugData, setDebugData] = useState<{ data: any; title: string } | null>(null);
 
   // Handler for subagent drill-down
   const handleSubagentClick = (subagentId: string, description: string) => {
@@ -123,10 +119,9 @@ export const SessionDetail: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => setDebugOpen(!debugOpen)}
             className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
           >
-            {debugOpen ? 'Hide Debug' : 'Debug JSON'}
+            Debug JSON
           </button>
         </div>
 
@@ -158,21 +153,10 @@ export const SessionDetail: React.FC = () => {
             key={chunk.id}
             chunk={chunk}
             index={index}
-            onDebugClick={(data: any, title: string) => {
-              setDebugData({ data, title });
-              setDebugOpen(true);
-            }}
             onSubagentClick={handleSubagentClick}
           />
         ))}
       </div>
-
-      <DebugSidebar
-        isOpen={debugOpen}
-        onClose={() => setDebugOpen(false)}
-        selectedData={debugData?.data}
-        title={debugData?.title || 'Raw Data'}
-      />
 
       {/* Subagent Drill-Down Modal */}
       <SubagentDetailModal />

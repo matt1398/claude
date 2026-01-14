@@ -12,10 +12,7 @@ import {
   isAIChunk,
   isEnhancedAIChunk,
 } from '../../types/data';
-import { GanttChart } from './GanttChart';
 import { SemanticStepView } from './SemanticStepView';
-import { DebugSidebar } from './DebugSidebar';
-import { ContextLengthChart } from './ContextLengthChart';
 import { groupIntoSegments } from '../../utils/segmentGrouping';
 
 type ChunkType = Chunk | EnhancedChunk | ConversationGroup;
@@ -23,11 +20,10 @@ type ChunkType = Chunk | EnhancedChunk | ConversationGroup;
 interface ChunkViewProps {
   chunk: ChunkType;
   index: number;
-  onDebugClick?: (data: any, title: string) => void;
   onSubagentClick?: (subagentId: string, description: string) => void;
 }
 
-export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick, onSubagentClick }) => {
+export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onSubagentClick }) => {
   // Type guard to check if chunk is a ConversationGroup
   const isConversationGroup = (c: ChunkType): c is ConversationGroup => {
     return 'type' in c && c.type === 'user-ai-exchange' && 'aiResponses' in c;
@@ -75,18 +71,23 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
 
   const responses = getResponses();
 
-  // Get subagents array (handles all chunk types)
-  const getSubagents = () => {
+  // Get processes array (handles all chunk types)
+  const getProcesses = () => {
     if (isConversationGroup(chunk)) {
-      return chunk.subagents;
+      return chunk.processes;
     }
     if (isAIChunk(chunk)) {
-      return chunk.subagents;
+      return chunk.processes;
     }
     return [];
   };
 
-  const subagents = getSubagents();
+  const processes = getProcesses();
+
+  // Filter to only processes that have subagentType (these are true subagents)
+  const subagents = processes.filter((p: any) => p.subagentType);
+  const hasSubagents = subagents.length > 0;
+  const parallelSubagents = subagents.filter((s: any) => s.isParallel);
 
   // Get tool executions array (handles all chunk types)
   const getToolExecutions = () => {
@@ -143,13 +144,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     });
   };
 
-  // Handle debug selection
-  const handleDebugSelect = (data: unknown, title: string) => {
-    setDebugData({ data, title });
-    setDebugOpen(true);
-    onDebugClick?.(data, title);
-  };
-
   const formatTokens = (inputTokens: number, outputTokens: number, cacheReadTokens?: number) => {
     const total = inputTokens + outputTokens;
     const cached = cacheReadTokens || 0;
@@ -174,8 +168,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
   const assistantResponses = responses.filter((r: any) => r.type === 'assistant');
   const toolResults = responses.filter((r: any) => r.isMeta === true);
 
-  const hasSubagents = subagents.length > 0;
-  const parallelSubagents = subagents.filter((s: any) => s.isParallel);
 
   // Check if this is a ConversationGroup with task executions
   const hasTaskExecutions = isConversationGroup(chunk) && chunk.taskExecutions.length > 0;
@@ -269,7 +261,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                 const debugTitle = isConversationGroup(chunk)
                   ? `Group ${index + 1} Data`
                   : `${getChunkTypeLabel()} ${index + 1} Raw Messages`;
-                handleDebugSelect(debugData, debugTitle);
               }}
               className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
             >
@@ -304,14 +295,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                 </button>
               </div>
             </div>
-            {chartMode === 'timeline' ? (
-              <GanttChart
-                segments={segments}
-                height={Math.max(200, segments.length * 40)}
-              />
-            ) : (
-              <ContextLengthChart steps={chunk.semanticSteps} />
-            )}
           </div>
 
           {/* Semantic Steps Detail - No groups, just individual steps */}
@@ -325,7 +308,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
                 step={step}
                 isExpanded={expandedSteps.has(step.id)}
                 onToggle={() => toggleStep(step.id)}
-                onSelect={() => handleDebugSelect(step, `Step: ${getStepLabel(step)}`)}
+                onSelect={() => {}}
                 onSubagentClick={onSubagentClick}
               />
             ))}
@@ -583,14 +566,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
           )}
         </div>
       )}
-
-      {/* Debug Sidebar */}
-      <DebugSidebar
-        isOpen={debugOpen}
-        onClose={() => setDebugOpen(false)}
-        selectedData={debugData?.data}
-        title={debugData?.title || 'Debug Data'}
-      />
     </div>
   );
 };
