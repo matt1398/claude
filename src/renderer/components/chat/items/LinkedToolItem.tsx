@@ -1,6 +1,8 @@
 import React from 'react';
 import { Wrench } from 'lucide-react';
 import type { LinkedToolItem as LinkedToolItemType } from '../../../types/groups';
+import { CodeBlockViewer } from './CodeBlockViewer';
+import { DiffViewer } from './DiffViewer';
 
 interface LinkedToolItemProps {
   linkedTool: LinkedToolItemType;
@@ -378,6 +380,183 @@ function renderOutput(content: string | unknown[]): React.ReactNode {
 }
 
 // =============================================================================
+// Specialized Tool Viewers
+// =============================================================================
+
+/**
+ * Renders the Read tool result using CodeBlockViewer.
+ * Prefers enriched toolUseResult data which has cleaner content without line number prefixes.
+ */
+const ReadToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedTool }) => {
+  const filePath = linkedTool.input.file_path as string;
+
+  // Prefer enriched toolUseResult data
+  const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
+  const fileData = toolUseResult?.file as {
+    content?: string;
+    startLine?: number;
+    totalLines?: number;
+    numLines?: number;
+  } | undefined;
+
+  // Get content: prefer enriched file data, fall back to raw result content
+  let content: string;
+  if (fileData?.content) {
+    content = fileData.content;
+  } else {
+    const resultContent = linkedTool.result?.content;
+    content = typeof resultContent === 'string'
+      ? resultContent
+      : Array.isArray(resultContent)
+        ? resultContent.map((item: unknown) => typeof item === 'string' ? item : JSON.stringify(item)).join('\n')
+        : JSON.stringify(resultContent, null, 2);
+  }
+
+  // Get line range: prefer enriched data, fall back to input params
+  const startLine = fileData?.startLine || (linkedTool.input.offset as number) || 1;
+  const totalLines = fileData?.totalLines || fileData?.numLines;
+  const limit = linkedTool.input.limit as number | undefined;
+
+  const endLine = totalLines
+    ? startLine + totalLines - 1
+    : (limit ? startLine + limit - 1 : undefined);
+
+  return (
+    <CodeBlockViewer
+      fileName={filePath}
+      content={content}
+      startLine={startLine}
+      endLine={endLine}
+    />
+  );
+};
+
+/**
+ * Renders the Write tool result.
+ * Shows the created file path and a preview of the content.
+ */
+const WriteToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedTool }) => {
+  const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
+
+  // Get file path from toolUseResult or input
+  const filePath = (toolUseResult?.filePath as string) || (linkedTool.input.file_path as string);
+
+  // Get content from toolUseResult or input
+  const content = (toolUseResult?.content as string) || (linkedTool.input.content as string) || '';
+
+  // Check if this is a create operation
+  const isCreate = toolUseResult?.type === 'create';
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-zinc-500 mb-1">
+        {isCreate ? 'Created file' : 'Wrote to file'}
+      </div>
+      <CodeBlockViewer
+        fileName={filePath}
+        content={content}
+        startLine={1}
+      />
+    </div>
+  );
+};
+
+/**
+ * Renders the Edit tool with DiffViewer.
+ * Uses enriched toolUseResult data when available.
+ */
+const EditToolViewer: React.FC<{ linkedTool: LinkedToolItemType; status: ToolStatus }> = ({ linkedTool, status }) => {
+  const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
+
+  // Get file path from toolUseResult or input
+  const filePath = (toolUseResult?.filePath as string) || (linkedTool.input.file_path as string);
+
+  // Get old/new strings: prefer toolUseResult, fall back to input
+  const oldString = (toolUseResult?.oldString as string) || (linkedTool.input.old_string as string) || '';
+  const newString = (toolUseResult?.newString as string) || (linkedTool.input.new_string as string) || '';
+
+  return (
+    <div className="space-y-3">
+      <DiffViewer
+        fileName={filePath}
+        oldString={oldString}
+        newString={newString}
+      />
+
+      {/* Show result status if available */}
+      {!linkedTool.isOrphaned && linkedTool.result != null && (
+        <div>
+          <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+            Result
+            <StatusDot status={status} />
+          </div>
+          <div className={`bg-zinc-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto ${
+            status === 'error' ? 'text-red-400' : 'text-zinc-300'
+          }`}>
+            {renderOutput(linkedTool.result.content)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// =============================================================================
+// Content Check Helpers
+// =============================================================================
+
+/**
+ * Checks if Read tool has displayable content.
+ * Considers both result.content and toolUseResult.file.content.
+ */
+function hasReadContent(linkedTool: LinkedToolItemType): boolean {
+  if (!linkedTool.result) return false;
+
+  // Check toolUseResult first
+  const toolUseResult = linkedTool.result.toolUseResult as Record<string, unknown> | undefined;
+  const fileData = toolUseResult?.file as { content?: string } | undefined;
+  if (fileData?.content) return true;
+
+  // Fall back to result.content
+  if (linkedTool.result.content != null) {
+    if (typeof linkedTool.result.content === 'string' && linkedTool.result.content.length > 0) return true;
+    if (Array.isArray(linkedTool.result.content) && linkedTool.result.content.length > 0) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Checks if Edit tool has displayable content.
+ * Considers both input and toolUseResult.
+ */
+function hasEditContent(linkedTool: LinkedToolItemType): boolean {
+  // Check input for old_string
+  if (linkedTool.input.old_string != null) return true;
+
+  // Check toolUseResult
+  const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
+  if (toolUseResult?.oldString != null || toolUseResult?.newString != null) return true;
+
+  return false;
+}
+
+/**
+ * Checks if Write tool has displayable content.
+ * Considers both input.content and toolUseResult.content.
+ */
+function hasWriteContent(linkedTool: LinkedToolItemType): boolean {
+  // Check input for content
+  if (linkedTool.input.content != null || linkedTool.input.file_path != null) return true;
+
+  // Check toolUseResult
+  const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
+  if (toolUseResult?.content != null || toolUseResult?.filePath != null) return true;
+
+  return false;
+}
+
+// =============================================================================
 // Main Component
 // =============================================================================
 
@@ -409,24 +588,72 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
       {/* Expanded: Full content */}
       {isExpanded && (
         <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-2 space-y-3">
-          {/* Input Section */}
-          <div>
-            <div className="text-xs text-zinc-500 mb-1">Input</div>
-            <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-96 overflow-y-auto">
-              {renderInput(linkedTool.name, linkedTool.input)}
-            </div>
-          </div>
+          {/* Special rendering for Read tool with CodeBlockViewer */}
+          {linkedTool.name === 'Read' && hasReadContent(linkedTool) && !linkedTool.result?.isError && (
+            <ReadToolViewer linkedTool={linkedTool} />
+          )}
 
-          {/* Output Section */}
-          {!linkedTool.isOrphaned && linkedTool.result && (
+          {/* Special rendering for Edit tool with DiffViewer */}
+          {linkedTool.name === 'Edit' && hasEditContent(linkedTool) && (
+            <EditToolViewer linkedTool={linkedTool} status={status} />
+          )}
+
+          {/* Special rendering for Write tool */}
+          {linkedTool.name === 'Write' && hasWriteContent(linkedTool) && !linkedTool.result?.isError && (
+            <WriteToolViewer linkedTool={linkedTool} />
+          )}
+
+          {/* Default rendering for other tools or fallback cases */}
+          {!(linkedTool.name === 'Read' && hasReadContent(linkedTool) && !linkedTool.result?.isError) &&
+           !(linkedTool.name === 'Edit' && hasEditContent(linkedTool)) &&
+           !(linkedTool.name === 'Write' && hasWriteContent(linkedTool) && !linkedTool.result?.isError) && (
+            <>
+              {/* Input Section */}
+              <div>
+                <div className="text-xs text-zinc-500 mb-1">Input</div>
+                <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-96 overflow-y-auto">
+                  {renderInput(linkedTool.name, linkedTool.input)}
+                </div>
+              </div>
+
+              {/* Output Section */}
+              {!linkedTool.isOrphaned && linkedTool.result && (
+                <div>
+                  <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+                    Output
+                    <StatusDot status={status} />
+                  </div>
+                  <div className={`bg-zinc-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto ${
+                    status === 'error' ? 'text-red-400' : 'text-zinc-300'
+                  }`}>
+                    {renderOutput(linkedTool.result.content)}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Output section for Read tool errors */}
+          {linkedTool.name === 'Read' && linkedTool.result?.isError && (
             <div>
               <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
-                Output
-                <StatusDot status={status} />
+                Error
+                <StatusDot status="error" />
               </div>
-              <div className={`bg-zinc-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto ${
-                status === 'error' ? 'text-red-400' : 'text-zinc-300'
-              }`}>
+              <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-red-400 overflow-x-auto max-h-96 overflow-y-auto">
+                {renderOutput(linkedTool.result.content)}
+              </div>
+            </div>
+          )}
+
+          {/* Output section for Write tool errors */}
+          {linkedTool.name === 'Write' && linkedTool.result?.isError && (
+            <div>
+              <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+                Error
+                <StatusDot status="error" />
+              </div>
+              <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-red-400 overflow-x-auto max-h-96 overflow-y-auto">
                 {renderOutput(linkedTool.result.content)}
               </div>
             </div>

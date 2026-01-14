@@ -32,48 +32,48 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
     : textContent;
 
   return (
-    <div className="border border-zinc-700/50 bg-zinc-800/30 rounded-lg p-4 space-y-2 mb-4">
-      {/* Header */}
-      <div className="flex items-center justify-between text-xs text-zinc-400">
-        <div className="flex items-center gap-2">
-          <User className="w-3.5 h-3.5" />
-          <span className="font-medium text-zinc-300">User</span>
-          <span>·</span>
+    <div className="flex justify-end">
+      <div className="max-w-[85%] space-y-2">
+        {/* Header - right aligned */}
+        <div className="flex items-center justify-end gap-2 text-xs text-zinc-400">
+          {/* Command badges */}
+          {hasCommands && (
+            <div className="flex flex-wrap gap-2">
+              {content.commands.map((cmd, idx) => (
+                <CommandBadge key={idx} command={cmd.name} args={cmd.args} />
+              ))}
+            </div>
+          )}
           <span>{format(timestamp, 'h:mm:ss a')}</span>
+          <span>·</span>
+          <span className="font-medium text-zinc-300">You</span>
+          <User className="w-3.5 h-3.5 text-zinc-400" />
         </div>
-        {/* Command badges */}
-        {hasCommands && (
-          <div className="flex flex-wrap gap-2">
-            {content.commands.map((cmd, idx) => (
-              <CommandBadge key={idx} command={cmd.name} args={cmd.args} />
-            ))}
+
+        {/* Content - subtle bubble style */}
+        {textContent && (
+          <div className="bg-blue-600/15 rounded-2xl rounded-br-sm px-4 py-3">
+            <div className="text-zinc-100 text-sm whitespace-pre-wrap break-words">
+              {displayText}
+            </div>
+            {isLongContent && (
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="text-xs text-zinc-400 hover:text-zinc-300 mt-2 underline"
+              >
+                {isExpanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Images indicator */}
+        {hasImages && (
+          <div className="text-xs text-zinc-400 text-right">
+            {content.images.length} image{content.images.length > 1 ? 's' : ''} attached
           </div>
         )}
       </div>
-
-      {/* Content */}
-      {textContent && (
-        <div>
-          <div className="text-zinc-100 text-sm whitespace-pre-wrap break-words">
-            {displayText}
-          </div>
-          {isLongContent && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs text-zinc-400 hover:text-zinc-300 mt-1 underline"
-            >
-              {isExpanded ? 'Show less' : 'Show more'}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Images indicator */}
-      {hasImages && (
-        <div className="text-xs text-zinc-400">
-          {content.images.length} image{content.images.length > 1 ? 's' : ''} attached
-        </div>
-      )}
     </div>
   );
 }

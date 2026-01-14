@@ -160,7 +160,7 @@ export function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | 
   let userType: string | undefined;
   let sourceToolUseID: string | undefined;
   let sourceToolAssistantUUID: string | undefined;
-  let toolUseResult: { success: boolean; commandName?: string } | undefined;
+  let toolUseResult: Record<string, unknown> | undefined;
   let parentUuid: string | null = null;
 
   // Extract properties based on entry type

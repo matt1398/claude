@@ -120,6 +120,19 @@ export interface ConversationalEntry extends BaseEntry {
 }
 
 /**
+ * Tool use result data - preserves full structure from JSONL entries.
+ *
+ * The structure varies significantly by tool type:
+ * - File tools: { type, success, filePath, content, structuredPatch, ... }
+ * - Task tools: { status, prompt, agentId, content, totalDurationMs, totalTokens, usage, ... }
+ * - AskUserQuestion: { questions, answers }
+ * - Bash: { stdout, stderr, exitCode, ... }
+ *
+ * Using Record<string, unknown> to preserve all data without loss.
+ */
+export type ToolUseResultData = Record<string, unknown>;
+
+/**
  * CRITICAL: User entries serve two purposes:
  *
  * 1. Real User Input (chunk starters):
@@ -141,10 +154,7 @@ export interface UserEntry extends ConversationalEntry {
   isMeta?: boolean;
   agentId?: string;
 
-  toolUseResult?: {
-    success: boolean;
-    commandName?: string;
-  };
+  toolUseResult?: ToolUseResultData;
   sourceToolUseID?: string;
   sourceToolAssistantUUID?: string;
 }
@@ -625,10 +635,7 @@ export interface ParsedMessage {
   /** Source assistant UUID if this is a tool result message */
   sourceToolAssistantUUID?: string;
   /** Tool use result information if this is a tool result message */
-  toolUseResult?: {
-    success: boolean;
-    commandName?: string;
-  };
+  toolUseResult?: ToolUseResultData;
 }
 
 /**
@@ -840,6 +847,7 @@ export interface SemanticStep {
     toolInput?: unknown;        // For tool_call
     toolResultContent?: string; // For tool_result
     isError?: boolean;          // For tool_result
+    toolUseResult?: ToolUseResultData; // For tool_result - enriched data from message
     subagentId?: string;        // For subagent
     subagentDescription?: string;
     outputText?: string;        // For output

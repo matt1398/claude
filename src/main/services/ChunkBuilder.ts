@@ -720,6 +720,7 @@ export class ChunkBuilder {
                   ? result.content
                   : JSON.stringify(result.content),
               isError: result.isError,
+              toolUseResult: msg.toolUseResult,  // Enriched data from message
             },
             context: msg.agentId ? 'subagent' : 'main',
             agentId: msg.agentId,

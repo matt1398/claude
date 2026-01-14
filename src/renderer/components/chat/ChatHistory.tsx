@@ -18,12 +18,18 @@ export function ChatHistory(): JSX.Element {
   if (conversationLoading) {
     return (
       <div className="flex-1 overflow-hidden flex items-center justify-center">
-        <div className="space-y-4 w-full max-w-4xl px-6">
+        <div className="space-y-8 w-full max-w-5xl px-6">
           {/* Loading skeleton */}
           {[1, 2, 3].map((i) => (
-            <div key={i} className="space-y-3 animate-pulse">
-              <div className="ml-auto w-3/4 h-20 bg-blue-600/10 rounded-2xl rounded-br-sm"></div>
-              <div className="w-full h-32 bg-claude-dark-surface rounded-2xl rounded-tl-sm"></div>
+            <div key={i} className="space-y-6 animate-pulse">
+              {/* User message skeleton - right aligned */}
+              <div className="flex justify-end">
+                <div className="w-2/3 h-16 bg-blue-600/10 rounded-2xl rounded-br-sm"></div>
+              </div>
+              {/* AI response skeleton - left aligned with border accent */}
+              <div className="pl-3 border-l-2 border-zinc-700/40">
+                <div className="w-full h-24 bg-zinc-800/30 rounded-lg"></div>
+              </div>
             </div>
           ))}
         </div>
@@ -50,19 +56,21 @@ export function ChatHistory(): JSX.Element {
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-6">
-          <div className="flex flex-col gap-4">
+        <div className="max-w-5xl mx-auto px-6 py-8">
+          <div className="space-y-8">
             {conversation.turns.map((turn: ConversationTurn) => (
-              <div key={turn.id} className="flex flex-col gap-4">
-                {/* User message */}
+              <div key={turn.id} className="space-y-6">
+                {/* User message - right aligned */}
                 <UserChatGroup userGroup={turn.userGroup} />
 
-                {/* AI responses */}
-                {turn.aiGroups.map((aiGroup) => (
-                  <div ref={registerAIGroupRef(aiGroup.id)} key={aiGroup.id}>
-                    <AIChatGroup aiGroup={aiGroup} />
-                  </div>
-                ))}
+                {/* AI responses - left aligned with spacing */}
+                <div className="space-y-4">
+                  {turn.aiGroups.map((aiGroup) => (
+                    <div ref={registerAIGroupRef(aiGroup.id)} key={aiGroup.id}>
+                      <AIChatGroup aiGroup={aiGroup} />
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

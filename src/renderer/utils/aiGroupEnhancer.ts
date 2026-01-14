@@ -139,6 +139,7 @@ export function linkToolCallsToResults(steps: SemanticStep[]): Map<string, Linke
       result: resultStep ? {
         content: resultStep.content.toolResultContent || '',
         isError: resultStep.content.isError || false,
+        toolUseResult: resultStep.content.toolUseResult,
       } : undefined,
       inputPreview: formatToolInput(toolInput as Record<string, unknown>),
       outputPreview: resultStep ? formatToolResult(resultStep.content.toolResultContent || '') : undefined,

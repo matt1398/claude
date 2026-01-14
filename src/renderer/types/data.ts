@@ -144,6 +144,39 @@ export interface ToolResult {
 }
 
 /**
+ * Tool use result data structure.
+ * Contains detailed information about tool execution results from JSONL entries.
+ */
+export interface ToolUseResultData {
+  type?: 'text' | 'edit' | 'create' | 'delete' | 'bash' | string;
+  success?: boolean;
+  commandName?: string;
+  // For file reads (type: 'text')
+  file?: {
+    filePath: string;
+    content: string;
+    numLines: number;
+    startLine: number;
+    totalLines: number;
+  };
+  // For edits (type: 'edit')
+  filePath?: string;
+  oldString?: string;
+  newString?: string;
+  structuredPatch?: Array<{
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+  }>;
+  // For bash commands (type: 'bash')
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+}
+
+/**
  * Parsed message from JSONL.
  */
 export interface ParsedMessage {
@@ -186,11 +219,9 @@ export interface ParsedMessage {
   sourceToolUseID?: string;
   /** Assistant UUID that made the tool call (for linking results to calls) */
   sourceToolAssistantUUID?: string;
-  /** Result status for tool execution (if this is a tool result message) */
-  toolUseResult?: {
-    success: boolean;
-    commandName?: string;
-  };
+  /** Tool use result data - preserves full structure from JSONL entries.
+   * Structure varies by tool type (file tools, Task, AskUserQuestion, Bash, etc.) */
+  toolUseResult?: Record<string, unknown>;
 }
 
 /**
@@ -413,6 +444,7 @@ export interface SemanticStep {
     toolInput?: unknown;        // For tool_call
     toolResultContent?: string; // For tool_result
     isError?: boolean;          // For tool_result
+    toolUseResult?: ToolUseResultData; // For tool_result - enriched data from message
     subagentId?: string;        // For subagent
     subagentDescription?: string;
     outputText?: string;        // For output

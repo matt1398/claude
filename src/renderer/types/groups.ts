@@ -3,7 +3,7 @@
  * These types separate user input from AI responses for a chat-style display.
  */
 
-import type { ParsedMessage, SemanticStep, Subagent, SessionMetrics } from './data';
+import type { ParsedMessage, SemanticStep, Subagent, SessionMetrics, ToolUseResultData } from './data';
 
 // =============================================================================
 // Expansion Levels
@@ -138,6 +138,7 @@ export interface LinkedToolItem {
   result?: {
     content: string | unknown[];
     isError: boolean;
+    toolUseResult?: ToolUseResultData;
   };
   /** Preview of input (first 100 chars) */
   inputPreview: string;

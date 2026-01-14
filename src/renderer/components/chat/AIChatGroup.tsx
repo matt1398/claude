@@ -38,28 +38,26 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
   };
 
   return (
-    <div className="mb-4 border border-zinc-700/50 bg-zinc-900/50 rounded-lg overflow-hidden border-l-2 border-l-zinc-600">
+    <div className="pl-3 border-l-2 border-zinc-700/60 space-y-3">
       {/* Clickable Header */}
       {hasToggleContent && (
         <div
-          className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+          className="flex items-center gap-2 cursor-pointer group"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <div className="flex items-center gap-2 text-xs">
-            <Bot className="w-4 h-4 text-zinc-400" />
-            <span className="font-medium text-zinc-300">Claude</span>
-            <span className="text-zinc-500">·</span>
-            <span className="text-zinc-500">{enhanced.itemsSummary}</span>
-          </div>
+          <Bot className="w-4 h-4 text-zinc-500" />
+          <span className="text-xs font-medium text-zinc-400">Claude</span>
+          <span className="text-xs text-zinc-600">·</span>
+          <span className="text-xs text-zinc-500">{enhanced.itemsSummary}</span>
           <ChevronDown
-            className={`w-4 h-4 text-zinc-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+            className={`w-3.5 h-3.5 text-zinc-500 transition-transform group-hover:text-zinc-400 ${isExpanded ? 'rotate-180' : ''}`}
           />
         </div>
       )}
 
       {/* Expandable Content */}
       {hasToggleContent && isExpanded && (
-        <div className="border-t border-zinc-800 p-4">
+        <div className="pl-2 py-2">
           <DisplayItemList
             items={enhanced.displayItems}
             onItemClick={handleItemClick}
@@ -69,7 +67,7 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
       )}
 
       {/* Always-visible Output */}
-      <div className={`${hasToggleContent ? 'border-t border-zinc-800' : ''} p-4`}>
+      <div>
         <LastOutputDisplay lastOutput={enhanced.lastOutput} />
       </div>
     </div>
