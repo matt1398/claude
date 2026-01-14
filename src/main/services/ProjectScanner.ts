@@ -173,6 +173,11 @@ export class ProjectScanner {
         try {
           const entry = JSON.parse(line) as ChatHistoryEntry;
 
+          // Skip entries without uuid (queue-operation, etc.)
+          if (!entry.uuid) {
+            continue;
+          }
+
           // If we find any non-noise message, return true immediately
           if (!isNoiseMessage(entry)) {
             fileStream.destroy();

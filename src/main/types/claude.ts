@@ -14,7 +14,7 @@
 // Core JSONL Types
 // =============================================================================
 
-export type EntryType = 'user' | 'assistant' | 'system' | 'summary' | 'file-history-snapshot';
+export type EntryType = 'user' | 'assistant' | 'system' | 'summary' | 'file-history-snapshot' | 'queue-operation';
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type ContentType = 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image';
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | null;
@@ -190,7 +190,12 @@ export interface FileHistorySnapshotEntry extends BaseEntry {
   isSnapshotUpdate: boolean;
 }
 
-export type ChatHistoryEntry = UserEntry | AssistantEntry | SystemEntry | SummaryEntry | FileHistorySnapshotEntry;
+export interface QueueOperationEntry extends BaseEntry {
+  type: 'queue-operation';
+  operation: string;
+}
+
+export type ChatHistoryEntry = UserEntry | AssistantEntry | SystemEntry | SummaryEntry | FileHistorySnapshotEntry | QueueOperationEntry;
 
 // =============================================================================
 // Type Guards for Raw JSONL Entries
@@ -292,8 +297,14 @@ export function isTaskToolResult(entry: ChatHistoryEntry): entry is UserEntry {
  *   They ARE trigger messages that start chunks, even if they have no AI response.
  */
 export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
+  // Store type to avoid TypeScript narrowing issues
+  const entryType = entry.type;
+
+  // Filter queue-operation entries
+  if (entryType === 'queue-operation') return true;
+
   // Filter file-history-snapshot entries
-  if (entry.type === 'file-history-snapshot') return true;
+  if (entryType === 'file-history-snapshot') return true;
 
   // Filter system entries with local_command subtype
   if (entry.type === 'system') {
@@ -529,7 +540,7 @@ export type TokenUsage = UsageMetadata;
 /**
  * Message type classification for parsed messages.
  */
-export type MessageType = 'user' | 'assistant' | 'system' | 'summary' | 'file-history-snapshot';
+export type MessageType = 'user' | 'assistant' | 'system' | 'summary' | 'file-history-snapshot' | 'queue-operation';
 
 // =============================================================================
 // Project & Session Types
@@ -1151,6 +1162,9 @@ export function isParsedAssistantMessage(msg: ParsedMessage): boolean {
  *   They ARE trigger messages that start chunks, even if they have no AI response.
  */
 export function isParsedNoiseMessage(msg: ParsedMessage): boolean {
+  // Queue operations are metadata
+  if (msg.type === 'queue-operation') return true;
+
   // File snapshots are metadata, not messages
   if (msg.type === 'file-history-snapshot') return true;
 

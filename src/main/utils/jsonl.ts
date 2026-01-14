@@ -231,6 +231,8 @@ function parseMessageType(type?: string): MessageType | null {
       return 'summary';
     case 'file-history-snapshot':
       return 'file-history-snapshot';
+    case 'queue-operation':
+      return 'queue-operation';
     default:
       // Unknown types are skipped
       return null;
