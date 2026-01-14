@@ -10,30 +10,28 @@ import {
   ConversationGroup,
   AIChunk,
   EnhancedAIChunk,
-  LegacyChunk,
-  LegacyEnhancedChunk,
 } from '../types/data';
 import { TaskSegment } from '../types/gantt';
 
 /**
  * Type guard to check if the input is a ConversationGroup.
  */
-function isConversationGroup(input: Chunk | EnhancedChunk | ConversationGroup | LegacyChunk | LegacyEnhancedChunk): input is ConversationGroup {
+function isConversationGroup(input: Chunk | EnhancedChunk | ConversationGroup): input is ConversationGroup {
   return 'taskExecutions' in input;
 }
 
 /**
- * Type guard to check if chunk has subagents property (AIChunk variants or legacy chunks).
+ * Type guard to check if chunk has subagents property (AIChunk variants).
  */
-function hasSubagents(input: Chunk | EnhancedChunk | ConversationGroup | LegacyChunk | LegacyEnhancedChunk): input is AIChunk | EnhancedAIChunk | LegacyChunk | LegacyEnhancedChunk {
-  return 'subagents' in input && Array.isArray((input as any).subagents);
+function hasSubagents(input: Chunk | EnhancedChunk | ConversationGroup): input is AIChunk | EnhancedAIChunk {
+  return 'subagents' in input && Array.isArray((input as AIChunk | EnhancedAIChunk).subagents);
 }
 
 /**
  * Type guard to check if chunk has toolExecutions property.
  */
-function hasToolExecutions(input: Chunk | EnhancedChunk | ConversationGroup | LegacyChunk | LegacyEnhancedChunk): input is AIChunk | EnhancedAIChunk | LegacyChunk | LegacyEnhancedChunk {
-  return 'toolExecutions' in input && Array.isArray((input as any).toolExecutions);
+function hasToolExecutions(input: Chunk | EnhancedChunk | ConversationGroup): input is AIChunk | EnhancedAIChunk {
+  return 'toolExecutions' in input && Array.isArray((input as AIChunk | EnhancedAIChunk).toolExecutions);
 }
 
 /**
@@ -43,7 +41,7 @@ function hasToolExecutions(input: Chunk | EnhancedChunk | ConversationGroup | Le
  */
 export function groupIntoSegments(
   steps: SemanticStep[],
-  chunk: Chunk | EnhancedChunk | ConversationGroup | LegacyChunk | LegacyEnhancedChunk
+  chunk: Chunk | EnhancedChunk | ConversationGroup
 ): TaskSegment[] {
   if (steps.length === 0) {
     return [];
@@ -63,7 +61,7 @@ export function groupIntoSegments(
       }
     }
   } else if (hasSubagents(chunk)) {
-    // For AIChunk/EnhancedAIChunk/LegacyChunks, use subagents' parentTaskId
+    // For AIChunk/EnhancedAIChunk, use subagents' parentTaskId
     for (const subagent of chunk.subagents) {
       if (subagent.parentTaskId && subagent.id) {
         subagentToTaskId.set(subagent.id, subagent.parentTaskId);
@@ -99,7 +97,7 @@ export function groupIntoSegments(
                 taskExec?.taskCall.taskDescription ||
                 'Task Execution';
       } else if (hasToolExecutions(chunk)) {
-        // For AIChunk/EnhancedAIChunk/LegacyChunks, use toolExecutions
+        // For AIChunk/EnhancedAIChunk, use toolExecutions
         const taskExecution = chunk.toolExecutions.find(
           (exec: { toolCall: { id: string; name: string; taskDescription?: string } }) =>
             exec.toolCall.id === taskId && exec.toolCall.name === 'Task'

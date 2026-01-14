@@ -5,16 +5,12 @@ import {
   EnhancedChunk,
   EnhancedAIChunk,
   EnhancedUserChunk,
-  LegacyChunk,
-  LegacyEnhancedChunk,
   SemanticStep,
   ConversationGroup,
   ToolResult,
   isUserChunk,
   isAIChunk,
   isEnhancedAIChunk,
-  isLegacyChunk,
-  isLegacyEnhancedChunk,
 } from '../../types/data';
 import { GanttChart } from './GanttChart';
 import { SemanticStepView } from './SemanticStepView';
@@ -22,7 +18,7 @@ import { DebugSidebar } from './DebugSidebar';
 import { ContextLengthChart } from './ContextLengthChart';
 import { groupIntoSegments } from '../../utils/segmentGrouping';
 
-type ChunkType = Chunk | EnhancedChunk | ConversationGroup | LegacyChunk | LegacyEnhancedChunk;
+type ChunkType = Chunk | EnhancedChunk | ConversationGroup;
 
 interface ChunkViewProps {
   chunk: ChunkType;
@@ -48,15 +44,9 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     return 'chunkType' in c && c.chunkType === 'user' && 'userMessage' in c;
   };
 
-  // Type guard to check if chunk is a legacy enhanced chunk
-  // Legacy chunks have semanticSteps but no chunkType discriminator
-  const isLegacyEnhanced = (c: ChunkType): c is LegacyEnhancedChunk => {
-    return !('chunkType' in c) && 'semanticSteps' in c && 'userMessage' in c && 'responses' in c;
-  };
-
-  // Type guard for any chunk with semantic steps
-  const hasSemanticSteps = (c: ChunkType): c is EnhancedAIChunk | LegacyEnhancedChunk => {
-    return isEnhancedAI(c) || isLegacyEnhanced(c);
+  // Type guard for any chunk with semantic steps (only EnhancedAIChunk has them)
+  const hasSemanticSteps = (c: ChunkType): c is EnhancedAIChunk => {
+    return isEnhancedAI(c);
   };
 
   const [isExpanded, setIsExpanded] = useState(false);
@@ -77,7 +67,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     if (isConversationGroup(chunk)) {
       return chunk.aiResponses;
     }
-    if (isAIChunk(chunk) || isLegacyChunk(chunk)) {
+    if (isAIChunk(chunk)) {
       return chunk.responses;
     }
     return [];
@@ -90,7 +80,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     if (isConversationGroup(chunk)) {
       return chunk.subagents;
     }
-    if (isAIChunk(chunk) || isLegacyChunk(chunk)) {
+    if (isAIChunk(chunk)) {
       return chunk.subagents;
     }
     return [];
@@ -103,7 +93,7 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     if (isConversationGroup(chunk)) {
       return chunk.toolExecutions;
     }
-    if (isAIChunk(chunk) || isLegacyChunk(chunk)) {
+    if (isAIChunk(chunk)) {
       return chunk.toolExecutions;
     }
     return [];
@@ -115,9 +105,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
       return chunk.userMessage;
     }
     if (isUserChunk(chunk)) {
-      return chunk.userMessage;
-    }
-    if (isLegacyChunk(chunk)) {
       return chunk.userMessage;
     }
     return null;
@@ -199,7 +186,6 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onDebugClick
     if (isConversationGroup(chunk)) return 'Group';
     if (isUserChunk(chunk)) return 'User';
     if (isAIChunk(chunk)) return 'AI';
-    if (isLegacyChunk(chunk)) return 'Chunk';
     return 'Chunk';
   };
 
