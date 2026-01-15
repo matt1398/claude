@@ -24,8 +24,8 @@ import {
   isParsedInternalUserMessage,
   isParsedResponseUserMessage,
   isParsedAssistantMessage,
+  isParsedUserChunkMessage,
   isTextContent,
-  isTriggerMessage,
 } from '../types/claude';
 import { sanitizeDisplayContent } from '../../shared/utils/contentSanitizer';
 
@@ -571,8 +571,14 @@ export async function countMessages(filePath: string): Promise<number> {
 }
 
 /**
- * Count trigger messages (real user inputs that start conversation turns) in a JSONL file.
- * This matches the ConversationTurn count in the UI.
+ * Count user chunk messages (real user inputs that start User chunks) in a JSONL file.
+ * This matches the UserChunk count in the UI.
+ *
+ * Uses isParsedUserChunkMessage which:
+ * - Includes real user messages (isMeta!=true, has text/image content)
+ * - Includes slash commands (<command-name>) as visible user input
+ * - Excludes command output (<local-command-stdout>) - those are System chunks
+ * - Excludes noise (<local-command-caveat>, <system-reminder>)
  */
 export async function countTriggerMessages(filePath: string): Promise<number> {
   if (!fs.existsSync(filePath)) {
@@ -592,7 +598,9 @@ export async function countTriggerMessages(filePath: string): Promise<number> {
 
     try {
       const entry = JSON.parse(trimmed) as ChatHistoryEntry;
-      if (isTriggerMessage(entry)) {
+      // Parse entry to ParsedMessage to use the new type guard
+      const parsed = parseChatHistoryEntry(entry);
+      if (parsed && isParsedUserChunkMessage(parsed)) {
         count++;
       }
     } catch (error) {

@@ -1,9 +1,9 @@
 /**
  * Transforms EnhancedChunk[] into SessionConversation structure.
  *
- * This module converts chunk-based data into a chat-style conversation model
- * with UserGroups (right-aligned) and AIGroups (left-aligned), enabling a
- * three-panel chat interface with synchronized Gantt visualization.
+ * This module converts chunk-based data into a flat list of ChatItems
+ * (UserGroups, SystemGroups, AIGroups) for a chat-style display.
+ * Each item is independent - no pairing between user and AI chunks.
  */
 
 import type {
@@ -16,7 +16,8 @@ import type {
   AIGroupSummary,
   AIGroupStatus,
   AIGroupTokens,
-  ConversationTurn,
+  ChatItem,
+  SystemGroup,
   SessionConversation,
 } from '../types/groups';
 
@@ -24,6 +25,7 @@ import type {
   EnhancedChunk,
   EnhancedUserChunk,
   EnhancedAIChunk,
+  EnhancedSystemChunk,
   ParsedMessage,
   Process,
   SemanticStep,
@@ -52,11 +54,16 @@ const COMMAND_PATTERN = /\/([a-z-]+)(?:\s+(.+?))?(?=\s*\/|\s*$)/gi;
  */
 const THINKING_PREVIEW_LENGTH = 100;
 
+// =============================================================================
+// Type Guard for EnhancedSystemChunk
+// =============================================================================
+
 /**
- * Time window (ms) to consider subagents as belonging to an AI Group.
- * If a subagent starts within this window of an AI Group's start/end, link them.
+ * Type guard to check if a chunk is an EnhancedSystemChunk.
  */
-const SUBAGENT_LINK_WINDOW_MS = 100;
+function isEnhancedSystemChunk(chunk: EnhancedChunk): chunk is EnhancedSystemChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'system';
+}
 
 // =============================================================================
 // Main Transformation Function
@@ -65,101 +72,74 @@ const SUBAGENT_LINK_WINDOW_MS = 100;
 /**
  * Transforms EnhancedChunk[] into SessionConversation.
  *
- * Processes separated chunks (UserChunk + AIChunk pairs) into conversation turns.
+ * Produces a flat list of independent ChatItems (user, system, AI).
+ * Each chunk type becomes its own item - no pairing or grouping.
  *
  * @param chunks - Array of enhanced chunks with semantic steps
- * @param subagents - Array of all subagents in the session
+ * @param _subagents - Array of all subagents in the session (unused, processes come from chunks)
  * @returns SessionConversation structure for chat-style rendering
  */
 export function transformChunksToConversation(
   chunks: EnhancedChunk[],
-  subagents: Process[]
+  _subagents: Process[]
 ): SessionConversation {
   if (!chunks || chunks.length === 0) {
     return {
       sessionId: '',
-      turns: [],
+      items: [],
       totalUserGroups: 0,
+      totalSystemGroups: 0,
       totalAIGroups: 0,
     };
   }
 
-  return transformSeparatedChunks(chunks, subagents);
-}
+  const items: ChatItem[] = [];
+  let userCount = 0;
+  let systemCount = 0;
+  let aiCount = 0;
 
-/**
- * Transforms new separated chunks (UserChunk + AIChunk pairs) into SessionConversation.
- *
- * @param chunks - Array of separated chunks (UserChunks and AIChunks mixed)
- * @param subagents - Array of all subagents in the session
- * @returns SessionConversation structure
- */
-function transformSeparatedChunks(
-  chunks: EnhancedChunk[],
-  subagents: Process[]
-): SessionConversation {
-  const turns: ConversationTurn[] = [];
-  let totalAIGroupCount = 0;
-  let turnIndex = 0;
-
-  // Separate user chunks and AI chunks
-  const userChunks = chunks.filter(isEnhancedUserChunk);
-  const aiChunks = chunks.filter(isEnhancedAIChunk);
-
-  // Create a map of AI chunks by userChunkId for quick lookup
-  const aiChunkMap = new Map<string, EnhancedAIChunk>();
-  for (const aiChunk of aiChunks) {
-    aiChunkMap.set(aiChunk.userChunkId, aiChunk);
-  }
-
-  // Process each user chunk and find its corresponding AI chunk
-  for (const userChunk of userChunks) {
-    try {
-      // Create UserGroup from the user chunk
-      const userGroup = createUserGroup(userChunk.userMessage, turnIndex);
-
-      // Find corresponding AI chunk
-      const aiChunk = aiChunkMap.get(userChunk.id);
-
-      // Create AIGroups from the AI chunk (if it exists)
-      const aiGroups = aiChunk
-        ? splitIntoAIGroupsFromAIChunk(aiChunk, userGroup.id, subagents)
-        : [];
-      totalAIGroupCount += aiGroups.length;
-
-      // Determine turn timing
-      const startTime = userChunk.startTime;
-      const endTime = aiChunk?.endTime || userChunk.endTime;
-
-      // Create conversation turn
-      const turn: ConversationTurn = {
-        id: `turn-${turnIndex}`,
-        userGroup,
-        aiGroups,
-        startTime,
-        endTime,
-      };
-
-      turns.push(turn);
-      turnIndex++;
-    } catch (error) {
-      console.error(`Error processing user chunk ${userChunk.id}:`, error);
-      // Continue with other chunks even if one fails
+  for (const chunk of chunks) {
+    if (isEnhancedUserChunk(chunk)) {
+      items.push({
+        type: 'user',
+        group: createUserGroupFromChunk(chunk, userCount++),
+      });
+    } else if (isEnhancedSystemChunk(chunk)) {
+      items.push({
+        type: 'system',
+        group: createSystemGroup(chunk, systemCount++),
+      });
+    } else if (isEnhancedAIChunk(chunk)) {
+      items.push({
+        type: 'ai',
+        group: createAIGroupFromChunk(chunk, aiCount++),
+      });
     }
   }
 
   return {
-    sessionId: userChunks[0]?.id.split('-')[0] || '',
-    turns,
-    totalUserGroups: userChunks.length,
-    totalAIGroups: totalAIGroupCount,
+    sessionId: chunks[0]?.id || 'unknown',
+    items,
+    totalUserGroups: userCount,
+    totalSystemGroups: systemCount,
+    totalAIGroups: aiCount,
   };
 }
-
 
 // =============================================================================
 // UserGroup Creation
 // =============================================================================
+
+/**
+ * Creates a UserGroup from an EnhancedUserChunk.
+ *
+ * @param chunk - The user chunk to transform
+ * @param index - Index within the session (for ordering)
+ * @returns UserGroup with parsed content
+ */
+function createUserGroupFromChunk(chunk: EnhancedUserChunk, index: number): UserGroup {
+  return createUserGroup(chunk.userMessage, index);
+}
 
 /**
  * Creates a UserGroup from a ParsedMessage.
@@ -280,19 +260,6 @@ export function extractImages(): ImageData[] {
 }
 
 /**
- * Extracts ImageData from an image content block.
- *
- * TODO: Not yet implemented - will be needed when image support is added.
- */
-// function extractImageFromBlock(block: any): ImageData {
-//   return {
-//     id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-//     mediaType: block.source?.media_type || 'image/png',
-//     data: block.source?.data,
-//   };
-// }
-
-/**
  * Regex pattern for detecting file/directory references.
  * Matches @path that looks like a file/directory reference.
  * Must either:
@@ -332,36 +299,48 @@ function extractFileReferences(text: string): FileReference[] {
 }
 
 // =============================================================================
+// SystemGroup Creation
+// =============================================================================
+
+/**
+ * Creates a SystemGroup from an EnhancedSystemChunk.
+ *
+ * @param chunk - The system chunk to transform
+ * @param index - Index within the session (for ordering)
+ * @returns SystemGroup with command output
+ */
+function createSystemGroup(chunk: EnhancedSystemChunk, index: number): SystemGroup {
+  return {
+    id: `system-${index}`,
+    message: chunk.message,
+    timestamp: chunk.startTime,
+    commandOutput: chunk.commandOutput,
+  };
+}
+
+// =============================================================================
 // AIGroup Creation
 // =============================================================================
 
 /**
- * Creates ONE AIGroup from a new separated AIChunk.
+ * Creates an AIGroup from an EnhancedAIChunk.
  *
- * @param aiChunk - The separated AI chunk to process
- * @param userGroupId - ID of the parent UserGroup
- * @param allSubagents - All subagents in the session
- * @returns Array containing exactly ONE AIGroup
+ * @param chunk - The AI chunk to transform
+ * @param index - Index within the session (for ordering)
+ * @returns AIGroup with semantic steps and metrics
  */
-function splitIntoAIGroupsFromAIChunk(
-  aiChunk: EnhancedAIChunk,
-  userGroupId: string,
-  allSubagents: Process[]
-): AIGroup[] {
-  const steps = aiChunk.semanticSteps;
-
-  // If no semantic steps, return empty array
-  if (steps.length === 0) {
-    return [];
-  }
+function createAIGroupFromChunk(chunk: EnhancedAIChunk, index: number): AIGroup {
+  const steps = chunk.semanticSteps;
 
   // Calculate timing from all steps
-  const startTime = steps[0].startTime;
-  const endTime = steps[steps.length - 1].endTime || steps[steps.length - 1].startTime;
+  const startTime = steps.length > 0 ? steps[0].startTime : chunk.startTime;
+  const endTime = steps.length > 0
+    ? (steps[steps.length - 1].endTime || steps[steps.length - 1].startTime)
+    : chunk.endTime;
   const durationMs = endTime.getTime() - startTime.getTime();
 
   // Find any source assistant message for token calculation
-  const sourceMessage = aiChunk.responses.find(msg => isAssistantMessage(msg)) || null;
+  const sourceMessage = chunk.responses.find(msg => isAssistantMessage(msg)) || null;
 
   // Calculate tokens from all steps
   const tokens = calculateTokensFromSteps(steps, sourceMessage);
@@ -372,17 +351,8 @@ function splitIntoAIGroupsFromAIChunk(
   // Determine status from all steps
   const status = determineAIGroupStatus(steps);
 
-  // Use processes from the chunk (already linked by ChunkBuilder)
-  // Or link by timing as fallback
-  const linkedProcesses = aiChunk.processes.length > 0
-    ? aiChunk.processes
-    : linkProcessesToAIGroup(startTime, endTime, allSubagents);
-
-  // Create single AIGroup with all steps
-  const aiGroup: AIGroup = {
-    id: `ai-${aiChunk.id}`,
-    userGroupId,
-    responseIndex: 0,
+  return {
+    id: `ai-${index}`,
     startTime,
     endTime,
     durationMs,
@@ -390,33 +360,10 @@ function splitIntoAIGroupsFromAIChunk(
     tokens,
     summary,
     status,
-    processes: linkedProcesses,
-    chunkId: aiChunk.id,
-    metrics: aiChunk.metrics,
+    processes: chunk.processes,
+    chunkId: chunk.id,
+    metrics: chunk.metrics,
   };
-
-  return [aiGroup];
-}
-
-
-/**
- * Creates ONE AIGroup per chunk containing ALL semantic steps.
- *
- * @param chunk - The enhanced AI chunk to process
- * @param userGroupId - ID of the parent UserGroup
- * @param allSubagents - All subagents in the session
- * @returns Array containing exactly ONE AIGroup
- */
-export function splitIntoAIGroups(
-  chunk: EnhancedChunk,
-  userGroupId: string,
-  allSubagents: Process[]
-): AIGroup[] {
-  if (isEnhancedAIChunk(chunk)) {
-    return splitIntoAIGroupsFromAIChunk(chunk, userGroupId, allSubagents);
-  }
-  // UserChunks don't have AI responses
-  return [];
 }
 
 /**
@@ -465,41 +412,6 @@ function calculateTokensFromSteps(
     cached,
     thinking,
   };
-}
-
-/**
- * Links processes to an AI Group by timing overlap.
- *
- * @param startTime - AI Group start time
- * @param endTime - AI Group end time
- * @param allSubagents - All subagents in the session
- * @returns Processes that overlap with this AI Group
- */
-function linkProcessesToAIGroup(
-  startTime: Date,
-  endTime: Date,
-  allSubagents: Process[]
-): Process[] {
-  const linked: Process[] = [];
-
-  for (const subagent of allSubagents) {
-    const subStart = subagent.startTime.getTime();
-    const subEnd = subagent.endTime.getTime();
-    const aiStart = startTime.getTime();
-    const aiEnd = endTime.getTime();
-
-    // Check if subagent overlaps with AI Group (with window tolerance)
-    const overlaps =
-      (subStart >= aiStart - SUBAGENT_LINK_WINDOW_MS && subStart <= aiEnd + SUBAGENT_LINK_WINDOW_MS) ||
-      (subEnd >= aiStart - SUBAGENT_LINK_WINDOW_MS && subEnd <= aiEnd + SUBAGENT_LINK_WINDOW_MS) ||
-      (subStart <= aiStart && subEnd >= aiEnd);
-
-    if (overlaps) {
-      linked.push(subagent);
-    }
-  }
-
-  return linked;
 }
 
 // =============================================================================

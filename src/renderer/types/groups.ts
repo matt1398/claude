@@ -97,6 +97,17 @@ export interface UserGroup {
   index: number;
 }
 
+/**
+ * System Group - represents command output rendered like AI.
+ */
+export interface SystemGroup {
+  id: string;
+  message: ParsedMessage;
+  timestamp: Date;
+  commandOutput: string;  // Raw output text
+  commandName?: string;   // Optional: extracted command name
+}
+
 // =============================================================================
 // AI Group Types
 // =============================================================================
@@ -215,15 +226,11 @@ export interface AIGroupTokens {
 
 /**
  * AI Group - represents a single assistant response cycle.
- * Multiple AI Groups can exist per user message (e.g., if interrupted).
+ * AI Groups are independent items in the flat conversation list.
  */
 export interface AIGroup {
   /** Unique identifier */
   id: string;
-  /** Reference to the parent UserGroup */
-  userGroupId: string;
-  /** Index within the chunk (for multiple responses per user message) */
-  responseIndex: number;
   /** Start timestamp */
   startTime: Date;
   /** End timestamp */
@@ -251,31 +258,27 @@ export interface AIGroup {
 // =============================================================================
 
 /**
- * Conversation turn - pairs a user message with all AI responses.
+ * Chat item - can be user, system, or AI.
+ * These are INDEPENDENT items in a flat list, not paired turns.
  */
-export interface ConversationTurn {
-  /** Unique identifier */
-  id: string;
-  /** The user's input */
-  userGroup: UserGroup;
-  /** AI responses (may be multiple if interrupted/resumed) */
-  aiGroups: AIGroup[];
-  /** Start time (user message timestamp) */
-  startTime: Date;
-  /** End time (last AI response end) */
-  endTime: Date;
-}
+export type ChatItem =
+  | { type: 'user'; group: UserGroup }
+  | { type: 'system'; group: SystemGroup }
+  | { type: 'ai'; group: AIGroup };
 
 /**
- * Complete conversation for a session.
+ * Session conversation as a flat list of independent chat items.
+ * NO LONGER uses turns - each item stands alone.
  */
 export interface SessionConversation {
   /** Session ID */
   sessionId: string;
-  /** All conversation turns */
-  turns: ConversationTurn[];
+  /** All chat items in chronological order */
+  items: ChatItem[];
   /** Total count of user groups */
   totalUserGroups: number;
+  /** Total count of system groups */
+  totalSystemGroups: number;
   /** Total count of AI groups */
   totalAIGroups: number;
 }

@@ -10,34 +10,32 @@
 
 import {
   Chunk,
-  UserChunk,
   AIChunk,
   ParsedMessage,
   Process,
   SessionMetrics,
   ToolExecution,
-  WaterfallItem,
-  WaterfallData,
   Session,
   SessionDetail,
   EMPTY_METRICS,
-  isParsedResponseUserMessage,
-  isParsedAssistantMessage,
   isParsedHardNoiseMessage,
-  isParsedTriggerMessage,
+  isParsedUserChunkMessage,
+  isParsedSystemChunkMessage,
   SemanticStep,
   EnhancedChunk,
   EnhancedUserChunk,
   EnhancedAIChunk,
+  EnhancedSystemChunk,
   ContentBlock,
   SemanticStepGroup,
-  isTextContent,
   isUserChunk,
   isAIChunk,
   isEnhancedAIChunk,
+  isSystemChunk,
   ConversationGroup,
   TaskExecution,
   ToolCall,
+  MessageCategory,
 } from '../types/claude';
 import { calculateMetrics } from '../utils/jsonl';
 import { fillTimelineGaps } from '../utils/timelineGapFilling';
@@ -58,11 +56,16 @@ export class ChunkBuilder {
   // ===========================================================================
 
   /**
-   * Build chunks from messages.
-   * Produces separate UserChunks and AIChunks for independent visualization.
-   * Hard noise messages (caveats, snapshots) are filtered out.
-   * Soft noise messages (commands) pass through to trigger detection.
-   * Returns EnhancedChunks with semantic step breakdown.
+   * Build chunks from messages using 4-category classification.
+   * Produces independent UserChunks, AIChunks, and SystemChunks.
+   *
+   * Categories:
+   * - User: Genuine user input (creates UserChunk, renders RIGHT)
+   * - System: Command output <local-command-stdout> (creates SystemChunk, renders LEFT)
+   * - Hard Noise: Filtered out entirely (system metadata, caveats, reminders)
+   * - AI: All other messages grouped into AIChunks (renders LEFT)
+   *
+   * All chunk types are INDEPENDENT - no pairing between User and AI.
    */
   buildChunks(messages: ParsedMessage[], subagents: Process[] = []): EnhancedChunk[] {
     const chunks: EnhancedChunk[] = [];
@@ -71,135 +74,214 @@ export class ChunkBuilder {
     const mainMessages = messages.filter((m) => !m.isSidechain);
     console.log(`[ChunkBuilder] Total messages: ${messages.length}, Main thread: ${mainMessages.length}`);
 
-    // Filter out hard noise messages (caveats, snapshots)
-    // Soft noise (commands) pass through to trigger detection
-    const cleanMessages = mainMessages.filter((m) => !isParsedHardNoiseMessage(m));
-    const noiseCount = mainMessages.length - cleanMessages.length;
-    console.log(`[ChunkBuilder] After hard noise filter: ${cleanMessages.length} (filtered ${noiseCount} hard noise messages)`);
+    // Classify each message into categories
+    const classified = this.classifyMessages(mainMessages);
 
-    console.log(`[ChunkBuilder] Clean messages:`, cleanMessages);
-    // Log what types of messages were filtered as hard noise
-    if (noiseCount > 0) {
-      const noiseMessages = mainMessages.filter((m) => isParsedHardNoiseMessage(m));
-      const noiseTypes = new Map<string, number>();
-      for (const msg of noiseMessages) {
-        const key = msg.type;
-        noiseTypes.set(key, (noiseTypes.get(key) || 0) + 1);
-      }
-      console.log(`[ChunkBuilder] Hard noise message types:`, Object.fromEntries(noiseTypes));
+    // Log classification summary
+    const categoryCounts = new Map<MessageCategory, number>();
+    for (const { category } of classified) {
+      categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
     }
+    console.log(`[ChunkBuilder] Message classification:`, Object.fromEntries(categoryCounts));
 
-    // Find all trigger messages (these start chunks)
-    // Use isParsedTriggerMessage to identify genuine user inputs
-    const userMessages = cleanMessages.filter(isParsedTriggerMessage);
-    const nonTriggerCount = cleanMessages.length - userMessages.length;
-    console.log(`[ChunkBuilder] Trigger messages: ${userMessages.length} (${nonTriggerCount} non-trigger clean messages)`);
+    // Build chunks from classification - AI chunks are INDEPENDENT
+    let aiBuffer: ParsedMessage[] = [];
 
-    // Log details about non-trigger clean messages (these should be responses)
-    if (nonTriggerCount > 0) {
-      const nonTriggers = cleanMessages.filter((m) => !isParsedTriggerMessage(m));
-      const nonTriggerTypes = new Map<string, number>();
-      for (const msg of nonTriggers) {
-        const key = `${msg.type}${msg.isMeta ? ' (meta)' : ''}`;
-        nonTriggerTypes.set(key, (nonTriggerTypes.get(key) || 0) + 1);
-      }
-      console.log(`[ChunkBuilder] Non-trigger message types:`, Object.fromEntries(nonTriggerTypes));
-    }
+    for (const { message, category } of classified) {
+      switch (category) {
+        case 'hardNoise':
+          // Skip - filtered out
+          break;
 
-    for (let i = 0; i < userMessages.length; i++) {
-      const userMsg = userMessages[i];
-      const nextUserMsg = userMessages[i + 1];
+        case 'user':
+          // Flush any buffered AI messages first
+          if (aiBuffer.length > 0) {
+            chunks.push(this.buildAIChunkFromBuffer(aiBuffer, subagents, messages));
+            aiBuffer = [];
+          }
+          chunks.push(this.buildUserChunk(message));
+          break;
 
-      // Generate IDs for the user chunk and AI chunk pair
-      const userChunkId = generateChunkId();
-      const aiChunkId = generateChunkId();
+        case 'system':
+          // Flush any buffered AI messages first
+          if (aiBuffer.length > 0) {
+            chunks.push(this.buildAIChunkFromBuffer(aiBuffer, subagents, messages));
+            aiBuffer = [];
+          }
+          chunks.push(this.buildSystemChunk(message));
+          break;
 
-      // Calculate user chunk timing (just the user message)
-      const userMetrics = calculateMetrics([userMsg]);
-
-      // Create user chunk
-      const userChunk: EnhancedUserChunk = {
-        id: userChunkId,
-        chunkType: 'user',
-        userMessage: userMsg,
-        startTime: userMsg.timestamp,
-        endTime: userMsg.timestamp,
-        durationMs: 0,
-        metrics: userMetrics,
-        rawMessages: [userMsg],
-      };
-      chunks.push(userChunk);
-
-      // Collect responses until next user message (from clean messages, noise already filtered)
-      const responses = this.collectResponses(cleanMessages, userMsg, nextUserMsg);
-
-      // Only create AI chunk if there are responses
-      if (responses.length > 0) {
-        // Collect sidechain messages for this time range
-        const sidechainMessages = this.collectSidechainMessages(
-          messages,
-          userMsg.timestamp,
-          nextUserMsg?.timestamp
-        );
-
-        // Calculate AI chunk timing
-        const { startTime, endTime, durationMs } = this.calculateAIChunkTiming(responses);
-
-        // Calculate metrics for responses only
-        const aiMetrics = calculateMetrics(responses);
-
-        // Build tool executions
-        const toolExecutions = this.buildToolExecutions(responses);
-
-        // Create AI chunk
-        const aiChunk: EnhancedAIChunk = {
-          id: aiChunkId,
-          chunkType: 'ai',
-          userChunkId,
-          responses,
-          startTime,
-          endTime,
-          durationMs,
-          metrics: aiMetrics,
-          processes: [], // Will be filled by linkProcesses
-          sidechainMessages,
-          toolExecutions,
-          semanticSteps: [], // Will be filled after subagents are linked
-          rawMessages: responses,
-        };
-        chunks.push(aiChunk);
+        case 'ai':
+          aiBuffer.push(message);
+          break;
       }
     }
 
-    // Link processes to AI chunks
-    this.linkProcessesToChunks(chunks, subagents);
-
-    // Extract semantic steps for each AI chunk (now that subagents are linked)
-    for (const chunk of chunks) {
-      if (isAIChunk(chunk)) {
-        const aiChunk = chunk as EnhancedAIChunk;
-        aiChunk.semanticSteps = this.extractSemanticStepsFromAIChunk(aiChunk);
-
-        // Apply timeline gap filling
-        aiChunk.semanticSteps = fillTimelineGaps({
-          steps: aiChunk.semanticSteps,
-          chunkStartTime: aiChunk.startTime,
-          chunkEndTime: aiChunk.endTime,
-        });
-
-        // Calculate context for each step using its source message
-        calculateStepContext(aiChunk.semanticSteps, aiChunk.rawMessages);
-
-        aiChunk.semanticStepGroups = this.buildSemanticStepGroups(aiChunk.semanticSteps);
-      }
+    // Flush remaining AI buffer
+    if (aiBuffer.length > 0) {
+      chunks.push(this.buildAIChunkFromBuffer(aiBuffer, subagents, messages));
     }
 
     // Log final chunk summary
     const userChunkCount = chunks.filter(isUserChunk).length;
     const aiChunkCount = chunks.filter(isAIChunk).length;
-    console.log(`[ChunkBuilder] Created ${chunks.length} chunks: ${userChunkCount} user, ${aiChunkCount} AI`);
+    const systemChunkCount = chunks.filter(isSystemChunk).length;
+    console.log(`[ChunkBuilder] Created ${chunks.length} chunks: ${userChunkCount} user, ${aiChunkCount} AI, ${systemChunkCount} system`);
 
     return chunks;
+  }
+
+  // ===========================================================================
+  // Message Classification
+  // ===========================================================================
+
+  /**
+   * Classify all messages into categories.
+   */
+  private classifyMessages(messages: ParsedMessage[]): Array<{message: ParsedMessage, category: MessageCategory}> {
+    return messages.map(message => ({
+      message,
+      category: this.categorizeMessage(message)
+    }));
+  }
+
+  /**
+   * Categorize a single message into one of four categories.
+   */
+  private categorizeMessage(message: ParsedMessage): MessageCategory {
+    // Check hard noise first (filtered out)
+    if (isParsedHardNoiseMessage(message)) {
+      return 'hardNoise';
+    }
+
+    // Check system (command output)
+    if (isParsedSystemChunkMessage(message)) {
+      return 'system';
+    }
+
+    // Check user (real user input)
+    if (isParsedUserChunkMessage(message)) {
+      return 'user';
+    }
+
+    // Everything else is AI (assistant messages, tool results, etc.)
+    return 'ai';
+  }
+
+  // ===========================================================================
+  // Chunk Builders
+  // ===========================================================================
+
+  /**
+   * Build a UserChunk from a user message.
+   */
+  private buildUserChunk(message: ParsedMessage): EnhancedUserChunk {
+    const id = generateChunkId();
+    const metrics = calculateMetrics([message]);
+
+    return {
+      id,
+      chunkType: 'user',
+      userMessage: message,
+      startTime: message.timestamp,
+      endTime: message.timestamp,
+      durationMs: 0,
+      metrics,
+      rawMessages: [message],
+    };
+  }
+
+  /**
+   * Build a SystemChunk from a command output message.
+   */
+  private buildSystemChunk(message: ParsedMessage): EnhancedSystemChunk {
+    const id = generateChunkId();
+    const commandOutput = this.extractCommandOutput(message);
+    const metrics = calculateMetrics([message]);
+
+    return {
+      id,
+      chunkType: 'system',
+      message,
+      commandOutput,
+      startTime: message.timestamp,
+      endTime: message.timestamp,
+      durationMs: 0,
+      metrics,
+      rawMessages: [message],
+    };
+  }
+
+  /**
+   * Extract command output from <local-command-stdout> tag.
+   */
+  private extractCommandOutput(message: ParsedMessage): string {
+    const content = typeof message.content === 'string' ? message.content : '';
+    const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
+    return match ? match[1] : content;
+  }
+
+  /**
+   * Build an AIChunk from buffered AI messages.
+   */
+  private buildAIChunkFromBuffer(
+    responses: ParsedMessage[],
+    subagents: Process[],
+    allMessages: ParsedMessage[]
+  ): EnhancedAIChunk {
+    const id = generateChunkId();
+    const { startTime, endTime, durationMs } = this.calculateAIChunkTiming(responses);
+    const metrics = calculateMetrics(responses);
+    const toolExecutions = this.buildToolExecutions(responses);
+
+    // Collect sidechain messages for this time range
+    const sidechainMessages = this.collectSidechainMessages(
+      allMessages,
+      startTime,
+      endTime
+    );
+
+    const chunk: EnhancedAIChunk = {
+      id,
+      chunkType: 'ai',
+      responses,
+      startTime,
+      endTime,
+      durationMs,
+      metrics,
+      processes: [],
+      sidechainMessages,
+      toolExecutions,
+      semanticSteps: [],
+      rawMessages: responses,
+    };
+
+    // Link processes to this chunk
+    this.linkProcessesToAIChunk(chunk, subagents);
+
+    // Extract semantic steps
+    chunk.semanticSteps = this.extractSemanticStepsFromAIChunk(chunk);
+    chunk.semanticSteps = fillTimelineGaps({
+      steps: chunk.semanticSteps,
+      chunkStartTime: chunk.startTime,
+      chunkEndTime: chunk.endTime,
+    });
+    calculateStepContext(chunk.semanticSteps, chunk.rawMessages);
+    chunk.semanticStepGroups = this.buildSemanticStepGroups(chunk.semanticSteps);
+
+    return chunk;
+  }
+
+  /**
+   * Link processes to a single AI chunk based on timing.
+   */
+  private linkProcessesToAIChunk(chunk: EnhancedAIChunk, subagents: Process[]): void {
+    for (const subagent of subagents) {
+      if (subagent.startTime >= chunk.startTime && subagent.startTime <= chunk.endTime) {
+        chunk.processes.push(subagent);
+      }
+    }
+    chunk.processes.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   }
 
   // ===========================================================================
@@ -222,8 +304,8 @@ export class ChunkBuilder {
     const mainMessages = messages.filter(m => !m.isSidechain);
 
     // Step 2: Find all REAL user messages (these start groups)
-    // Use isParsedTriggerMessage to filter out noise
-    const userMessages = mainMessages.filter(isParsedTriggerMessage);
+    // Use isParsedUserChunkMessage to filter out noise
+    const userMessages = mainMessages.filter(isParsedUserChunkMessage);
 
     // Step 3: For each user message, collect all AI responses until next user message
     for (let i = 0; i < userMessages.length; i++) {
@@ -402,43 +484,6 @@ export class ChunkBuilder {
   }
 
   /**
-   * Collect responses for a user message.
-   * Note: Input messages should already be filtered for noise (no system/summary/snapshot messages).
-   */
-  private collectResponses(
-    messages: ParsedMessage[],
-    userMsg: ParsedMessage,
-    nextUserMsg: ParsedMessage | undefined
-  ): ParsedMessage[] {
-    const responses: ParsedMessage[] = [];
-    const startTime = userMsg.timestamp;
-    const endTime = nextUserMsg?.timestamp;
-
-    for (const msg of messages) {
-      // Skip if before this user message
-      if (msg.timestamp < startTime) continue;
-
-      // Skip if at or after next user message
-      if (endTime && msg.timestamp >= endTime) continue;
-
-      // Skip the user message itself
-      if (msg.uuid === userMsg.uuid) continue;
-
-      // Include assistant responses and response user messages
-      // Response user messages include:
-      // - Tool results (isMeta: true)
-      // - Interruptions (isMeta: false, array content)
-      // This ensures these are part of the response, not starting new chunks
-      // Noise messages are already filtered out at this point
-      if (isParsedAssistantMessage(msg) || isParsedResponseUserMessage(msg)) {
-        responses.push(msg);
-      }
-    }
-
-    return responses;
-  }
-
-  /**
    * Collect sidechain messages in a time range.
    */
   private collectSidechainMessages(
@@ -452,30 +497,6 @@ export class ChunkBuilder {
       if (endTime && m.timestamp >= endTime) return false;
       return true;
     });
-  }
-
-  /**
-   * Calculate chunk timing from user message and responses.
-   * Used for legacy chunks that combine user + responses.
-   */
-  private calculateChunkTiming(
-    userMsg: ParsedMessage,
-    responses: ParsedMessage[]
-  ): { startTime: Date; endTime: Date; durationMs: number } {
-    const startTime = userMsg.timestamp;
-
-    let endTime = startTime;
-    for (const resp of responses) {
-      if (resp.timestamp > endTime) {
-        endTime = resp.timestamp;
-      }
-    }
-
-    return {
-      startTime,
-      endTime,
-      durationMs: endTime.getTime() - startTime.getTime(),
-    };
   }
 
   /**
@@ -580,30 +601,6 @@ export class ChunkBuilder {
     executions.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
     return executions;
-  }
-
-  /**
-   * Link processes to AI chunks based on timing.
-   * Only AIChunks have processes, UserChunks do not.
-   */
-  private linkProcessesToChunks(chunks: (Chunk | EnhancedChunk)[], subagents: Process[]): void {
-    // Get only AI chunks (UserChunks don't have processes)
-    const aiChunks = chunks.filter(isAIChunk) as (AIChunk | EnhancedAIChunk)[];
-
-    for (const subagent of subagents) {
-      // Find the AI chunk that contains this subagent's start time
-      for (const chunk of aiChunks) {
-        if (subagent.startTime >= chunk.startTime && subagent.startTime <= chunk.endTime) {
-          chunk.processes.push(subagent);
-          break;
-        }
-      }
-    }
-
-    // Sort processes within each chunk
-    for (const chunk of aiChunks) {
-      chunk.processes.sort((a: Process, b: Process) => a.startTime.getTime() - b.startTime.getTime());
-    }
   }
 
   /**

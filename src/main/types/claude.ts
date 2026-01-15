@@ -212,7 +212,7 @@ export type ChatHistoryEntry = UserEntry | AssistantEntry | SystemEntry | Summar
  * - Older sessions: content as string
  * - Newer sessions: content as array with text/image blocks
  *
- * Note: For chunk creation, prefer `isTriggerMessage()` which also filters noise messages.
+ * Note: For chunk creation, prefer `isParsedUserChunkMessage()` which also filters noise messages.
  */
 export function isRealUserMessage(entry: ChatHistoryEntry): entry is UserEntry {
   if (entry.type !== 'user') return false;
@@ -382,86 +382,7 @@ export function isHardNoiseMessage(entry: ChatHistoryEntry): boolean {
   return false;
 }
 
-/**
- * Soft noise message - command-only messages like /model, /clear and their output.
- * These should be rendered IF the session has non-noise messages.
- *
- * Filtered patterns:
- * - User messages containing <command-name> tag (slash commands)
- * - User messages containing <local-command-stdout> tag (command output)
- * - These represent commands the user typed, but they may not have AI responses
- * - Examples: /model, /clear, /help
- *
- * Rendering logic:
- * - If session has ANY non-noise messages → render soft noise
- * - If session has ONLY noise messages → hide everything (empty session)
- *
- * Example soft noise:
- * ```json
- * {"type":"user","message":{"content":"<command-name>/model</command-name>..."},"isMeta":false}
- * {"type":"user","message":{"content":"<local-command-stdout>Context Usage...</local-command-stdout>"},"isMeta":true}
- * ```
- */
-export function isSoftNoiseMessage(entry: ChatHistoryEntry): boolean {
-  // Only user messages can be soft noise
-  if (entry.type !== 'user') return false;
 
-  const userEntry = entry as UserEntry;
-  const content = userEntry.message?.content;
-
-  if (typeof content === 'string') {
-    // Check for command tags - these are slash commands and their output
-    // They're visible user actions but may not have substantive AI responses
-    if (content.includes('<command-name>') || content.includes('<local-command-stdout>')) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Noise message - combines hard and soft noise for backward compatibility.
- * Returns true if the message is either hard noise OR soft noise.
- *
- * Two levels of noise:
- * 1. HARD NOISE (isHardNoiseMessage):
- *    - System metadata that should NEVER be displayed
- *    - Examples: file snapshots, system reminders, command output
- *    - Always filtered regardless of session content
- *
- * 2. SOFT NOISE (isSoftNoiseMessage):
- *    - Command-only messages (e.g., /model, /clear)
- *    - May be displayed if session has non-noise content
- *    - Hidden if session contains ONLY noise
- *
- * For most filtering use cases, use this combined function.
- * For advanced rendering logic, use isHardNoiseMessage() and isSoftNoiseMessage() separately.
- */
-export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
-  return isHardNoiseMessage(entry) || isSoftNoiseMessage(entry);
-}
-
-/**
- * Trigger message - genuine user input that starts chunks.
- * This is the primary filter for chunk creation.
- *
- * Requirements:
- * - Must be type: 'user'
- * - Must have isMeta !== true
- * - Must have string content (not array)
- * - Must NOT match noise message patterns
- *
- * Flow messages (responses, tool results, interruptions) are NOT trigger messages.
- * Noise messages (system metadata) are NOT trigger messages.
- */
-export function isTriggerMessage(entry: ChatHistoryEntry): entry is UserEntry {
-  // Must be a real user message first
-  if (!isRealUserMessage(entry)) return false;
-
-  // Must not be noise
-  return !isNoiseMessage(entry);
-}
 
 // =============================================================================
 // Content Type Guards
@@ -531,36 +452,38 @@ export function isImageContent(content: ContentBlock): content is ImageContent {
  * 4. User interrupts → type: "user", isMeta: false, content: array → FLOW MESSAGE (PART OF RESPONSE)
  * 5. Assistant continues → type: "assistant" → FLOW MESSAGE (PART OF RESPONSE)
  *
- * Message Categories:
+ * Message Categories (New 4-Category System):
  *
- * 1. TRIGGER MESSAGES (start chunks):
+ * 1. USER MESSAGES (create UserChunks):
  *    - Genuine user input that initiates a new request/response cycle
- *    - Detected by: isTriggerMessage() type guard
- *    - Requirements: type='user', isMeta!=true, string content, NOT noise
+ *    - Detected by: isParsedUserChunkMessage() type guard
+ *    - Requirements: type='user', isMeta!=true, has text/image content
+ *    - Excludes: <local-command-stdout>, <local-command-caveat>, <system-reminder>
+ *    - Allows: <command-name> (slash commands like /model are visible user input)
  *
- * 2. FLOW MESSAGES (part of responses):
- *    - All assistant messages
- *    - Internal user messages (tool results): isMeta=true
- *    - Interruption messages: user messages with array content
+ * 2. SYSTEM MESSAGES (create SystemChunks):
+ *    - Command output from slash commands
+ *    - Detected by: isParsedSystemChunkMessage() type guard
+ *    - Contains <local-command-stdout> tag
+ *    - Renders on LEFT side like AI responses
  *
- * 3. NOISE MESSAGES (filtered out):
- *    - System-generated metadata
- *    - file-history-snapshot entries
- *    - system entries with local_command subtype
- *    - User messages containing system metadata tags:
- *      <local-command-stdout>, <local-command-caveat>, <system-reminder>
- *    - Detected by: isNoiseMessage() type guard
+ * 3. HARD NOISE MESSAGES (filtered out):
+ *    - System-generated metadata that should NEVER be displayed
+ *    - Detected by: isParsedHardNoiseMessage() type guard
+ *    - Includes: system/summary/file-history-snapshot/queue-operation entries
+ *    - Includes: User messages with ONLY <local-command-caveat> or <system-reminder>
  *
- * 4. COMMAND MESSAGES (special trigger messages):
- *    - Slash commands the user typed (e.g., /model, /clear)
- *    - Contain <command-name>, <command-message>, <command-args> tags
- *    - ARE trigger messages (start chunks), but typically have no AI response
- *    - Visible in the chat UI as user actions
+ * 4. AI MESSAGES (create AIChunks):
+ *    - All assistant messages and flow messages between User/System/HardNoise
+ *    - Includes: assistant messages, tool results, interruptions
+ *    - Consecutive AI messages are grouped into single AIChunk
+ *    - AIChunks are INDEPENDENT - no longer paired with UserChunks
  *
  * Key Rules:
- * - Trigger messages (genuine user input, not noise) START chunks
- * - Flow messages (responses, tool results, interruptions) are PART of responses
- * - Noise messages are FILTERED OUT entirely
+ * - User messages START UserChunks (render on RIGHT)
+ * - System messages START SystemChunks (render on LEFT)
+ * - AI messages are GROUPED into independent AIChunks (render on LEFT)
+ * - Hard noise messages are FILTERED OUT entirely
  *
  * Tool Linking:
  * - tool_use.id in assistant message
@@ -647,6 +570,12 @@ export type TokenUsage = UsageMetadata;
  * Message type classification for parsed messages.
  */
 export type MessageType = 'user' | 'assistant' | 'system' | 'summary' | 'file-history-snapshot' | 'queue-operation';
+
+/**
+ * Message category for chunk building.
+ * Used to classify messages into one of four categories for independent chunk creation.
+ */
+export type MessageCategory = 'user' | 'system' | 'hardNoise' | 'ai';
 
 // =============================================================================
 // Project & Session Types
@@ -863,12 +792,12 @@ export interface UserChunk extends BaseChunk {
 /**
  * AI chunk - represents all assistant responses to a user message.
  * Contains responses, tool executions, and subagent spawns.
+ *
+ * NOTE: AI chunks are independent - they no longer reference a parent user chunk.
  */
 export interface AIChunk extends BaseChunk {
   /** Discriminator for chunk type */
   chunkType: 'ai';
-  /** Reference to the parent user chunk ID */
-  userChunkId: string;
   /** All assistant responses and internal messages */
   responses: ParsedMessage[];
   /** Processes spawned during this chunk */
@@ -880,10 +809,19 @@ export interface AIChunk extends BaseChunk {
 }
 
 /**
- * A chunk can be either a user input or AI response.
+ * System chunk - represents command output rendered like AI.
+ */
+export interface SystemChunk extends BaseChunk {
+  chunkType: 'system';
+  message: ParsedMessage;
+  commandOutput: string;  // Extracted from <local-command-stdout>
+}
+
+/**
+ * A chunk can be either a user input, AI response, or system output.
  * This discriminated union enables separate visualization and processing.
  */
-export type Chunk = UserChunk | AIChunk;
+export type Chunk = UserChunk | AIChunk | SystemChunk;
 
 /**
  * Tool execution with timing information.
@@ -1095,9 +1033,17 @@ export interface EnhancedUserChunk extends UserChunk {
 }
 
 /**
- * Enhanced chunk can be either user or AI type.
+ * Enhanced system chunk with additional metadata.
  */
-export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk;
+export interface EnhancedSystemChunk extends SystemChunk {
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+/**
+ * Enhanced chunk can be user, AI, or system type.
+ */
+export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk | EnhancedSystemChunk;
 
 // =============================================================================
 // Session Detail (complete parsed session)
@@ -1276,26 +1222,134 @@ export function isParsedRealUserMessage(msg: ParsedMessage): boolean {
 
   // String content format (older sessions)
   if (typeof content === 'string') {
-    // Exclude command output messages - they should be treated as system responses
-    // if (content.includes('<local-command-stdout>')) {
-    //   return false;
-    // }
     return true;
   }
 
   // Array content format (newer sessions)
   if (Array.isArray(content)) {
-    // Filter out system-generated interruption messages
-    if (content.length === 1 &&
-        content[0].type === 'text' &&
-        content[0].text === '[Request interrupted by user for tool use]') {
-      return false;
-    }
-
     // Check if it contains text or image blocks (real user input)
     // Exclude arrays with only tool_result blocks (those are internal messages)
     return content.some(block =>
       block.type === 'text' || block.type === 'image'
+    );
+  }
+
+  return false;
+}
+
+/**
+ * Type guard for User chunk creation - genuine user input that starts User chunks.
+ *
+ * Returns true if message should create a User chunk:
+ * - type='user'
+ * - isMeta!=true
+ * - Has text/image content
+ * - Content does NOT contain: <local-command-stdout>, <local-command-caveat>, <system-reminder>
+ * - Content MAY contain: <command-name> (slash commands like /model ARE user input)
+ *
+ * Example User chunk messages:
+ * - "Help me debug this code"
+ * - "<command-name>/model</command-name> Switch to sonnet"
+ *
+ * NOT User chunks:
+ * - "<local-command-stdout>Set model to...</local-command-stdout>" → System chunk
+ * - "<local-command-caveat>...</local-command-caveat>" → Hard noise
+ * - "<system-reminder>...</system-reminder>" → Hard noise
+ */
+export function isParsedUserChunkMessage(msg: ParsedMessage): boolean {
+  if (msg.type !== 'user') return false;
+  if (msg.isMeta === true) return false;
+
+  const content = msg.content;
+
+  // Check string content
+  if (typeof content === 'string') {
+    const trimmed = content.trim();
+
+    // Exclude messages that are system output or system metadata
+    // These tags indicate system-generated content, not user input
+    const excludeTags = [
+      '<local-command-stdout>',
+      '<local-command-caveat>',
+      '<system-reminder>'
+    ];
+
+    for (const tag of excludeTags) {
+      if (trimmed.includes(tag)) {
+        return false;
+      }
+    }
+
+    // <command-name> is ALLOWED - it's user-initiated slash commands
+    // Remaining content is genuine user input
+    return trimmed.length > 0;
+  }
+
+  // Array content format (newer sessions)
+  if (Array.isArray(content)) {
+    // Must contain text or image blocks for real user input
+    const hasUserContent = content.some(block =>
+      block.type === 'text' || block.type === 'image'
+    );
+
+    if (!hasUserContent) {
+      return false;
+    }
+
+    // Check text blocks for excluded tags
+    const excludeTags = [
+      '<local-command-stdout>',
+      '<local-command-caveat>',
+      '<system-reminder>'
+    ];
+
+    for (const block of content) {
+      if (block.type === 'text') {
+        const textBlock = block as TextContent;
+        for (const tag of excludeTags) {
+          if (textBlock.text.includes(tag)) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Type guard for System chunk creation - command output messages.
+ *
+ * Returns true if message should create a System chunk:
+ * - type='user' (confusingly, command output comes as user entries in JSONL)
+ * - Contains <local-command-stdout> tag
+ *
+ * System chunks render on the LEFT side (like AI responses) with neutral gray styling.
+ *
+ * Example:
+ * ```
+ * {
+ *   type: "user",
+ *   content: "<local-command-stdout>Set model to sonnet...</local-command-stdout>"
+ * }
+ * ```
+ */
+export function isParsedSystemChunkMessage(msg: ParsedMessage): boolean {
+  if (msg.type !== 'user') return false;
+
+  const content = msg.content;
+
+  if (typeof content === 'string') {
+    return content.includes('<local-command-stdout>');
+  }
+
+  // Array content - check text blocks
+  if (Array.isArray(content)) {
+    return content.some(block =>
+      block.type === 'text' && (block as TextContent).text.includes('<local-command-stdout>')
     );
   }
 
@@ -1430,73 +1484,6 @@ export function isParsedHardNoiseMessage(msg: ParsedMessage): boolean {
 }
 
 /**
- * Soft noise message (ParsedMessage version) - command-only messages like /model, /clear and their output.
- * This wraps isSoftNoiseMessage() but works with ParsedMessage instead of ChatHistoryEntry.
- *
- * Filtered patterns:
- * - User messages containing <command-name> tag (slash commands)
- * - User messages containing <local-command-stdout> tag (command output)
- * - These represent commands the user typed, but they may not have AI responses
- * - Examples: /model, /clear, /help
- *
- * Rendering logic:
- * - If session has ANY non-noise messages → render soft noise
- * - If session has ONLY noise messages → hide everything (empty session)
- */
-export function isParsedSoftNoiseMessage(msg: ParsedMessage): boolean {
-  // Only user messages can be soft noise
-  if (msg.type !== 'user') return false;
-
-  const content = msg.content;
-
-  if (typeof content === 'string') {
-    // Check for command tags - these are slash commands and their output
-    // They're visible user actions but may not have substantive AI responses
-    if (content.includes('<command-name>') || content.includes('<local-command-stdout>')) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/**
- * Noise message (ParsedMessage version) - combines hard and soft noise for backward compatibility.
- * This wraps isNoiseMessage() but works with ParsedMessage instead of ChatHistoryEntry.
- *
- * Returns true if the message is either hard noise OR soft noise.
- *
- * Two levels of noise:
- * 1. HARD NOISE (isParsedHardNoiseMessage):
- *    - System metadata that should NEVER be displayed
- *    - Examples: file snapshots, system reminders, command output
- *    - Always filtered regardless of session content
- *
- * 2. SOFT NOISE (isParsedSoftNoiseMessage):
- *    - Command-only messages (e.g., /model, /clear)
- *    - May be displayed if session has non-noise content
- *    - Hidden if session contains ONLY noise
- *
- * For most filtering use cases, use this combined function.
- * For advanced rendering logic, use isParsedHardNoiseMessage() and isParsedSoftNoiseMessage() separately.
- */
-export function isParsedNoiseMessage(msg: ParsedMessage): boolean {
-  return isParsedHardNoiseMessage(msg) || isParsedSoftNoiseMessage(msg);
-}
-
-/**
- * Type guard to check if a ParsedMessage is a trigger message (starts a chunk).
- * This wraps the spec's type guard but works with ParsedMessage instead of UserEntry.
- */
-export function isParsedTriggerMessage(msg: ParsedMessage): boolean {
-  // Must be a real user message first
-  if (!isParsedRealUserMessage(msg)) return false;
-
-  // Must not be noise
-  return !isParsedNoiseMessage(msg);
-}
-
-/**
  * Type guard to check if a ParsedMessage is a Task tool result.
  * Used to link Task tool calls with their subagent executions.
  */
@@ -1543,4 +1530,18 @@ export function isEnhancedUserChunk(chunk: Chunk | EnhancedChunk): chunk is Enha
  */
 export function isEnhancedAIChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedAIChunk {
   return isAIChunk(chunk) && 'semanticSteps' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is a SystemChunk.
+ */
+export function isSystemChunk(chunk: Chunk | EnhancedChunk): chunk is SystemChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'system';
+}
+
+/**
+ * Type guard to check if a chunk is an EnhancedSystemChunk.
+ */
+export function isEnhancedSystemChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedSystemChunk {
+  return isSystemChunk(chunk) && 'rawMessages' in chunk;
 }

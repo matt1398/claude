@@ -1,6 +1,7 @@
-import type { ConversationTurn } from '../../types/groups';
+import type { ChatItem, AIGroup } from '../../types/groups';
 import { UserChatGroup } from './UserChatGroup';
 import { AIChatGroup } from './AIChatGroup';
+import { SystemChatGroup } from './SystemChatGroup';
 import { useStore } from '../../store';
 import { useVisibleAIGroup } from '../../hooks/useVisibleAIGroup';
 
@@ -38,7 +39,7 @@ export function ChatHistory(): JSX.Element {
   }
 
   // Empty state
-  if (!conversation || conversation.turns.length === 0) {
+  if (!conversation || conversation.items.length === 0) {
     return (
       <div className="flex-1 overflow-hidden flex items-center justify-center">
         <div className="text-center text-gray-400 space-y-2">
@@ -52,27 +53,30 @@ export function ChatHistory(): JSX.Element {
     );
   }
 
-  // Render conversation
+  // Render conversation as flat list of items
+  const renderItem = (item: ChatItem): JSX.Element | null => {
+    switch (item.type) {
+      case 'user':
+        return <UserChatGroup key={item.group.id} userGroup={item.group} />;
+      case 'system':
+        return <SystemChatGroup key={item.group.id} systemGroup={item.group} />;
+      case 'ai':
+        return (
+          <div ref={registerAIGroupRef(item.group.id)} key={item.group.id}>
+            <AIChatGroup aiGroup={item.group as AIGroup} />
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="space-y-8">
-            {conversation.turns.map((turn: ConversationTurn) => (
-              <div key={turn.id} className="space-y-6">
-                {/* User message - right aligned */}
-                <UserChatGroup userGroup={turn.userGroup} />
-
-                {/* AI responses - left aligned with spacing */}
-                <div className="space-y-4">
-                  {turn.aiGroups.map((aiGroup) => (
-                    <div ref={registerAIGroupRef(aiGroup.id)} key={aiGroup.id}>
-                      <AIChatGroup aiGroup={aiGroup} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="space-y-6">
+            {conversation.items.map(renderItem)}
           </div>
         </div>
       </div>

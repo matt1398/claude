@@ -377,9 +377,21 @@ export interface AIChunk extends BaseChunk {
 }
 
 /**
- * A chunk can be either a user input or AI response.
+ * System chunk - represents command output rendered like AI.
  */
-export type Chunk = UserChunk | AIChunk;
+export interface SystemChunk extends BaseChunk {
+  /** Discriminator for chunk type */
+  chunkType: 'system';
+  /** The system message */
+  message: ParsedMessage;
+  /** Extracted command output text */
+  commandOutput: string;
+}
+
+/**
+ * A chunk can be user input, AI response, or system output.
+ */
+export type Chunk = UserChunk | AIChunk | SystemChunk;
 
 // =============================================================================
 // Conversation Group Types (Simplified Grouping Strategy)
@@ -587,9 +599,17 @@ export interface EnhancedUserChunk extends UserChunk {
 }
 
 /**
- * Enhanced chunk can be either user or AI type.
+ * Enhanced system chunk with additional metadata.
  */
-export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk;
+export interface EnhancedSystemChunk extends SystemChunk {
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+/**
+ * Enhanced chunk can be user, AI, or system type.
+ */
+export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk | EnhancedSystemChunk;
 
 // =============================================================================
 // Chunk Type Guards
@@ -621,6 +641,20 @@ export function isEnhancedUserChunk(chunk: Chunk | EnhancedChunk): chunk is Enha
  */
 export function isEnhancedAIChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedAIChunk {
   return isAIChunk(chunk) && 'semanticSteps' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is a SystemChunk.
+ */
+export function isSystemChunk(chunk: Chunk | EnhancedChunk): chunk is SystemChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'system';
+}
+
+/**
+ * Type guard to check if a chunk is an EnhancedSystemChunk.
+ */
+export function isEnhancedSystemChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedSystemChunk {
+  return isSystemChunk(chunk) && 'rawMessages' in chunk;
 }
 
 // =============================================================================

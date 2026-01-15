@@ -259,13 +259,15 @@ export const useStore = create<AppState>((set, get) => ({
         : null;
 
       if (conversation) {
-        console.log('[Store] Transformed to conversation with', conversation.turns.length, 'turns');
-        console.log('[Store] First turn has', conversation.turns[0]?.aiGroups?.length, 'AI groups');
+        console.log('[Store] Transformed to conversation with', conversation.items.length, 'items');
+        const aiItems = conversation.items.filter(item => item.type === 'ai');
+        console.log('[Store] Conversation has', aiItems.length, 'AI groups');
       }
 
       // Initialize visibleAIGroupId to first AI Group if available
-      const firstAIGroupId = conversation?.turns?.[0]?.aiGroups?.[0]?.id ?? null;
-      const firstAIGroup = conversation?.turns?.[0]?.aiGroups?.[0] ?? null;
+      const firstAIItem = conversation?.items?.find(item => item.type === 'ai');
+      const firstAIGroupId = firstAIItem?.type === 'ai' ? firstAIItem.group.id : null;
+      const firstAIGroup = firstAIItem?.type === 'ai' ? firstAIItem.group : null;
       console.log('[Store] Setting visibleAIGroupId to:', firstAIGroupId);
 
       set({
@@ -402,10 +404,9 @@ export const useStore = create<AppState>((set, get) => ({
     // Find the AIGroup in the conversation
     let selectedAIGroup: AIGroup | null = null;
     if (aiGroupId && state.conversation) {
-      for (const turn of state.conversation.turns) {
-        const found = turn.aiGroups.find(g => g.id === aiGroupId);
-        if (found) {
-          selectedAIGroup = found;
+      for (const item of state.conversation.items) {
+        if (item.type === 'ai' && item.group.id === aiGroupId) {
+          selectedAIGroup = item.group;
           break;
         }
       }

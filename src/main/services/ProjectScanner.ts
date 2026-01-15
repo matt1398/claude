@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import { Project, Session, ChatHistoryEntry, isNoiseMessage } from '../types/claude';
+import { Project, Session, ChatHistoryEntry, isHardNoiseMessage } from '../types/claude';
 import {
   decodePath,
   isValidEncodedPath,
@@ -181,8 +181,10 @@ export class ProjectScanner {
             continue;
           }
 
-          // If we find any non-noise message, return true immediately
-          if (!isNoiseMessage(entry)) {
+          // If we find any non-hard-noise message, return true immediately
+          // Hard noise includes system entries, summaries, file-history-snapshots, etc.
+          // Soft noise (commands) should now be visible, so we only filter hard noise
+          if (!isHardNoiseMessage(entry)) {
             fileStream.destroy();
             return true;
           }
