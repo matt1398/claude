@@ -35,7 +35,7 @@ import {
   isEnhancedUserChunk,
   isEnhancedAIChunk,
 } from '../types/data';
-import { sanitizeDisplayContent, isCommandContent } from './contentSanitizer';
+import { sanitizeDisplayContent, isCommandContent } from '../../shared/utils/contentSanitizer';
 
 // =============================================================================
 // Constants

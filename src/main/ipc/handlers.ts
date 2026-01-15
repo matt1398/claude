@@ -71,9 +71,6 @@ function registerHandlers(): void {
   ipcMain.handle('get-session-groups', handleGetSessionGroups);
   ipcMain.handle('get-session-metrics', handleGetSessionMetrics);
 
-  // Visualization handlers
-  ipcMain.handle('get-waterfall-data', handleGetWaterfallData);
-
   // Subagent handlers
   ipcMain.handle('get-subagent-detail', handleGetSubagentDetail);
 
@@ -270,41 +267,6 @@ async function handleGetSessionMetrics(
     return parsedSession.metrics;
   } catch (error) {
     console.error(`IPC: Error in get-session-metrics for ${projectId}/${sessionId}:`, error);
-    return null;
-  }
-}
-
-// =============================================================================
-// Visualization Handlers
-// =============================================================================
-
-/**
- * Handler for 'get-waterfall-data' IPC call.
- * Gets waterfall chart data for a session.
- */
-async function handleGetWaterfallData(
-  _event: IpcMainInvokeEvent,
-  projectId: string,
-  sessionId: string
-): Promise<WaterfallData | null> {
-  try {
-    console.log(`IPC: get-waterfall-data for ${projectId}/${sessionId}`);
-
-    if (!projectId || !sessionId) {
-      return null;
-    }
-
-    // Get session detail (will use cache if available)
-    const sessionDetail = await handleGetSessionDetail(_event, projectId, sessionId);
-
-    if (!sessionDetail) {
-      return null;
-    }
-
-    // Build waterfall data from chunks
-    return chunkBuilder.buildWaterfallData(sessionDetail.chunks);
-  } catch (error) {
-    console.error(`IPC: Error in get-waterfall-data for ${projectId}/${sessionId}:`, error);
     return null;
   }
 }

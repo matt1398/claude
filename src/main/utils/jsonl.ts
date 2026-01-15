@@ -27,7 +27,7 @@ import {
   isTextContent,
   isTriggerMessage,
 } from '../types/claude';
-import { sanitizeDisplayContent } from './contentSanitizer';
+import { sanitizeDisplayContent } from '../../shared/utils/contentSanitizer';
 
 // =============================================================================
 // Core Parsing Functions

@@ -23,7 +23,7 @@ import {
   EMPTY_METRICS,
   isParsedResponseUserMessage,
   isParsedAssistantMessage,
-  isParsedNoiseMessage,
+  isParsedHardNoiseMessage,
   isParsedTriggerMessage,
   SemanticStep,
   EnhancedChunk,
@@ -60,7 +60,8 @@ export class ChunkBuilder {
   /**
    * Build chunks from messages.
    * Produces separate UserChunks and AIChunks for independent visualization.
-   * Noise messages (commands, caveats, snapshots) are filtered out.
+   * Hard noise messages (caveats, snapshots) are filtered out.
+   * Soft noise messages (commands) pass through to trigger detection.
    * Returns EnhancedChunks with semantic step breakdown.
    */
   buildChunks(messages: ParsedMessage[], subagents: Process[] = []): EnhancedChunk[] {
@@ -68,13 +69,42 @@ export class ChunkBuilder {
 
     // Filter to main thread messages (non-sidechain)
     const mainMessages = messages.filter((m) => !m.isSidechain);
+    console.log(`[ChunkBuilder] Total messages: ${messages.length}, Main thread: ${mainMessages.length}`);
 
-    // Filter out noise messages (commands, caveats, snapshots)
-    const cleanMessages = mainMessages.filter((m) => !isParsedNoiseMessage(m));
+    // Filter out hard noise messages (caveats, snapshots)
+    // Soft noise (commands) pass through to trigger detection
+    const cleanMessages = mainMessages.filter((m) => !isParsedHardNoiseMessage(m));
+    const noiseCount = mainMessages.length - cleanMessages.length;
+    console.log(`[ChunkBuilder] After hard noise filter: ${cleanMessages.length} (filtered ${noiseCount} hard noise messages)`);
+
+    console.log(`[ChunkBuilder] Clean messages:`, cleanMessages);
+    // Log what types of messages were filtered as hard noise
+    if (noiseCount > 0) {
+      const noiseMessages = mainMessages.filter((m) => isParsedHardNoiseMessage(m));
+      const noiseTypes = new Map<string, number>();
+      for (const msg of noiseMessages) {
+        const key = msg.type;
+        noiseTypes.set(key, (noiseTypes.get(key) || 0) + 1);
+      }
+      console.log(`[ChunkBuilder] Hard noise message types:`, Object.fromEntries(noiseTypes));
+    }
 
     // Find all trigger messages (these start chunks)
     // Use isParsedTriggerMessage to identify genuine user inputs
     const userMessages = cleanMessages.filter(isParsedTriggerMessage);
+    const nonTriggerCount = cleanMessages.length - userMessages.length;
+    console.log(`[ChunkBuilder] Trigger messages: ${userMessages.length} (${nonTriggerCount} non-trigger clean messages)`);
+
+    // Log details about non-trigger clean messages (these should be responses)
+    if (nonTriggerCount > 0) {
+      const nonTriggers = cleanMessages.filter((m) => !isParsedTriggerMessage(m));
+      const nonTriggerTypes = new Map<string, number>();
+      for (const msg of nonTriggers) {
+        const key = `${msg.type}${msg.isMeta ? ' (meta)' : ''}`;
+        nonTriggerTypes.set(key, (nonTriggerTypes.get(key) || 0) + 1);
+      }
+      console.log(`[ChunkBuilder] Non-trigger message types:`, Object.fromEntries(nonTriggerTypes));
+    }
 
     for (let i = 0; i < userMessages.length; i++) {
       const userMsg = userMessages[i];
@@ -163,6 +193,11 @@ export class ChunkBuilder {
         aiChunk.semanticStepGroups = this.buildSemanticStepGroups(aiChunk.semanticSteps);
       }
     }
+
+    // Log final chunk summary
+    const userChunkCount = chunks.filter(isUserChunk).length;
+    const aiChunkCount = chunks.filter(isAIChunk).length;
+    console.log(`[ChunkBuilder] Created ${chunks.length} chunks: ${userChunkCount} user, ${aiChunkCount} AI`);
 
     return chunks;
   }
@@ -838,157 +873,6 @@ export class ChunkBuilder {
       processes: subagents,
       metrics,
     };
-  }
-
-  // ===========================================================================
-  // Waterfall Chart Data
-  // ===========================================================================
-
-  /**
-   * Build waterfall chart data from chunks.
-   */
-  buildWaterfallData(chunks: (Chunk | EnhancedChunk)[]): WaterfallData {
-    if (chunks.length === 0) {
-      const now = new Date();
-      return {
-        items: [],
-        minTime: now,
-        maxTime: now,
-        totalDurationMs: 0,
-      };
-    }
-
-    const items: WaterfallItem[] = [];
-    let itemIdCounter = 0;
-
-    // Find overall time range
-    const allTimes: number[] = [];
-    for (const chunk of chunks) {
-      allTimes.push(chunk.startTime.getTime(), chunk.endTime.getTime());
-      // Only AIChunks have processes
-      if (isAIChunk(chunk)) {
-        for (const process of chunk.processes) {
-          allTimes.push(process.startTime.getTime(), process.endTime.getTime());
-        }
-      }
-    }
-
-    const minTime = new Date(Math.min(...allTimes));
-    const maxTime = new Date(Math.max(...allTimes));
-    const totalDurationMs = maxTime.getTime() - minTime.getTime();
-
-    // Build items for each chunk
-    for (const chunk of chunks) {
-      const chunkItemId = `item-${++itemIdCounter}`;
-
-      // Main chunk item
-      items.push({
-        id: chunkItemId,
-        label: this.getChunkLabel(chunk),
-        startTime: chunk.startTime,
-        endTime: chunk.endTime,
-        durationMs: chunk.durationMs,
-        tokenUsage: {
-          input_tokens: chunk.metrics.inputTokens,
-          output_tokens: chunk.metrics.outputTokens,
-          cache_read_input_tokens: chunk.metrics.cacheReadTokens,
-          cache_creation_input_tokens: chunk.metrics.cacheCreationTokens,
-        },
-        level: 0,
-        type: 'chunk',
-        isParallel: false,
-      });
-
-      // Only AIChunks have processes and tool executions
-      if (isAIChunk(chunk)) {
-        // Process items
-        for (const process of chunk.processes) {
-          items.push({
-            id: `item-${++itemIdCounter}`,
-            label: process.description || process.subagentType || process.id,
-            startTime: process.startTime,
-            endTime: process.endTime,
-            durationMs: process.durationMs,
-            tokenUsage: {
-              input_tokens: process.metrics.inputTokens,
-              output_tokens: process.metrics.outputTokens,
-              cache_read_input_tokens: process.metrics.cacheReadTokens,
-              cache_creation_input_tokens: process.metrics.cacheCreationTokens,
-            },
-            level: 1,
-            type: 'subagent',
-            isParallel: process.isParallel,
-            parentId: chunkItemId,
-            metadata: {
-              subagentType: process.subagentType,
-              messageCount: process.metrics.messageCount,
-            },
-          });
-        }
-
-        // Tool execution items (optional, level 2)
-        for (const toolExec of chunk.toolExecutions) {
-          if (toolExec.durationMs && toolExec.durationMs > 100) {
-            // Only show significant tool executions
-            items.push({
-              id: `item-${++itemIdCounter}`,
-              label: toolExec.toolCall.name,
-              startTime: toolExec.startTime,
-              endTime: toolExec.endTime!,
-              durationMs: toolExec.durationMs,
-              tokenUsage: {
-                input_tokens: 0,
-                output_tokens: 0,
-              },
-              level: 2,
-              type: 'tool',
-              isParallel: false,
-              parentId: chunkItemId,
-              metadata: {
-                toolName: toolExec.toolCall.name,
-              },
-            });
-          }
-        }
-      }
-    }
-
-    return {
-      items,
-      minTime,
-      maxTime,
-      totalDurationMs,
-    };
-  }
-
-  /**
-   * Get a display label for a chunk.
-   */
-  private getChunkLabel(chunk: Chunk | EnhancedChunk): string {
-    // UserChunk: get text from user message
-    if (isUserChunk(chunk)) {
-      let text = '';
-      if (typeof chunk.userMessage.content === 'string') {
-        text = chunk.userMessage.content;
-      } else {
-        const textBlock = chunk.userMessage.content.find(isTextContent);
-        text = textBlock?.text || '';
-      }
-
-      // Truncate to 50 chars
-      if (text.length > 50) {
-        return text.substring(0, 50) + '...';
-      }
-      return text || `User ${chunk.id}`;
-    }
-
-    // AIChunk: use chunk ID with AI label
-    if (isAIChunk(chunk)) {
-      return `AI Response ${chunk.id}`;
-    }
-
-    // Fallback for exhaustive type check (should never reach here)
-    return `Chunk (unknown)`;
   }
 
   // ===========================================================================

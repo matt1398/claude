@@ -257,6 +257,29 @@ export function isAssistantMessage(msg: ParsedMessage): boolean {
   return msg.type === 'assistant';
 }
 
+/**
+ * Type guard: Check if message is a command output message.
+ *
+ * Command output messages are type:"user" but should display as assistant/system messages.
+ * They contain command output wrapped in <local-command-stdout> tags.
+ *
+ * Example:
+ * ```
+ * {
+ *   type: "user",
+ *   content: "<local-command-stdout>Set model to sonnet...</local-command-stdout>"
+ * }
+ * ```
+ */
+export function isCommandOutputMessage(msg: ParsedMessage): boolean {
+  if (msg.type !== 'user') return false;
+  const content = msg.content;
+  if (typeof content === 'string') {
+    return content.includes('<local-command-stdout>');
+  }
+  return false;
+}
+
 // =============================================================================
 // Process Types
 // =============================================================================

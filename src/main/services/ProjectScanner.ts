@@ -154,6 +154,9 @@ export class ProjectScanner {
    * - summary entries
    * - system entries with local_command subtype
    * - user messages with system metadata tags (local-command-stdout, etc.)
+   * - command messages (e.g., /model, /clear) with <command-name> tags
+   *
+   * Sessions containing ONLY noise messages are filtered out from the UI.
    */
   private async hasNonNoiseMessages(filePath: string): Promise<boolean> {
     if (!fs.existsSync(filePath)) {

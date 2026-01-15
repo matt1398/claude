@@ -256,7 +256,24 @@ export function isResponseUserMessage(entry: ChatHistoryEntry): entry is UserEnt
   if (userEntry.isMeta === true) return true;
 
   // Interruptions: array content (not string)
-  if (Array.isArray(userEntry.message?.content)) return true;
+  // IMPORTANT: Not all array content is interruption!
+  // Newer sessions use array format for ALL messages: [{type:'text', text:'...'}]
+  // Only classify as interruption if it does NOT contain text/image blocks
+  const content = userEntry.message?.content;
+  if (Array.isArray(content)) {
+    // Check if this is a real user message with text/image content
+    const hasUserContent = content.some(block =>
+      block && typeof block === 'object' && (block.type === 'text' || block.type === 'image')
+    );
+
+    // If it has text/image blocks, it's a real user message, not a response
+    if (hasUserContent) {
+      return false; // NOT a response message
+    }
+
+    // Otherwise it's an interruption or internal message
+    return true;
+  }
 
   return false;
 }
@@ -307,60 +324,122 @@ export function isTaskToolResult(entry: ChatHistoryEntry): entry is UserEntry {
 // =============================================================================
 
 /**
- * Noise message - system-generated metadata to be filtered.
- * These messages don't contribute to conversation flow or visualization.
+ * Hard noise message - NEVER rendered or counted in the UI.
+ * These are low-level system messages that should be completely invisible.
  *
- * Filtered patterns:
- * - file-history-snapshot entries
- * - system entries with local_command subtype
- * - user messages containing system XML tags:
- *   - <local-command-stdout> (command output - not user input)
- *   - <local-command-caveat> (system metadata)
- *   - <system-reminder> (system instructions)
+ * Filtered types:
+ * - 'system' entries
+ * - 'summary' entries
+ * - 'file-history-snapshot' entries
+ * - 'queue-operation' entries
  *
- * NOT filtered (these are real user commands that should be visible):
- * - <command-name>, <command-message>, <command-args>
- *   These represent slash commands the user typed (e.g., /model, /clear)
- *   They ARE trigger messages that start chunks, even if they have no AI response.
+ * Filtered user messages:
+ * - Messages containing ONLY these system metadata tags (no real content):
+ *   - <local-command-caveat>
+ *   - <system-reminder>
+ *
+ * Example hard noise:
+ * ```json
+ * {"type":"user","message":{"content":"<local-command-caveat>...</local-command-caveat>"},"isMeta":true}
+ * ```
  */
-export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
+export function isHardNoiseMessage(entry: ChatHistoryEntry): boolean {
   // Store type to avoid TypeScript narrowing issues
   const entryType = entry.type;
 
-  // Filter queue-operation entries
+  // Filter structural metadata types - these should never be displayed
+  if (entryType === 'system') return true;
+  if (entryType === 'summary') return true;
+  if (entryType === 'file-history-snapshot') return true;
   if (entryType === 'queue-operation') return true;
 
-  // Filter file-history-snapshot entries
-  if (entryType === 'file-history-snapshot') return true;
-
-  // Filter system entries with local_command subtype
-  if (entry.type === 'system') {
-    const systemEntry = entry as SystemEntry;
-    return systemEntry.subtype === 'local_command' as any;
-  }
-
-  // Filter user messages with system metadata tags
-  // NOTE: <command-name> is NOT filtered - it represents real user commands
+  // Filter user messages with ONLY system metadata tags (no real content)
   if (entry.type === 'user') {
     const userEntry = entry as UserEntry;
     const content = userEntry.message?.content;
 
     if (typeof content === 'string') {
-      // These are system-generated, not user input
-      const noiseTags = [
-        '<local-command-stdout>',
+      // These are system-generated metadata, not user input
+      const hardNoiseTags = [
         '<local-command-caveat>',
         '<system-reminder>'
       ];
 
-      // Filter if contains noise tags
-      if (noiseTags.some(tag => content.includes(tag))) {
-        return true;
+      // Check if content contains ONLY noise tags (trim whitespace)
+      const trimmedContent = content.trim();
+
+      // If the content is wrapped in a noise tag, it's hard noise
+      for (const tag of hardNoiseTags) {
+        const openTag = tag;
+        const closeTag = tag.replace('<', '</');
+        if (trimmedContent.startsWith(openTag) && trimmedContent.endsWith(closeTag)) {
+          return true;
+        }
       }
     }
   }
 
   return false;
+}
+
+/**
+ * Soft noise message - command-only messages like /model, /clear and their output.
+ * These should be rendered IF the session has non-noise messages.
+ *
+ * Filtered patterns:
+ * - User messages containing <command-name> tag (slash commands)
+ * - User messages containing <local-command-stdout> tag (command output)
+ * - These represent commands the user typed, but they may not have AI responses
+ * - Examples: /model, /clear, /help
+ *
+ * Rendering logic:
+ * - If session has ANY non-noise messages → render soft noise
+ * - If session has ONLY noise messages → hide everything (empty session)
+ *
+ * Example soft noise:
+ * ```json
+ * {"type":"user","message":{"content":"<command-name>/model</command-name>..."},"isMeta":false}
+ * {"type":"user","message":{"content":"<local-command-stdout>Context Usage...</local-command-stdout>"},"isMeta":true}
+ * ```
+ */
+export function isSoftNoiseMessage(entry: ChatHistoryEntry): boolean {
+  // Only user messages can be soft noise
+  if (entry.type !== 'user') return false;
+
+  const userEntry = entry as UserEntry;
+  const content = userEntry.message?.content;
+
+  if (typeof content === 'string') {
+    // Check for command tags - these are slash commands and their output
+    // They're visible user actions but may not have substantive AI responses
+    if (content.includes('<command-name>') || content.includes('<local-command-stdout>')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Noise message - combines hard and soft noise for backward compatibility.
+ * Returns true if the message is either hard noise OR soft noise.
+ *
+ * Two levels of noise:
+ * 1. HARD NOISE (isHardNoiseMessage):
+ *    - System metadata that should NEVER be displayed
+ *    - Examples: file snapshots, system reminders, command output
+ *    - Always filtered regardless of session content
+ *
+ * 2. SOFT NOISE (isSoftNoiseMessage):
+ *    - Command-only messages (e.g., /model, /clear)
+ *    - May be displayed if session has non-noise content
+ *    - Hidden if session contains ONLY noise
+ *
+ * For most filtering use cases, use this combined function.
+ * For advanced rendering logic, use isHardNoiseMessage() and isSoftNoiseMessage() separately.
+ */
+export function isNoiseMessage(entry: ChatHistoryEntry): boolean {
+  return isHardNoiseMessage(entry) || isSoftNoiseMessage(entry);
 }
 
 /**
@@ -1185,6 +1264,9 @@ export const EMPTY_TOKEN_USAGE: TokenUsage = {
  * Accepts both formats:
  * - Older sessions: content as string
  * - Newer sessions: content as array with text/image blocks
+ *
+ * Excludes command output messages (with <local-command-stdout>) which should
+ * be treated as system responses, not user input that starts new chunks.
  */
 export function isParsedRealUserMessage(msg: ParsedMessage): boolean {
   if (msg.type !== 'user') return false;
@@ -1193,7 +1275,13 @@ export function isParsedRealUserMessage(msg: ParsedMessage): boolean {
   const content = msg.content;
 
   // String content format (older sessions)
-  if (typeof content === 'string') return true;
+  if (typeof content === 'string') {
+    // Exclude command output messages - they should be treated as system responses
+    // if (content.includes('<local-command-stdout>')) {
+    //   return false;
+    // }
+    return true;
+  }
 
   // Array content format (newer sessions)
   if (Array.isArray(content)) {
@@ -1223,6 +1311,29 @@ export function isParsedInternalUserMessage(msg: ParsedMessage): boolean {
 }
 
 /**
+ * Type guard to check if a ParsedMessage is a command output message.
+ *
+ * Command output messages are type:"user" but should display as assistant/system messages.
+ * They contain command output wrapped in <local-command-stdout> tags.
+ *
+ * Example:
+ * ```
+ * {
+ *   type: "user",
+ *   content: "<local-command-stdout>Set model to sonnet...</local-command-stdout>"
+ * }
+ * ```
+ */
+export function isParsedCommandOutputMessage(msg: ParsedMessage): boolean {
+  if (msg.type !== 'user') return false;
+  const content = msg.content;
+  if (typeof content === 'string') {
+    return content.includes('<local-command-stdout>');
+  }
+  return false;
+}
+
+/**
  * Type guard for ParsedMessage that should be included in responses (not start new chunks).
  * This wraps the spec's type guard but works with ParsedMessage instead of UserEntry.
  */
@@ -1232,11 +1343,34 @@ export function isParsedResponseUserMessage(msg: ParsedMessage): boolean {
   // Internal messages (tool results) - isMeta: true
   if (msg.isMeta === true) return true;
 
+  // Command output messages - should be treated as system responses
+  if (isParsedCommandOutputMessage(msg)) return true;
+
   // Interruption messages - isMeta: false but array content
-  if (Array.isArray(msg.content)) return true;
+  // IMPORTANT: Not all array content is interruption!
+  // Newer sessions use array format for ALL messages: [{type:'text', text:'...'}]
+  // Only classify as interruption if:
+  // 1. Array content AND
+  // 2. Does NOT contain text/image blocks (i.e., only tool_result blocks)
+  if (Array.isArray(msg.content)) {
+    // Check if this is a real user message with text/image content
+    // Real user messages have text or image blocks
+    const hasUserContent = msg.content.some(block =>
+      block.type === 'text' || block.type === 'image'
+    );
+
+    // If it has text/image blocks, it's a real user message, not a response
+    if (hasUserContent) {
+      return false; // NOT a response message, should be a trigger
+    }
+
+    // Otherwise it's an interruption or internal message (array content but no text/image)
+    return true;
+  }
 
   return false;
 }
+
 
 /**
  * Type guard to check if a ParsedMessage is an assistant message.
@@ -1246,40 +1380,108 @@ export function isParsedAssistantMessage(msg: ParsedMessage): boolean {
 }
 
 /**
- * Type guard to check if a ParsedMessage is a noise message.
- * This wraps the spec's type guard but works with ParsedMessage instead of ChatHistoryEntry.
+ * Hard noise message (ParsedMessage version) - NEVER rendered or counted in the UI.
+ * This wraps isHardNoiseMessage() but works with ParsedMessage instead of ChatHistoryEntry.
  *
- * NOT filtered (these are real user commands that should be visible):
- * - <command-name>, <command-message>, <command-args>
- *   These represent slash commands the user typed (e.g., /model, /clear)
- *   They ARE trigger messages that start chunks, even if they have no AI response.
+ * Filtered types:
+ * - 'system' entries
+ * - 'summary' entries
+ * - 'file-history-snapshot' entries
+ * - 'queue-operation' entries
+ *
+ * Filtered user messages:
+ * - Messages containing ONLY these system metadata tags (no real content):
+ *   - <local-command-caveat>
+ *   - <system-reminder>
  */
-export function isParsedNoiseMessage(msg: ParsedMessage): boolean {
-  // Queue operations are metadata
+export function isParsedHardNoiseMessage(msg: ParsedMessage): boolean {
+  // Filter structural metadata types - these should never be displayed
+  if (msg.type === 'system') return true;
+  if (msg.type === 'summary') return true;
+  if (msg.type === 'file-history-snapshot') return true;
   if (msg.type === 'queue-operation') return true;
 
-  // File snapshots are metadata, not messages
-  if (msg.type === 'file-history-snapshot') return true;
-
-  // Summaries are aggregated context, not conversation
-  if (msg.type === 'summary') return true;
-
-  // System messages are metadata
-  if (msg.type === 'system') return true;
-
-  // User messages with system metadata tags (NOT command tags)
+  // Filter user messages with ONLY system metadata tags (no real content)
   if (msg.type === 'user') {
     const content = msg.content;
+
     if (typeof content === 'string') {
-      // These are system-generated metadata, filter them out
-      // NOTE: <command-name> etc. are NOT filtered - they represent real user commands
-      if (content.includes('<local-command-caveat>')) return true;
-      if (content.includes('<local-command-stdout>')) return true;
-      if (content.includes('<system-reminder>')) return true;
+      // These are system-generated metadata, not user input
+      const hardNoiseTags = [
+        '<local-command-caveat>',
+        '<system-reminder>'
+      ];
+
+      // Check if content contains ONLY noise tags (trim whitespace)
+      const trimmedContent = content.trim();
+
+      // If the content is wrapped in a noise tag, it's hard noise
+      for (const tag of hardNoiseTags) {
+        const openTag = tag;
+        const closeTag = tag.replace('<', '</');
+        if (trimmedContent.startsWith(openTag) && trimmedContent.endsWith(closeTag)) {
+          return true;
+        }
+      }
     }
   }
 
   return false;
+}
+
+/**
+ * Soft noise message (ParsedMessage version) - command-only messages like /model, /clear and their output.
+ * This wraps isSoftNoiseMessage() but works with ParsedMessage instead of ChatHistoryEntry.
+ *
+ * Filtered patterns:
+ * - User messages containing <command-name> tag (slash commands)
+ * - User messages containing <local-command-stdout> tag (command output)
+ * - These represent commands the user typed, but they may not have AI responses
+ * - Examples: /model, /clear, /help
+ *
+ * Rendering logic:
+ * - If session has ANY non-noise messages → render soft noise
+ * - If session has ONLY noise messages → hide everything (empty session)
+ */
+export function isParsedSoftNoiseMessage(msg: ParsedMessage): boolean {
+  // Only user messages can be soft noise
+  if (msg.type !== 'user') return false;
+
+  const content = msg.content;
+
+  if (typeof content === 'string') {
+    // Check for command tags - these are slash commands and their output
+    // They're visible user actions but may not have substantive AI responses
+    if (content.includes('<command-name>') || content.includes('<local-command-stdout>')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Noise message (ParsedMessage version) - combines hard and soft noise for backward compatibility.
+ * This wraps isNoiseMessage() but works with ParsedMessage instead of ChatHistoryEntry.
+ *
+ * Returns true if the message is either hard noise OR soft noise.
+ *
+ * Two levels of noise:
+ * 1. HARD NOISE (isParsedHardNoiseMessage):
+ *    - System metadata that should NEVER be displayed
+ *    - Examples: file snapshots, system reminders, command output
+ *    - Always filtered regardless of session content
+ *
+ * 2. SOFT NOISE (isParsedSoftNoiseMessage):
+ *    - Command-only messages (e.g., /model, /clear)
+ *    - May be displayed if session has non-noise content
+ *    - Hidden if session contains ONLY noise
+ *
+ * For most filtering use cases, use this combined function.
+ * For advanced rendering logic, use isParsedHardNoiseMessage() and isParsedSoftNoiseMessage() separately.
+ */
+export function isParsedNoiseMessage(msg: ParsedMessage): boolean {
+  return isParsedHardNoiseMessage(msg) || isParsedSoftNoiseMessage(msg);
 }
 
 /**
