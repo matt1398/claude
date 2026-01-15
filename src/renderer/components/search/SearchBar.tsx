@@ -47,7 +47,7 @@ export function SearchBar() {
   }
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 bg-claude-dark-bg border-b border-claude-dark-border">
+    <div className="absolute top-2 right-4 z-10 flex items-center gap-2 px-3 py-2 bg-claude-dark-bg border border-claude-dark-border rounded-lg shadow-lg">
       {/* Search input */}
       <input
         ref={inputRef}
@@ -56,7 +56,7 @@ export function SearchBar() {
         onChange={(e) => setSearchQuery(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Find in conversation..."
-        className="flex-1 bg-claude-dark-surface text-claude-dark-text text-sm px-3 py-1.5 rounded border border-claude-dark-border focus:outline-none focus:border-claude-dark-text-secondary"
+        className="w-48 bg-claude-dark-surface text-claude-dark-text text-sm px-3 py-1.5 rounded border border-claude-dark-border focus:outline-none focus:border-claude-dark-text-secondary"
       />
 
       {/* Result count */}
@@ -69,11 +69,11 @@ export function SearchBar() {
       )}
 
       {/* Navigation buttons */}
-      <div className="flex gap-1">
+      <div className="flex gap-0.5">
         <button
           onClick={previousSearchResult}
           disabled={searchResultCount === 0}
-          className="p-1.5 text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-1 text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title="Previous result (Shift+Enter)"
         >
           <ChevronUp className="w-4 h-4" />
@@ -81,7 +81,7 @@ export function SearchBar() {
         <button
           onClick={nextSearchResult}
           disabled={searchResultCount === 0}
-          className="p-1.5 text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-1 text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           title="Next result (Enter)"
         >
           <ChevronDown className="w-4 h-4" />
@@ -91,7 +91,7 @@ export function SearchBar() {
       {/* Close button */}
       <button
         onClick={hideSearch}
-        className="p-1.5 text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface rounded transition-colors"
+        className="p-1 text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface rounded transition-colors"
         title="Close (Esc)"
       >
         <X className="w-4 h-4" />

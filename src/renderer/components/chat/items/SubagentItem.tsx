@@ -14,6 +14,7 @@ interface SubagentItemProps {
   subagent: Process;
   onClick: () => void;
   isExpanded: boolean;
+  aiGroupId: string;
 }
 
 // =============================================================================
@@ -57,9 +58,10 @@ function formatTokens(tokens: number): string {
 
 interface ExecutionTraceProps {
   items: AIGroupDisplayItem[];
+  aiGroupId: string;
 }
 
-const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items }) => {
+const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId }) => {
   // Local state for inline item expansion
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
@@ -103,6 +105,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items }) => {
                 preview={preview}
                 onClick={() => handleItemClick(itemId)}
                 isExpanded={isExpanded}
+                aiGroupId={aiGroupId}
               />
             );
           }
@@ -131,6 +134,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items }) => {
                 preview={preview}
                 onClick={() => handleItemClick(itemId)}
                 isExpanded={isExpanded}
+                aiGroupId={aiGroupId}
               />
             );
           }
@@ -170,7 +174,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items }) => {
 // Main Component
 // =============================================================================
 
-export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick, isExpanded }) => {
+export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick, isExpanded, aiGroupId }) => {
   const description = subagent.description || step.content.subagentDescription || 'Subagent';
   const subagentType = subagent.subagentType || 'Task';
   const totalTokens = subagent.metrics.totalTokens || 0;
@@ -294,7 +298,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
               {/* Execution trace content */}
               {showTrace && (
                 <div className="pl-2 bg-zinc-900/50 border border-zinc-800/40 rounded-lg py-2">
-                  <ExecutionTrace items={displayItems} />
+                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} />
                 </div>
               )}
             </div>

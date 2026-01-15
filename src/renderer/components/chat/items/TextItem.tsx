@@ -2,15 +2,19 @@ import React from 'react';
 import { MessageSquare, ChevronRight } from 'lucide-react';
 import type { SemanticStep } from '../../../types/data';
 import { MarkdownViewer } from './MarkdownViewer';
+import { SearchHighlight } from '../SearchHighlight';
+import { useStore } from '../../../store';
 
 interface TextItemProps {
   step: SemanticStep;
   preview: string;
   onClick: () => void;
   isExpanded: boolean;
+  aiGroupId: string;
 }
 
-export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isExpanded }) => {
+export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isExpanded, aiGroupId }) => {
+  const searchQuery = useStore((s) => s.searchQuery);
   const fullContent = step.content.outputText || preview;
   // Truncate preview to ~60 chars for collapsed one-liner
   const truncatedPreview = preview.length > 60 ? preview.slice(0, 60) + '...' : preview;
@@ -32,10 +36,16 @@ export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isEx
       {/* Expanded Content */}
       {isExpanded && (
         <div className="pl-4 ml-2 mt-1 mb-2">
-          <MarkdownViewer
-            content={fullContent}
-            maxHeight="max-h-96"
-          />
+          {searchQuery ? (
+            <div className="rounded-lg border border-zinc-700/30 bg-zinc-900/50 p-4 max-h-96 overflow-y-auto">
+              <SearchHighlight text={fullContent} itemId={aiGroupId} className="text-sm text-zinc-300 whitespace-pre-wrap" />
+            </div>
+          ) : (
+            <MarkdownViewer
+              content={fullContent}
+              maxHeight="max-h-96"
+            />
+          )}
         </div>
       )}
     </div>

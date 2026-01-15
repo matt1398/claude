@@ -9,6 +9,7 @@ interface DisplayItemListProps {
   items: AIGroupDisplayItem[];
   onItemClick: (itemId: string) => void;
   expandedItemIds: Set<string>;
+  aiGroupId: string;
 }
 
 /**
@@ -32,7 +33,7 @@ function truncateText(text: string, maxLength: number): string {
  *
  * The list is completely flat with no nested toggles or hierarchies.
  */
-export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds }) => {
+export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds, aiGroupId }) => {
   if (!items || items.length === 0) {
     return (
       <div className="px-3 py-2 text-sm text-claude-dark-text-secondary italic">
@@ -71,6 +72,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
                 preview={preview}
                 onClick={handleClick}
                 isExpanded={isExpanded}
+                aiGroupId={aiGroupId}
               />
             );
           }
@@ -101,6 +103,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
                 preview={preview}
                 onClick={handleClick}
                 isExpanded={isExpanded}
+                aiGroupId={aiGroupId}
               />
             );
           }
@@ -149,6 +152,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
                 subagent={item.subagent}
                 onClick={handleClick}
                 isExpanded={isExpanded}
+                aiGroupId={aiGroupId}
               />
             );
           }

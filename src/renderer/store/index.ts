@@ -10,6 +10,20 @@ interface BreadcrumbItem {
   description: string;
 }
 
+/**
+ * Represents a single search match in the conversation.
+ */
+export interface SearchMatch {
+  /** ID of the chat item containing this match */
+  itemId: string;
+  /** Type of item ('user' | 'system' | 'ai') */
+  itemType: 'user' | 'system' | 'ai';
+  /** Which match within this item (0-based) */
+  matchIndexInItem: number;
+  /** Global index across all matches */
+  globalIndex: number;
+}
+
 interface AppState {
   // Projects state
   projects: Project[];
@@ -73,6 +87,7 @@ interface AppState {
   searchVisible: boolean;
   searchResultCount: number;
   currentSearchIndex: number;
+  searchMatches: SearchMatch[];
 
   // Command palette state
   commandPaletteOpen: boolean;
@@ -124,7 +139,7 @@ interface AppState {
   // Command palette actions
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
-  navigateToSession: (projectId: string, sessionId: string) => void;
+  navigateToSession: (projectId: string, sessionId: string, fromSearch?: boolean) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -178,6 +193,7 @@ export const useStore = create<AppState>((set, get) => ({
   searchVisible: false,
   searchResultCount: 0,
   currentSearchIndex: -1,
+  searchMatches: [],
 
   // Command palette state
   commandPaletteOpen: false,
@@ -671,8 +687,79 @@ export const useStore = create<AppState>((set, get) => ({
   // Search actions
 
   setSearchQuery: (query: string) => {
-    set({ searchQuery: query, currentSearchIndex: query ? 0 : -1 });
-    // TODO: Calculate searchResultCount based on actual search results
+    const conversation = get().conversation;
+
+    if (!query.trim() || !conversation) {
+      set({
+        searchQuery: query,
+        searchResultCount: 0,
+        currentSearchIndex: -1,
+        searchMatches: []
+      });
+      return;
+    }
+
+    // Build search matches by scanning conversation
+    const matches: SearchMatch[] = [];
+    const lowerQuery = query.toLowerCase();
+    let globalIndex = 0;
+
+    for (const item of conversation.items) {
+      let searchableTexts: string[] = [];
+      let itemId = '';
+      let itemType: 'user' | 'system' | 'ai' = 'user';
+
+      if (item.type === 'user') {
+        itemId = item.group.id;
+        itemType = 'user';
+        const text = item.group.content.rawText || item.group.content.text || '';
+        searchableTexts = [text];
+      } else if (item.type === 'system') {
+        itemId = item.group.id;
+        itemType = 'system';
+        searchableTexts = [item.group.commandOutput || ''];
+      } else if (item.type === 'ai') {
+        itemId = item.group.id;
+        itemType = 'ai';
+        // Collect text from all steps
+        for (const step of item.group.steps) {
+          if (step.content.thinkingText) {
+            searchableTexts.push(step.content.thinkingText);
+          }
+          if (step.content.outputText) {
+            searchableTexts.push(step.content.outputText);
+          }
+          if (step.content.toolResultContent) {
+            searchableTexts.push(step.content.toolResultContent);
+          }
+        }
+      }
+
+      // Count matches in all searchable texts for this item
+      let matchIndexInItem = 0;
+      for (const text of searchableTexts) {
+        const lowerText = text.toLowerCase();
+        let pos = 0;
+        while ((pos = lowerText.indexOf(lowerQuery, pos)) !== -1) {
+          matches.push({
+            itemId,
+            itemType,
+            matchIndexInItem,
+            globalIndex,
+          });
+          matchIndexInItem++;
+          globalIndex++;
+          pos += lowerQuery.length;
+        }
+      }
+    }
+
+    set({
+      searchQuery: query,
+      searchResultCount: matches.length,
+      currentSearchIndex: matches.length > 0 ? 0 : -1,
+      searchMatches: matches
+    });
   },
 
   showSearch: () => {
@@ -680,7 +767,13 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   hideSearch: () => {
-    set({ searchVisible: false, searchQuery: '', searchResultCount: 0, currentSearchIndex: -1 });
+    set({
+      searchVisible: false,
+      searchQuery: '',
+      searchResultCount: 0,
+      currentSearchIndex: -1,
+      searchMatches: []
+    });
   },
 
   nextSearchResult: () => {
@@ -709,7 +802,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ commandPaletteOpen: false });
   },
 
-  navigateToSession: (projectId: string, sessionId: string) => {
+  navigateToSession: (projectId: string, sessionId: string, fromSearch = false) => {
     const state = get();
 
     // If different project, select it first
@@ -723,7 +816,13 @@ export const useStore = create<AppState>((set, get) => ({
       label: 'Loading...',
       projectId,
       sessionId,
+      fromSearch,
     });
+
+    // If opened from search, clear sidebar selection to deselect
+    if (fromSearch) {
+      set({ selectedSessionId: null });
+    }
 
     // Fetch session detail
     state.fetchSessionDetail(projectId, sessionId);

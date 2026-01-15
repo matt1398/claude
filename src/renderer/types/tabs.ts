@@ -30,6 +30,9 @@ export interface Tab {
 
   /** Unix timestamp when tab was opened */
   createdAt: number;
+
+  /** Whether this tab was opened from CommandPalette search */
+  fromSearch?: boolean;
 }
 
 /**

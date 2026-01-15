@@ -49,6 +49,11 @@ export function TabBar() {
               onClick={() => setActiveTab(tab.id)}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
+              {tab.fromSearch && (
+                <span title="Opened from search">
+                  <Search className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                </span>
+              )}
               <span className="text-sm truncate">{tab.label}</span>
               <button
                 className="w-4 h-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 hover:bg-claude-dark-border transition-opacity flex-shrink-0"

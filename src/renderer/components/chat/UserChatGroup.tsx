@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { User } from 'lucide-react';
 import type { UserGroup } from '../../types/groups';
 import { HighlightedText } from './HighlightedText';
+import { SearchHighlight } from './SearchHighlight';
 import { useStore } from '../../store';
 
 interface UserChatGroupProps {
@@ -19,12 +20,15 @@ interface UserChatGroupProps {
  * - Shows image count indicator
  */
 export function UserChatGroup({ userGroup }: UserChatGroupProps) {
-  const { content, timestamp } = userGroup;
+  const { content, timestamp, id: groupId } = userGroup;
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Get projectPath from store for path validation in HighlightedText
   const sessionDetail = useStore((s) => s.sessionDetail);
   const projectPath = sessionDetail?.session?.projectPath;
+
+  // Get search state for highlighting
+  const searchQuery = useStore((s) => s.searchQuery);
 
   const hasImages = content.images.length > 0;
   // Use rawText to preserve /commands inline (HighlightedText will highlight them)
@@ -51,7 +55,11 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
         {textContent && (
           <div className="bg-blue-600/15 rounded-2xl rounded-br-sm px-4 py-3">
             <div className="text-zinc-100 text-sm whitespace-pre-wrap break-words">
-              <HighlightedText text={displayText} projectPath={projectPath} />
+              {searchQuery ? (
+                <SearchHighlight text={displayText} itemId={groupId} />
+              ) : (
+                <HighlightedText text={displayText} projectPath={projectPath} />
+              )}
             </div>
             {isLongContent && (
               <button

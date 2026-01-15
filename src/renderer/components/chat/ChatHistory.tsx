@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { ChatItem, AIGroup } from '../../types/groups';
 import { UserChatGroup } from './UserChatGroup';
 import { AIChatGroup } from './AIChatGroup';
@@ -10,11 +11,30 @@ export function ChatHistory(): JSX.Element {
   const conversation = useStore((s) => s.conversation);
   const conversationLoading = useStore((s) => s.conversationLoading);
   const setVisibleAIGroup = useStore((s) => s.setVisibleAIGroup);
+  const currentSearchIndex = useStore((s) => s.currentSearchIndex);
 
   const { registerAIGroupRef } = useVisibleAIGroup({
     onVisibleChange: (aiGroupId) => setVisibleAIGroup(aiGroupId),
     threshold: 0.5,
   });
+
+  // Scroll to current search result when it changes
+  useEffect(() => {
+    if (currentSearchIndex < 0) return;
+
+    // Small delay to ensure DOM has updated with highlighted content
+    const timeoutId = setTimeout(() => {
+      const currentResultElement = document.querySelector('[data-search-result="current"]');
+      if (currentResultElement) {
+        currentResultElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      }
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
+  }, [currentSearchIndex]);
 
   // Loading state
   if (conversationLoading) {

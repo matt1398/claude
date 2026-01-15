@@ -94,13 +94,14 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
             items={enhanced.displayItems}
             onItemClick={handleItemClick}
             expandedItemIds={expandedItemIds}
+            aiGroupId={aiGroup.id}
           />
         </div>
       )}
 
       {/* Always-visible Output */}
       <div>
-        <LastOutputDisplay lastOutput={enhanced.lastOutput} />
+        <LastOutputDisplay lastOutput={enhanced.lastOutput} aiGroupId={aiGroup.id} />
       </div>
     </div>
   );

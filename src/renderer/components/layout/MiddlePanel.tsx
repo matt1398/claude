@@ -4,7 +4,7 @@ import { SearchBar } from '../search/SearchBar';
 
 export const MiddlePanel: React.FC = () => {
   return (
-    <div className="flex flex-col h-full">
+    <div className="relative flex flex-col h-full">
       <SearchBar />
       <ChatHistory />
     </div>

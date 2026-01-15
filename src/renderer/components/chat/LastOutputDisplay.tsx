@@ -3,9 +3,12 @@ import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AIGroupLastOutput } from '../../types/groups';
+import { SearchHighlight } from './SearchHighlight';
+import { useStore } from '../../store';
 
 interface LastOutputDisplayProps {
   lastOutput: AIGroupLastOutput | null;
+  aiGroupId: string;
 }
 
 /**
@@ -18,7 +21,9 @@ interface LastOutputDisplayProps {
  * - Handles error states for tool results
  * - Shows timestamp
  */
-export function LastOutputDisplay({ lastOutput }: LastOutputDisplayProps) {
+export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayProps) {
+  const searchQuery = useStore((s) => s.searchQuery);
+
   if (!lastOutput) {
     return null;
   }
@@ -33,9 +38,13 @@ export function LastOutputDisplay({ lastOutput }: LastOutputDisplayProps) {
           {format(timestamp, 'h:mm:ss a')}
         </div>
         <div className="prose prose-invert prose-sm max-w-none">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {lastOutput.text}
-          </ReactMarkdown>
+          {searchQuery ? (
+            <SearchHighlight text={lastOutput.text} itemId={aiGroupId} />
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {lastOutput.text}
+            </ReactMarkdown>
+          )}
         </div>
       </div>
     );
@@ -66,7 +75,11 @@ export function LastOutputDisplay({ lastOutput }: LastOutputDisplayProps) {
           )}
         </div>
         <pre className="text-sm text-claude-dark-text whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto">
-          {lastOutput.toolResult}
+          {searchQuery ? (
+            <SearchHighlight text={lastOutput.toolResult} itemId={aiGroupId} />
+          ) : (
+            lastOutput.toolResult
+          )}
         </pre>
       </div>
     );

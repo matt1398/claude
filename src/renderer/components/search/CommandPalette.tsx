@@ -97,7 +97,7 @@ export function CommandPalette() {
   // Handle result click
   const handleResultClick = useCallback((result: SearchResult) => {
     closeCommandPalette();
-    navigateToSession(result.projectId, result.sessionId);
+    navigateToSession(result.projectId, result.sessionId, true); // fromSearch = true
   }, [closeCommandPalette, navigateToSession]);
 
   // Handle backdrop click
