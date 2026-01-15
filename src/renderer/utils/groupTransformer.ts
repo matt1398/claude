@@ -346,12 +346,13 @@ function createSystemGroup(chunk: EnhancedSystemChunk, index: number): SystemGro
  *
  * @param chunk - The compact chunk to transform
  * @param index - Index within the session (for ordering)
- * @returns CompactGroup marking where conversation was compacted
+ * @returns CompactGroup marking where conversation was compacted, with message content
  */
 function createCompactGroup(chunk: EnhancedCompactChunk, index: number): CompactGroup {
   return {
     id: `compact-${index}`,
     timestamp: chunk.startTime,
+    message: chunk.message,  // Pass through the compact summary message
   };
 }
 

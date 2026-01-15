@@ -266,10 +266,12 @@ export interface AIGroup {
 
 /**
  * Compact Group - marks where conversation was compacted.
+ * Contains the compact summary message with the conversation summary.
  */
 export interface CompactGroup {
   id: string;
   timestamp: Date;
+  message: ParsedMessage;  // Contains compact summary in message.content
 }
 
 /**

@@ -391,10 +391,13 @@ export interface SystemChunk extends BaseChunk {
 
 /**
  * Compact chunk - marks where conversation was compacted/summarized.
+ * Contains the compact summary message.
  */
 export interface CompactChunk extends BaseChunk {
   /** Discriminator for chunk type */
   chunkType: 'compact';
+  /** The compact summary message */
+  message: ParsedMessage;
 }
 
 /**
