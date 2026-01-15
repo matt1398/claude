@@ -390,9 +390,17 @@ export interface SystemChunk extends BaseChunk {
 }
 
 /**
- * A chunk can be user input, AI response, or system output.
+ * Compact chunk - marks where conversation was compacted/summarized.
  */
-export type Chunk = UserChunk | AIChunk | SystemChunk;
+export interface CompactChunk extends BaseChunk {
+  /** Discriminator for chunk type */
+  chunkType: 'compact';
+}
+
+/**
+ * A chunk can be user input, AI response, system output, or compact marker.
+ */
+export type Chunk = UserChunk | AIChunk | SystemChunk | CompactChunk;
 
 // =============================================================================
 // Conversation Group Types (Simplified Grouping Strategy)
@@ -609,9 +617,17 @@ export interface EnhancedSystemChunk extends SystemChunk {
 }
 
 /**
- * Enhanced chunk can be user, AI, or system type.
+ * Enhanced compact chunk with additional metadata.
  */
-export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk | EnhancedSystemChunk;
+export interface EnhancedCompactChunk extends CompactChunk {
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+/**
+ * Enhanced chunk can be user, AI, system, or compact type.
+ */
+export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk | EnhancedSystemChunk | EnhancedCompactChunk;
 
 // =============================================================================
 // Chunk Type Guards
@@ -657,6 +673,20 @@ export function isSystemChunk(chunk: Chunk | EnhancedChunk): chunk is SystemChun
  */
 export function isEnhancedSystemChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedSystemChunk {
   return isSystemChunk(chunk) && 'rawMessages' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is a CompactChunk.
+ */
+export function isCompactChunk(chunk: Chunk | EnhancedChunk): chunk is CompactChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'compact';
+}
+
+/**
+ * Type guard to check if a chunk is an EnhancedCompactChunk.
+ */
+export function isEnhancedCompactChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedCompactChunk {
+  return isCompactChunk(chunk) && 'rawMessages' in chunk;
 }
 
 // =============================================================================

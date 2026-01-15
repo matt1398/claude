@@ -18,6 +18,7 @@ import type {
   AIGroupTokens,
   ChatItem,
   SystemGroup,
+  CompactGroup,
   SessionConversation,
 } from '../types/groups';
 
@@ -26,6 +27,7 @@ import type {
   EnhancedUserChunk,
   EnhancedAIChunk,
   EnhancedSystemChunk,
+  EnhancedCompactChunk,
   ParsedMessage,
   Process,
   SemanticStep,
@@ -37,6 +39,7 @@ import {
   isEnhancedUserChunk,
   isEnhancedAIChunk,
   isEnhancedSystemChunk,
+  isEnhancedCompactChunk,
 } from '../types/data';
 import { sanitizeDisplayContent, isCommandContent } from '../../shared/utils/contentSanitizer';
 
@@ -80,6 +83,7 @@ export function transformChunksToConversation(
       totalUserGroups: 0,
       totalSystemGroups: 0,
       totalAIGroups: 0,
+      totalCompactGroups: 0,
     };
   }
 
@@ -87,6 +91,7 @@ export function transformChunksToConversation(
   let userCount = 0;
   let systemCount = 0;
   let aiCount = 0;
+  let compactCount = 0;
 
   for (const chunk of chunks) {
     // Debug: Log chunk type info
@@ -114,6 +119,11 @@ export function transformChunksToConversation(
         type: 'ai',
         group: createAIGroupFromChunk(chunk, aiCount++),
       });
+    } else if (isEnhancedCompactChunk(chunk)) {
+      items.push({
+        type: 'compact',
+        group: createCompactGroup(chunk, compactCount++),
+      });
     }
   }
 
@@ -123,6 +133,7 @@ export function transformChunksToConversation(
     totalUserGroups: userCount,
     totalSystemGroups: systemCount,
     totalAIGroups: aiCount,
+    totalCompactGroups: compactCount,
   };
 }
 
@@ -315,6 +326,24 @@ function createSystemGroup(chunk: EnhancedSystemChunk, index: number): SystemGro
     message: chunk.message,
     timestamp: chunk.startTime,
     commandOutput: chunk.commandOutput,
+  };
+}
+
+// =============================================================================
+// CompactGroup Creation
+// =============================================================================
+
+/**
+ * Creates a CompactGroup from an EnhancedCompactChunk.
+ *
+ * @param chunk - The compact chunk to transform
+ * @param index - Index within the session (for ordering)
+ * @returns CompactGroup marking where conversation was compacted
+ */
+function createCompactGroup(chunk: EnhancedCompactChunk, index: number): CompactGroup {
+  return {
+    id: `compact-${index}`,
+    timestamp: chunk.startTime,
   };
 }
 

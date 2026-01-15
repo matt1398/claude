@@ -265,13 +265,22 @@ export interface AIGroup {
 // =============================================================================
 
 /**
- * Chat item - can be user, system, or AI.
+ * Compact Group - marks where conversation was compacted.
+ */
+export interface CompactGroup {
+  id: string;
+  timestamp: Date;
+}
+
+/**
+ * Chat item - can be user, system, ai, or compact.
  * These are INDEPENDENT items in a flat list, not paired turns.
  */
 export type ChatItem =
   | { type: 'user'; group: UserGroup }
   | { type: 'system'; group: SystemGroup }
-  | { type: 'ai'; group: AIGroup };
+  | { type: 'ai'; group: AIGroup }
+  | { type: 'compact'; group: CompactGroup };
 
 /**
  * Session conversation as a flat list of independent chat items.
@@ -288,6 +297,8 @@ export interface SessionConversation {
   totalSystemGroups: number;
   /** Total count of AI groups */
   totalAIGroups: number;
+  /** Total count of compact groups */
+  totalCompactGroups: number;
 }
 
 // =============================================================================

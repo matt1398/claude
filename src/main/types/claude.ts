@@ -575,7 +575,7 @@ export type MessageType = 'user' | 'assistant' | 'system' | 'summary' | 'file-hi
  * Message category for chunk building.
  * Used to classify messages into one of four categories for independent chunk creation.
  */
-export type MessageCategory = 'user' | 'system' | 'hardNoise' | 'ai';
+export type MessageCategory = 'user' | 'system' | 'hardNoise' | 'ai' | 'compact';
 
 // =============================================================================
 // Project & Session Types
@@ -694,6 +694,8 @@ export interface ParsedMessage {
   sourceToolAssistantUUID?: string;
   /** Tool use result information if this is a tool result message */
   toolUseResult?: ToolUseResultData;
+  /** Whether this is a compact summary boundary message */
+  isCompactSummary?: boolean;
 }
 
 /**
@@ -818,10 +820,18 @@ export interface SystemChunk extends BaseChunk {
 }
 
 /**
- * A chunk can be either a user input, AI response, or system output.
+ * Compact boundary chunk - marks where conversation was compacted.
+ */
+export interface CompactChunk extends BaseChunk {
+  chunkType: 'compact';
+  message: ParsedMessage;
+}
+
+/**
+ * A chunk can be either a user input, AI response, system output, or compact boundary.
  * This discriminated union enables separate visualization and processing.
  */
-export type Chunk = UserChunk | AIChunk | SystemChunk;
+export type Chunk = UserChunk | AIChunk | SystemChunk | CompactChunk;
 
 /**
  * Tool execution with timing information.
@@ -1042,9 +1052,17 @@ export interface EnhancedSystemChunk extends SystemChunk {
 }
 
 /**
- * Enhanced chunk can be user, AI, or system type.
+ * Enhanced compact chunk with additional metadata.
  */
-export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk | EnhancedSystemChunk;
+export interface EnhancedCompactChunk extends CompactChunk {
+  /** Raw messages for debug sidebar */
+  rawMessages: ParsedMessage[];
+}
+
+/**
+ * Enhanced chunk can be user, AI, system, or compact type.
+ */
+export type EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk | EnhancedSystemChunk | EnhancedCompactChunk;
 
 // =============================================================================
 // Session Detail (complete parsed session)
@@ -1518,6 +1536,14 @@ export function isParsedTaskToolResult(msg: ParsedMessage): boolean {
   );
 }
 
+/**
+ * Detect compact summary messages.
+ * These are markers indicating conversation was compacted.
+ */
+export function isParsedCompactMessage(msg: ParsedMessage): boolean {
+  return msg.isCompactSummary === true;
+}
+
 // =============================================================================
 // Chunk Type Guards
 // =============================================================================
@@ -1562,4 +1588,18 @@ export function isSystemChunk(chunk: Chunk | EnhancedChunk): chunk is SystemChun
  */
 export function isEnhancedSystemChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedSystemChunk {
   return isSystemChunk(chunk) && 'rawMessages' in chunk;
+}
+
+/**
+ * Type guard to check if a chunk is a CompactChunk.
+ */
+export function isCompactChunk(chunk: Chunk | EnhancedChunk): chunk is CompactChunk {
+  return 'chunkType' in chunk && chunk.chunkType === 'compact';
+}
+
+/**
+ * Type guard to check if a chunk is an EnhancedCompactChunk.
+ */
+export function isEnhancedCompactChunk(chunk: Chunk | EnhancedChunk): chunk is EnhancedCompactChunk {
+  return isCompactChunk(chunk) && 'rawMessages' in chunk;
 }

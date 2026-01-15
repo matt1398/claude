@@ -21,17 +21,20 @@ import {
   isParsedHardNoiseMessage,
   isParsedUserChunkMessage,
   isParsedSystemChunkMessage,
+  isParsedCompactMessage,
   SemanticStep,
   EnhancedChunk,
   EnhancedUserChunk,
   EnhancedAIChunk,
   EnhancedSystemChunk,
+  EnhancedCompactChunk,
   ContentBlock,
   SemanticStepGroup,
   isUserChunk,
   isAIChunk,
   isEnhancedAIChunk,
   isSystemChunk,
+  isCompactChunk,
   ConversationGroup,
   TaskExecution,
   ToolCall,
@@ -93,6 +96,15 @@ export class ChunkBuilder {
           // Skip - filtered out
           break;
 
+        case 'compact':
+          // Flush any buffered AI messages first
+          if (aiBuffer.length > 0) {
+            chunks.push(this.buildAIChunkFromBuffer(aiBuffer, subagents, messages));
+            aiBuffer = [];
+          }
+          chunks.push(this.buildCompactChunk(message));
+          break;
+
         case 'user':
           // Flush any buffered AI messages first
           if (aiBuffer.length > 0) {
@@ -126,7 +138,8 @@ export class ChunkBuilder {
     const userChunkCount = chunks.filter(isUserChunk).length;
     const aiChunkCount = chunks.filter(isAIChunk).length;
     const systemChunkCount = chunks.filter(isSystemChunk).length;
-    console.log(`[ChunkBuilder] Created ${chunks.length} chunks: ${userChunkCount} user, ${aiChunkCount} AI, ${systemChunkCount} system`);
+    const compactChunkCount = chunks.filter(isCompactChunk).length;
+    console.log(`[ChunkBuilder] Created ${chunks.length} chunks: ${userChunkCount} user, ${aiChunkCount} AI, ${systemChunkCount} system, ${compactChunkCount} compact`);
 
     return chunks;
   }
@@ -146,12 +159,17 @@ export class ChunkBuilder {
   }
 
   /**
-   * Categorize a single message into one of four categories.
+   * Categorize a single message into one of five categories.
    */
   private categorizeMessage(message: ParsedMessage): MessageCategory {
     // Check hard noise first (filtered out)
     if (isParsedHardNoiseMessage(message)) {
       return 'hardNoise';
+    }
+
+    // Check compact summary (before system/user to catch it early)
+    if (isParsedCompactMessage(message)) {
+      return 'compact';
     }
 
     // Check system (command output)
@@ -204,6 +222,25 @@ export class ChunkBuilder {
       chunkType: 'system',
       message,
       commandOutput,
+      startTime: message.timestamp,
+      endTime: message.timestamp,
+      durationMs: 0,
+      metrics,
+      rawMessages: [message],
+    };
+  }
+
+  /**
+   * Build a CompactChunk from a compact summary message.
+   */
+  private buildCompactChunk(message: ParsedMessage): EnhancedCompactChunk {
+    const id = generateChunkId();
+    const metrics = calculateMetrics([message]);
+
+    return {
+      id,
+      chunkType: 'compact',
+      message,
       startTime: message.timestamp,
       endTime: message.timestamp,
       durationMs: 0,

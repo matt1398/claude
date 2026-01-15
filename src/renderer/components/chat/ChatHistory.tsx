@@ -2,6 +2,7 @@ import type { ChatItem, AIGroup } from '../../types/groups';
 import { UserChatGroup } from './UserChatGroup';
 import { AIChatGroup } from './AIChatGroup';
 import { SystemChatGroup } from './SystemChatGroup';
+import { CompactBoundary } from './CompactBoundary';
 import { useStore } from '../../store';
 import { useVisibleAIGroup } from '../../hooks/useVisibleAIGroup';
 
@@ -66,6 +67,8 @@ export function ChatHistory(): JSX.Element {
             <AIChatGroup aiGroup={item.group as AIGroup} />
           </div>
         );
+      case 'compact':
+        return <CompactBoundary key={item.group.id} compactGroup={item.group} />;
       default:
         return null;
     }

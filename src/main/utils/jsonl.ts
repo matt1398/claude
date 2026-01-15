@@ -165,6 +165,7 @@ export function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | 
   let parentUuid: string | null = null;
 
   // Extract properties based on entry type
+  let isCompactSummary = false;
   if (entry.type === 'user' || entry.type === 'assistant' || entry.type === 'system') {
     const convEntry = entry as any; // Use any to access common properties
     content = convEntry.message?.content ?? '';
@@ -178,6 +179,7 @@ export function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | 
     isMeta = convEntry.isMeta ?? false;
     userType = convEntry.userType;
     parentUuid = convEntry.parentUuid ?? null;
+    isCompactSummary = convEntry.isCompactSummary === true;
 
     if (entry.type === 'user') {
       sourceToolUseID = convEntry.sourceToolUseID;
@@ -208,6 +210,7 @@ export function parseChatHistoryEntry(entry: ChatHistoryEntry): ParsedMessage | 
     isSidechain,
     isMeta,
     userType,
+    isCompactSummary,
     // Tool info
     toolCalls,
     toolResults,
