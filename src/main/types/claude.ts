@@ -944,6 +944,7 @@ export interface SemanticStep {
     subagentId?: string;        // For subagent
     subagentDescription?: string;
     outputText?: string;        // For output
+    sourceModel?: string;       // For tool_call - model from source assistant message
   };
 
   /** Token attribution */
@@ -1447,6 +1448,9 @@ export function isParsedAssistantMessage(msg: ParsedMessage): boolean {
  * - Messages containing ONLY these system metadata tags (no real content):
  *   - <local-command-caveat>
  *   - <system-reminder>
+ *
+ * Filtered assistant messages:
+ * - Synthetic messages with model='<synthetic>' (system-generated placeholders)
  */
 export function isParsedHardNoiseMessage(msg: ParsedMessage): boolean {
   // Filter structural metadata types - these should never be displayed
@@ -1454,6 +1458,11 @@ export function isParsedHardNoiseMessage(msg: ParsedMessage): boolean {
   if (msg.type === 'summary') return true;
   if (msg.type === 'file-history-snapshot') return true;
   if (msg.type === 'queue-operation') return true;
+
+  // Filter synthetic assistant messages (system-generated placeholders)
+  if (msg.type === 'assistant' && msg.model === '<synthetic>') {
+    return true;
+  }
 
   // Filter user messages with ONLY system metadata tags (no real content)
   if (msg.type === 'user') {

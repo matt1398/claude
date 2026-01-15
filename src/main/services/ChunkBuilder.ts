@@ -771,6 +771,7 @@ export class ChunkBuilder {
                 content: {
                   toolName: block.name,
                   toolInput: block.input,
+                  sourceModel: msg.model,
                 },
                 context: msg.agentId ? 'subagent' : 'main',
                 agentId: msg.agentId,

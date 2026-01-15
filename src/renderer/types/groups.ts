@@ -4,6 +4,7 @@
  */
 
 import type { ParsedMessage, SemanticStep, Process, SessionMetrics, ToolUseResultData } from './data';
+import type { ModelInfo } from '../../shared/utils/modelParser';
 
 // =============================================================================
 // Expansion Levels
@@ -163,6 +164,8 @@ export interface LinkedToolItem {
   durationMs?: number;
   /** Whether this is an orphaned call (no result) */
   isOrphaned: boolean;
+  /** Model used for the assistant message containing this tool call */
+  sourceModel?: string;
 }
 
 /**
@@ -207,6 +210,10 @@ export interface EnhancedAIGroup extends AIGroup {
   linkedTools: Map<string, LinkedToolItem>;
   /** Human-readable summary of items (e.g., "2 thinking, 4 tool calls, 3 subagents") */
   itemsSummary: string;
+  /** Model used by main agent (most common if mixed) */
+  mainModel: ModelInfo | null;
+  /** Unique models used by subagents (if different from main) */
+  subagentModels: ModelInfo[];
 }
 
 /**

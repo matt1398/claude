@@ -516,6 +516,7 @@ export interface SemanticStep {
     subagentId?: string;        // For subagent
     subagentDescription?: string;
     outputText?: string;        // For output
+    sourceModel?: string;       // For tool_call - model from source assistant message
   };
 
   /** Token attribution */

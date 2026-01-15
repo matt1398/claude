@@ -4,6 +4,7 @@ import type { AIGroup, EnhancedAIGroup } from '../../types/groups';
 import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
 import { DisplayItemList } from './DisplayItemList';
+import { getModelColorClass } from '../../../shared/utils/modelParser';
 
 interface AIChatGroupProps {
   aiGroup: AIGroup;
@@ -47,6 +48,29 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
         >
           <Bot className="w-4 h-4 text-zinc-500" />
           <span className="text-xs font-medium text-zinc-400">Claude</span>
+
+          {/* Main agent model */}
+          {enhanced.mainModel && (
+            <span className={`text-xs ${getModelColorClass(enhanced.mainModel.family)}`}>
+              {enhanced.mainModel.name}
+            </span>
+          )}
+
+          {/* Subagent models if different */}
+          {enhanced.subagentModels.length > 0 && (
+            <>
+              <span className="text-zinc-600">→</span>
+              <span className="text-xs text-zinc-500">
+                {enhanced.subagentModels.map((m, i) => (
+                  <span key={m.name}>
+                    {i > 0 && ', '}
+                    <span className={getModelColorClass(m.family)}>{m.name}</span>
+                  </span>
+                ))}
+              </span>
+            </>
+          )}
+
           <span className="text-xs text-zinc-600">·</span>
           <span className="text-xs text-zinc-500">{enhanced.itemsSummary}</span>
           <ChevronDown

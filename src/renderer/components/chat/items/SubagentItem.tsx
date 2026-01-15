@@ -6,6 +6,7 @@ import { ThinkingItem } from './ThinkingItem';
 import { TextItem } from './TextItem';
 import { LinkedToolItem } from './LinkedToolItem';
 import { buildDisplayItemsFromMessages, buildSummary, truncateText } from '../../../utils/aiGroupEnhancer';
+import { parseModelString, getModelColorClass } from '../../../../shared/utils/modelParser';
 
 interface SubagentItemProps {
   step: SemanticStep;
@@ -198,6 +199,15 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
     return buildSummary(displayItems);
   }, [isExpanded, displayItems, subagent.messages]);
 
+  // Extract model info from first assistant message
+  const modelInfo = useMemo(() => {
+    const assistantMsg = subagent.messages?.find(
+      m => m.type === 'assistant' && m.model && m.model !== '<synthetic>'
+    );
+    if (!assistantMsg?.model) return null;
+    return parseModelString(assistantMsg.model);
+  }, [subagent.messages]);
+
   // State to control trace visibility (separate from isExpanded which controls header)
   const [showTrace, setShowTrace] = useState(false);
 
@@ -210,6 +220,11 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
       >
         <Bot className="w-4 h-4 text-cyan-400 flex-shrink-0" />
         <span className="inline-block px-2 py-0.5 rounded-full bg-zinc-800 text-xs font-medium text-cyan-300">{subagentType}</span>
+        {modelInfo && (
+          <span className={`text-xs ${getModelColorClass(modelInfo.family)}`}>
+            {modelInfo.name}
+          </span>
+        )}
         <span className="text-zinc-600">→</span>
         <span className="text-zinc-500 truncate flex-1">{truncatedDesc}</span>
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 flex-shrink-0"></span>
@@ -241,6 +256,12 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
                 <span className="text-zinc-500">Tokens:</span>{' '}
                 <span className="text-zinc-300">{formatTokens(totalTokens)}</span>
               </div>
+              {modelInfo && (
+                <div>
+                  <span className="text-zinc-500">Model:</span>{' '}
+                  <span className={getModelColorClass(modelInfo.family)}>{modelInfo.name}</span>
+                </div>
+              )}
               <div>
                 <span className="text-zinc-500">ID:</span>{' '}
                 <span className="text-zinc-300 font-mono">{subagent.id || 'N/A'}</span>
