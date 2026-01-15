@@ -8,10 +8,6 @@
  * - get-session-groups: Get conversation groups for a session (alternative to chunks)
  * - get-session-metrics: Get metrics for a session
  * - get-waterfall-data: Get waterfall chart data for a session
- * - get-subagent-detail: Get detailed information for a specific subagent
- * - start-watching-session: Start watching a session file for changes
- * - stop-watching-session: Stop watching the current session file
- * - refresh-current-session: Clear cache and re-fetch session detail
  * - validate-skill: Validate if a skill exists (global or project-specific)
  * - validate-path: Validate if a file/directory path exists relative to project
  * - validate-mentions: Batch validate multiple items (more efficient)
@@ -20,12 +16,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { ipcMain, IpcMainInvokeEvent, BrowserWindow } from 'electron';
+import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import {
   Project,
   Session,
   SessionDetail,
   SessionMetrics,
+  WaterfallData,
   SubagentDetail,
   ConversationGroup,
 } from '../types/claude';
@@ -34,7 +31,6 @@ import { SessionParser } from '../services/SessionParser';
 import { SubagentResolver } from '../services/SubagentResolver';
 import { ChunkBuilder } from '../services/ChunkBuilder';
 import { DataCache } from '../services/DataCache';
-import { FileWatcher } from '../services/FileWatcher';
 
 // Service instances
 let projectScanner: ProjectScanner;
@@ -42,8 +38,6 @@ let sessionParser: SessionParser;
 let subagentResolver: SubagentResolver;
 let chunkBuilder: ChunkBuilder;
 let dataCache: DataCache;
-let fileWatcher: FileWatcher;
-let mainWindow: BrowserWindow | null = null;
 
 /**
  * Initializes IPC handlers with service instances.
@@ -53,17 +47,13 @@ export function initializeIpcHandlers(
   parser: SessionParser,
   resolver: SubagentResolver,
   builder: ChunkBuilder,
-  cache: DataCache,
-  watcher: FileWatcher,
-  window: BrowserWindow
+  cache: DataCache
 ): void {
   projectScanner = scanner;
   sessionParser = parser;
   subagentResolver = resolver;
   chunkBuilder = builder;
   dataCache = cache;
-  fileWatcher = watcher;
-  mainWindow = window;
 
   registerHandlers();
 }
@@ -83,11 +73,6 @@ function registerHandlers(): void {
 
   // Subagent handlers
   ipcMain.handle('get-subagent-detail', handleGetSubagentDetail);
-
-  // Session watching handlers
-  ipcMain.handle('start-watching-session', handleStartWatchingSession);
-  ipcMain.handle('stop-watching-session', handleStopWatchingSession);
-  ipcMain.handle('refresh-current-session', handleRefreshCurrentSession);
 
   // Validation handlers
   ipcMain.handle('validate-skill', handleValidateSkill);
@@ -351,105 +336,6 @@ async function handleGetSubagentDetail(
 }
 
 // =============================================================================
-// Session Watching Handlers
-// =============================================================================
-
-/**
- * Handler for 'start-watching-session' IPC call.
- * Starts watching a specific session file for changes and sends updates to renderer.
- */
-async function handleStartWatchingSession(
-  _event: IpcMainInvokeEvent,
-  projectId: string,
-  sessionId: string
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log(`IPC: start-watching-session for ${projectId}/${sessionId}`);
-
-    if (!projectId || !sessionId) {
-      return { success: false, error: 'Invalid parameters' };
-    }
-
-    // Build session file path
-    const sessionPath = projectScanner.getSessionPath(projectId, sessionId);
-
-    if (!fs.existsSync(sessionPath)) {
-      return { success: false, error: `Session file not found: ${sessionPath}` };
-    }
-
-    // Stop any existing watcher
-    fileWatcher.stopWatchingSession();
-
-    // Start watching with callback
-    await fileWatcher.startWatchingSession(sessionPath, (content) => {
-      // Send updated content to renderer
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('session-file-updated', {
-          projectId,
-          sessionId,
-          content
-        });
-      }
-    });
-
-    console.log(`IPC: Started watching session: ${sessionPath}`);
-    return { success: true };
-  } catch (error) {
-    console.error('IPC: Error starting session watch:', error);
-    return { success: false, error: String(error) };
-  }
-}
-
-/**
- * Handler for 'stop-watching-session' IPC call.
- * Stops watching the current session file.
- */
-async function handleStopWatchingSession(
-  _event: IpcMainInvokeEvent
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    console.log('IPC: stop-watching-session');
-    fileWatcher.stopWatchingSession();
-    return { success: true };
-  } catch (error) {
-    console.error('IPC: Error stopping session watch:', error);
-    return { success: false, error: String(error) };
-  }
-}
-
-/**
- * Handler for 'refresh-current-session' IPC call.
- * Clears cache and re-fetches session detail.
- */
-async function handleRefreshCurrentSession(
-  _event: IpcMainInvokeEvent,
-  projectId: string,
-  sessionId: string
-): Promise<SessionDetail | null> {
-  try {
-    console.log(`IPC: refresh-current-session for ${projectId}/${sessionId}`);
-
-    if (!projectId || !sessionId) {
-      console.error('IPC: refresh-current-session called with invalid parameters');
-      return null;
-    }
-
-    // Clear cache for this session
-    dataCache.invalidateSession(projectId, sessionId);
-    console.log(`IPC: Cleared cache for ${projectId}/${sessionId}`);
-
-    // Re-fetch session detail (will parse fresh from disk)
-    const sessionDetail = await handleGetSessionDetail(_event, projectId, sessionId);
-
-    console.log(`IPC: Refreshed session with ${sessionDetail?.chunks.length || 0} chunks`);
-    return sessionDetail;
-  } catch (error) {
-    console.error(`IPC: Error refreshing session for ${projectId}/${sessionId}:`, error);
-    return null;
-  }
-}
-
-// =============================================================================
 // Validation Handlers
 // =============================================================================
 
@@ -544,9 +430,6 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-session-metrics');
   ipcMain.removeHandler('get-waterfall-data');
   ipcMain.removeHandler('get-subagent-detail');
-  ipcMain.removeHandler('start-watching-session');
-  ipcMain.removeHandler('stop-watching-session');
-  ipcMain.removeHandler('refresh-current-session');
   ipcMain.removeHandler('validate-skill');
   ipcMain.removeHandler('validate-path');
   ipcMain.removeHandler('validate-mentions');

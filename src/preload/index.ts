@@ -26,28 +26,6 @@ const electronAPI: ElectronAPI = {
     mentions: { type: 'skill' | 'path'; value: string }[],
     projectPath: string
   ) => ipcRenderer.invoke('validate-mentions', mentions, projectPath),
-
-  // Session watching methods
-  startWatchingSession: (projectId: string, sessionId: string) =>
-    ipcRenderer.invoke('start-watching-session', projectId, sessionId),
-  stopWatchingSession: () =>
-    ipcRenderer.invoke('stop-watching-session'),
-  refreshCurrentSession: (projectId: string, sessionId: string) =>
-    ipcRenderer.invoke('refresh-current-session', projectId, sessionId),
-
-  // Event listeners
-  onSessionFileUpdated: (callback: (data: { projectId: string; sessionId: string; content: string }) => void) => {
-    ipcRenderer.on('session-file-updated', (_event, data) => callback(data));
-  },
-  onTriggerSoftRefresh: (callback: () => void) => {
-    ipcRenderer.on('trigger-soft-refresh', () => callback());
-  },
-  removeSessionFileUpdatedListener: () => {
-    ipcRenderer.removeAllListeners('session-file-updated');
-  },
-  removeTriggerSoftRefreshListener: () => {
-    ipcRenderer.removeAllListeners('trigger-soft-refresh');
-  },
 };
 
 // Use contextBridge to securely expose the API to the renderer process

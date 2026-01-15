@@ -15,6 +15,9 @@ export function useKeyboardShortcuts() {
     setActiveTab,
     showSearch,
     getActiveTab,
+    selectedProjectId,
+    selectedSessionId,
+    fetchSessionDetail,
   } = useStore();
 
   useEffect(() => {
@@ -141,15 +144,17 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+R: Recent sessions (placeholder for future implementation)
+      // Cmd+R: Refresh current session
       if (event.key === 'r') {
         event.preventDefault();
-        console.log('Recent sessions shortcut triggered (not yet implemented)');
+        if (selectedProjectId && selectedSessionId) {
+          fetchSessionDetail(selectedProjectId, selectedSessionId);
+        }
         return;
       }
     }
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab]);
+  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail]);
 }
