@@ -25,6 +25,7 @@ import {
   WaterfallData,
   SubagentDetail,
   ConversationGroup,
+  PaginatedSessionsResult,
 } from '../types/claude';
 import { ProjectScanner } from '../services/ProjectScanner';
 import { SessionParser } from '../services/SessionParser';
@@ -67,6 +68,7 @@ function registerHandlers(): void {
 
   // Session handlers
   ipcMain.handle('get-sessions', handleGetSessions);
+  ipcMain.handle('get-sessions-paginated', handleGetSessionsPaginated);
   ipcMain.handle('get-session-detail', handleGetSessionDetail);
   ipcMain.handle('get-session-groups', handleGetSessionGroups);
   ipcMain.handle('get-session-metrics', handleGetSessionMetrics);
@@ -128,6 +130,33 @@ async function handleGetSessions(
   } catch (error) {
     console.error(`IPC: Error in get-sessions for project ${projectId}:`, error);
     return [];
+  }
+}
+
+/**
+ * Handler for 'get-sessions-paginated' IPC call.
+ * Lists sessions for a project with cursor-based pagination.
+ */
+async function handleGetSessionsPaginated(
+  _event: IpcMainInvokeEvent,
+  projectId: string,
+  cursor: string | null,
+  limit?: number
+): Promise<PaginatedSessionsResult> {
+  try {
+    console.log(`IPC: get-sessions-paginated for project ${projectId}, cursor: ${cursor ? 'yes' : 'no'}, limit: ${limit}`);
+
+    if (!projectId) {
+      console.error('IPC: get-sessions-paginated called with empty projectId');
+      return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
+    }
+
+    const result = await projectScanner.listSessionsPaginated(projectId, cursor, limit);
+    console.log(`IPC: Found ${result.sessions.length} sessions, hasMore: ${result.hasMore}, total: ${result.totalCount}`);
+    return result;
+  } catch (error) {
+    console.error(`IPC: Error in get-sessions-paginated for project ${projectId}:`, error);
+    return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
   }
 }
 
@@ -425,6 +454,7 @@ async function handleValidateMentions(
 export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-projects');
   ipcMain.removeHandler('get-sessions');
+  ipcMain.removeHandler('get-sessions-paginated');
   ipcMain.removeHandler('get-session-detail');
   ipcMain.removeHandler('get-session-groups');
   ipcMain.removeHandler('get-session-metrics');

@@ -578,6 +578,35 @@ export type MessageType = 'user' | 'assistant' | 'system' | 'summary' | 'file-hi
 export type MessageCategory = 'user' | 'system' | 'hardNoise' | 'ai' | 'compact';
 
 // =============================================================================
+// Pagination Types
+// =============================================================================
+
+/**
+ * Cursor for session pagination.
+ * Uses timestamp + sessionId as a composite cursor for stable pagination.
+ */
+export interface SessionCursor {
+  /** Unix timestamp (birthtimeMs) of the session file */
+  timestamp: number;
+  /** Session ID for tie-breaking when timestamps are equal */
+  sessionId: string;
+}
+
+/**
+ * Result of paginated session listing.
+ */
+export interface PaginatedSessionsResult {
+  /** Sessions for this page */
+  sessions: Session[];
+  /** Cursor for next page (null if no more pages) */
+  nextCursor: string | null;
+  /** Whether there are more sessions to load */
+  hasMore: boolean;
+  /** Total count of sessions (for display purposes) */
+  totalCount: number;
+}
+
+// =============================================================================
 // Project & Session Types
 // =============================================================================
 

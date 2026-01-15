@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import { Project, Session, ChatHistoryEntry, isHardNoiseMessage } from '../types/claude';
+import { Project, Session, ChatHistoryEntry, isHardNoiseMessage, PaginatedSessionsResult, SessionCursor } from '../types/claude';
 import {
   decodePath,
   isValidEncodedPath,
@@ -246,6 +246,135 @@ export class ProjectScanner {
     } catch (error) {
       console.error(`Error listing sessions for project ${projectId}:`, error);
       return [];
+    }
+  }
+
+  /**
+   * Lists sessions for a project with cursor-based pagination.
+   * Efficiently fetches only the sessions needed for the current page.
+   *
+   * @param projectId - The project ID to list sessions for
+   * @param cursor - Base64-encoded cursor from previous page (null for first page)
+   * @param limit - Number of sessions to return (default 20)
+   * @returns Paginated result with sessions, cursor, and metadata
+   */
+  async listSessionsPaginated(
+    projectId: string,
+    cursor: string | null,
+    limit: number = 20
+  ): Promise<PaginatedSessionsResult> {
+    try {
+      const projectPath = path.join(this.projectsDir, projectId);
+
+      if (!fs.existsSync(projectPath)) {
+        return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
+      }
+
+      // Step 1: Get all session files with their timestamps (lightweight stat calls)
+      const entries = fs.readdirSync(projectPath, { withFileTypes: true });
+      const sessionFiles = entries.filter(
+        (entry) => entry.isFile() && entry.name.endsWith('.jsonl')
+      );
+
+      // Get stats for all session files
+      type SessionFileInfo = { name: string; sessionId: string; timestamp: number; filePath: string };
+      const fileInfos: SessionFileInfo[] = [];
+
+      for (const file of sessionFiles) {
+        const filePath = path.join(projectPath, file.name);
+        try {
+          const stats = fs.statSync(filePath);
+          fileInfos.push({
+            name: file.name,
+            sessionId: extractSessionId(file.name),
+            timestamp: stats.birthtimeMs,
+            filePath,
+          });
+        } catch {
+          // Skip files we can't stat
+          continue;
+        }
+      }
+
+      const totalCount = fileInfos.length;
+
+      // Step 2: Sort by timestamp descending (most recent first)
+      fileInfos.sort((a, b) => {
+        if (b.timestamp !== a.timestamp) {
+          return b.timestamp - a.timestamp;
+        }
+        // Tie-breaker: sort by sessionId alphabetically
+        return a.sessionId.localeCompare(b.sessionId);
+      });
+
+      // Step 3: Apply cursor filter to find starting position
+      let startIndex = 0;
+      if (cursor) {
+        try {
+          const decoded = JSON.parse(Buffer.from(cursor, 'base64').toString('utf8')) as SessionCursor;
+          startIndex = fileInfos.findIndex((info) => {
+            // Find the first item that comes AFTER the cursor
+            if (info.timestamp < decoded.timestamp) return true;
+            if (info.timestamp === decoded.timestamp && info.sessionId > decoded.sessionId) return true;
+            return false;
+          });
+          // If cursor not found, start from beginning
+          if (startIndex === -1) startIndex = fileInfos.length;
+        } catch {
+          // Invalid cursor, start from beginning
+          startIndex = 0;
+        }
+      }
+
+      // Step 4: Fetch sessions for this page
+      // Fetch extra for noise filtering, then filter down to limit
+      const fetchLimit = Math.min(limit + 10, fileInfos.length - startIndex);
+      const candidateFiles = fileInfos.slice(startIndex, startIndex + fetchLimit);
+
+      const decodedPath = decodePath(projectId);
+      const sessions: Session[] = [];
+
+      for (const fileInfo of candidateFiles) {
+        if (sessions.length >= limit) break;
+
+        // Check if session has non-noise messages
+        const hasContent = await this.hasNonNoiseMessages(fileInfo.filePath);
+        if (!hasContent) continue;
+
+        const session = await this.buildSessionMetadata(
+          projectId,
+          fileInfo.sessionId,
+          fileInfo.filePath,
+          decodedPath
+        );
+        sessions.push(session);
+      }
+
+      // Step 5: Build next cursor
+      let nextCursor: string | null = null;
+      const hasMore = startIndex + fetchLimit < fileInfos.length || sessions.length === limit;
+
+      if (sessions.length > 0 && hasMore) {
+        const lastSession = sessions[sessions.length - 1];
+        const lastFileInfo = fileInfos.find((f) => f.sessionId === lastSession.id);
+        if (lastFileInfo) {
+          const cursorData: SessionCursor = {
+            timestamp: lastFileInfo.timestamp,
+            sessionId: lastFileInfo.sessionId,
+          };
+          nextCursor = Buffer.from(JSON.stringify(cursorData)).toString('base64');
+        }
+      }
+
+      return {
+        sessions,
+        nextCursor,
+        hasMore: nextCursor !== null,
+        totalCount,
+      };
+    } catch (error) {
+      console.error(`Error listing paginated sessions for project ${projectId}:`, error);
+      return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
     }
   }
 
