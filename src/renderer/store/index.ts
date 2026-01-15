@@ -213,6 +213,12 @@ export const useStore = create<AppState>((set, get) => ({
   // Select a session and fetch its detail
   selectSession: (id: string) => {
     console.log('[Store] selectSession called with id:', id);
+
+    // Stop watching the previous session if switching
+    if (window.electronAPI?.stopWatchingSession) {
+      window.electronAPI.stopWatchingSession();
+    }
+
     set({
       selectedSessionId: id,
       sessionDetail: null,
@@ -279,6 +285,11 @@ export const useStore = create<AppState>((set, get) => ({
         selectedAIGroup: firstAIGroup
       });
       console.log('[Store] fetchSessionDetail completed successfully');
+
+      // Start watching this session for file updates
+      if (window.electronAPI?.startWatchingSession) {
+        window.electronAPI.startWatchingSession(projectId, sessionId);
+      }
     } catch (error) {
       console.error('[Store] fetchSessionDetail error:', error);
       set({
@@ -601,3 +612,27 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 }));
+
+// Set up IPC event listeners
+if (window.electronAPI) {
+  // Listen for session file updates
+  window.electronAPI.onSessionFileUpdated((data) => {
+    const { projectId, sessionId } = data;
+    const state = useStore.getState();
+
+    // Only refresh if this is the currently viewed session
+    if (state.selectedProjectId === projectId && state.selectedSessionId === sessionId) {
+      console.log('[Store] Session file updated, refreshing:', projectId, sessionId);
+      state.fetchSessionDetail(projectId, sessionId);
+    }
+  });
+
+  // Listen for soft refresh trigger (Cmd+R / Ctrl+R)
+  window.electronAPI.onTriggerSoftRefresh(() => {
+    const state = useStore.getState();
+    if (state.selectedProjectId && state.selectedSessionId) {
+      console.log('[Store] Soft refresh triggered, refreshing:', state.selectedProjectId, state.selectedSessionId);
+      state.fetchSessionDetail(state.selectedProjectId, state.selectedSessionId);
+    }
+  });
+}

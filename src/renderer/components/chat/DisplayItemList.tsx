@@ -8,7 +8,7 @@ import { SubagentItem } from './items/SubagentItem';
 interface DisplayItemListProps {
   items: AIGroupDisplayItem[];
   onItemClick: (itemId: string) => void;
-  expandedItemId: string | null;
+  expandedItemIds: Set<string>;
 }
 
 /**
@@ -32,7 +32,7 @@ function truncateText(text: string, maxLength: number): string {
  *
  * The list is completely flat with no nested toggles or hierarchies.
  */
-export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemId }) => {
+export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds }) => {
   if (!items || items.length === 0) {
     return (
       <div className="px-3 py-2 text-sm text-claude-dark-text-secondary italic">
@@ -62,7 +62,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
 
             const preview = truncateText(item.content, 150);
             const handleClick = () => onItemClick(itemId);
-            const isExpanded = expandedItemId === itemId;
+            const isExpanded = expandedItemIds.has(itemId);
 
             return (
               <ThinkingItem
@@ -92,7 +92,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
 
             const preview = truncateText(item.content, 150);
             const handleClick = () => onItemClick(itemId);
-            const isExpanded = expandedItemId === itemId;
+            const isExpanded = expandedItemIds.has(itemId);
 
             return (
               <TextItem
@@ -109,7 +109,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
             // Use index to ensure uniqueness within this list
             const itemId = `tool-${item.tool.id}-${index}`;
             const handleClick = () => onItemClick(itemId);
-            const isExpanded = expandedItemId === itemId;
+            const isExpanded = expandedItemIds.has(itemId);
 
             return (
               <LinkedToolItem
@@ -140,7 +140,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
             };
 
             const handleClick = () => onItemClick(itemId);
-            const isExpanded = expandedItemId === itemId;
+            const isExpanded = expandedItemIds.has(itemId);
 
             return (
               <SubagentItem

@@ -3,7 +3,7 @@
  * Supports tab switching, closing, and horizontal scrolling on overflow.
  */
 
-import { X, Plus, LayoutDashboard, FileText } from 'lucide-react';
+import { X, Plus, LayoutDashboard, FileText, RefreshCw } from 'lucide-react';
 import { useStore } from '../../store';
 
 export function TabBar() {
@@ -13,7 +13,18 @@ export function TabBar() {
     setActiveTab,
     closeTab,
     openDashboard,
+    fetchSessionDetail,
   } = useStore();
+
+  // Get the active tab
+  const activeTab = openTabs.find(tab => tab.id === activeTabId);
+
+  // Handle refresh for active session tab
+  const handleRefresh = async () => {
+    if (activeTab?.type === 'session' && activeTab.projectId && activeTab.sessionId) {
+      await fetchSessionDetail(activeTab.projectId, activeTab.sessionId);
+    }
+  };
 
   return (
     <div className="h-10 flex items-center border-b border-claude-dark-border bg-claude-dark-bg px-2">
@@ -51,6 +62,17 @@ export function TabBar() {
             </div>
           );
         })}
+
+        {/* Refresh button - show only for session tabs */}
+        {activeTab?.type === 'session' && (
+          <button
+            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-claude-dark-surface text-claude-dark-text-secondary hover:text-claude-dark-text transition-colors flex-shrink-0"
+            onClick={handleRefresh}
+            title="Refresh Session (Cmd+R)"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        )}
 
         {/* New tab button - right after last tab */}
         <button

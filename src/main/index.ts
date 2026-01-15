@@ -32,9 +32,14 @@ let cleanupInterval: NodeJS.Timeout | null = null;
 
 /**
  * Initializes all services.
+ * Must be called after createWindow so mainWindow is available.
  */
 function initializeServices(): void {
   console.log('Initializing services...');
+
+  if (!mainWindow) {
+    throw new Error('mainWindow must be created before initializing services');
+  }
 
   // Initialize services (paths are set automatically from environment)
   projectScanner = new ProjectScanner();
@@ -46,18 +51,20 @@ function initializeServices(): void {
 
   console.log(`Projects directory: ${projectScanner.getProjectsDir()}`);
 
-  // Initialize IPC handlers
+  // Start file watcher
+  fileWatcher = new FileWatcher(dataCache);
+  fileWatcher.start();
+
+  // Initialize IPC handlers (requires mainWindow and fileWatcher)
   initializeIpcHandlers(
     projectScanner,
     sessionParser,
     subagentResolver,
     chunkBuilder,
-    dataCache
+    dataCache,
+    fileWatcher,
+    mainWindow
   );
-
-  // Start file watcher
-  fileWatcher = new FileWatcher(dataCache);
-  fileWatcher.start();
 
   // Forward file change events to renderer
   fileWatcher.on('file-change', (event) => {
@@ -118,6 +125,15 @@ function createWindow(): void {
     title: 'Claude Code Execution Visualizer',
   });
 
+  // Intercept Cmd+R/Ctrl+R to prevent window reload and trigger soft refresh
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const isCmdOrCtrl = input.meta || input.control;
+    if (isCmdOrCtrl && input.key.toLowerCase() === 'r' && input.type === 'keyDown') {
+      event.preventDefault();
+      mainWindow?.webContents.send('trigger-soft-refresh');
+    }
+  });
+
   // Load the renderer
   if (process.env.NODE_ENV === 'development') {
     mainWindow.loadURL('http://localhost:5173');
@@ -139,15 +155,16 @@ function createWindow(): void {
 app.whenReady().then(() => {
   console.log('App ready, initializing...');
 
-  // Initialize services first
-  initializeServices();
-
-  // Then create window
+  // Create window first (needed by IPC handlers)
   createWindow();
+
+  // Then initialize services
+  initializeServices();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+      initializeServices();
     }
   });
 });

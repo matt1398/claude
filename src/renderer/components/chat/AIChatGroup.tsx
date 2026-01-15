@@ -27,15 +27,23 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
   // Local state for expansion
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Local state for inline item expansion
-  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  // Local state for inline item expansion - allows multiple items to be expanded
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(new Set());
 
   // Determine if there's content to toggle
   const hasToggleContent = enhanced.displayItems.length > 0;
 
-  // Handle item click - toggle inline expansion
+  // Handle item click - toggle inline expansion (add/remove from Set)
   const handleItemClick = (itemId: string) => {
-    setExpandedItemId(prev => prev === itemId ? null : itemId);
+    setExpandedItemIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemId)) {
+        newSet.delete(itemId);
+      } else {
+        newSet.add(itemId);
+      }
+      return newSet;
+    });
   };
 
   return (
@@ -85,7 +93,7 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
           <DisplayItemList
             items={enhanced.displayItems}
             onItemClick={handleItemClick}
-            expandedItemId={expandedItemId}
+            expandedItemIds={expandedItemIds}
           />
         </div>
       )}

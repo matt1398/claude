@@ -485,6 +485,17 @@ export interface ElectronAPI {
     mentions: { type: 'skill' | 'path'; value: string }[],
     projectPath: string
   ) => Promise<Record<string, boolean>>;
+
+  // Session watching methods
+  startWatchingSession: (projectId: string, sessionId: string) => Promise<{ success: boolean; error?: string }>;
+  stopWatchingSession: () => Promise<{ success: boolean; error?: string }>;
+  refreshCurrentSession: (projectId: string, sessionId: string) => Promise<SessionDetail | null>;
+
+  // Event listeners
+  onSessionFileUpdated: (callback: (data: { projectId: string; sessionId: string; content: string }) => void) => void;
+  onTriggerSoftRefresh: (callback: () => void) => void;
+  removeSessionFileUpdatedListener: () => void;
+  removeTriggerSoftRefreshListener: () => void;
 }
 
 // =============================================================================

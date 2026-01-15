@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Pencil, ChevronRight, ChevronDown } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Pencil, ChevronDown, ChevronUp } from 'lucide-react';
 
 // =============================================================================
 // Types
@@ -9,6 +9,7 @@ interface DiffViewerProps {
   fileName: string;           // The file being edited
   oldString: string;          // The original text being replaced
   newString: string;          // The new text
+  maxPreviewLines?: number;   // Default 15 - show this many before collapse
   isExpanded?: boolean;       // Initial expansion state
   onToggle?: () => void;      // Optional expansion callback
 }
@@ -111,6 +112,98 @@ function getFileName(filePath: string): string {
 }
 
 // =============================================================================
+// Language Detection
+// =============================================================================
+
+const EXTENSION_LANGUAGE_MAP: Record<string, string> = {
+  // JavaScript/TypeScript
+  '.ts': 'typescript',
+  '.tsx': 'tsx',
+  '.js': 'javascript',
+  '.jsx': 'jsx',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
+
+  // Python
+  '.py': 'python',
+  '.pyw': 'python',
+  '.pyx': 'python',
+
+  // Web
+  '.html': 'html',
+  '.htm': 'html',
+  '.css': 'css',
+  '.scss': 'scss',
+  '.sass': 'sass',
+  '.less': 'less',
+
+  // Data formats
+  '.json': 'json',
+  '.jsonl': 'json',
+  '.yaml': 'yaml',
+  '.yml': 'yaml',
+  '.toml': 'toml',
+  '.xml': 'xml',
+
+  // Shell
+  '.sh': 'bash',
+  '.bash': 'bash',
+  '.zsh': 'zsh',
+  '.fish': 'fish',
+
+  // Systems
+  '.rs': 'rust',
+  '.go': 'go',
+  '.c': 'c',
+  '.h': 'c',
+  '.cpp': 'cpp',
+  '.cc': 'cpp',
+  '.hpp': 'hpp',
+  '.java': 'java',
+  '.kt': 'kotlin',
+  '.swift': 'swift',
+
+  // Config
+  '.env': 'env',
+  '.gitignore': 'gitignore',
+  '.dockerignore': 'dockerignore',
+  '.md': 'markdown',
+  '.mdx': 'mdx',
+
+  // Other
+  '.sql': 'sql',
+  '.graphql': 'graphql',
+  '.gql': 'graphql',
+  '.vue': 'vue',
+  '.svelte': 'svelte',
+  '.rb': 'ruby',
+  '.php': 'php',
+  '.lua': 'lua',
+  '.r': 'r',
+  '.R': 'r',
+};
+
+/**
+ * Infer language from file name/extension.
+ */
+function inferLanguage(fileName: string): string {
+  // Check for dotfiles with specific names
+  const baseName = fileName.split('/').pop() || '';
+  if (baseName === 'Dockerfile') return 'dockerfile';
+  if (baseName === 'Makefile') return 'makefile';
+  if (baseName.startsWith('.env')) return 'env';
+
+  // Extract extension
+  const extMatch = fileName.match(/(\.[^./]+)$/);
+  if (extMatch) {
+    const ext = extMatch[1].toLowerCase();
+    return EXTENSION_LANGUAGE_MAP[ext] || 'text';
+  }
+
+  return 'text';
+}
+
+// =============================================================================
 // Diff Line Component
 // =============================================================================
 
@@ -168,6 +261,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   fileName,
   oldString,
   newString,
+  maxPreviewLines = 15,
   isExpanded: controlledExpanded,
   onToggle
 }) => {
@@ -188,6 +282,21 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const newLines = newString.split('\n');
   const diffLines = generateDiff(oldLines, newLines);
   const stats = computeStats(diffLines);
+  const totalLines = diffLines.length;
+
+  // Determine if content needs collapsing
+  const needsCollapse = totalLines > maxPreviewLines;
+
+  // Lines to display based on expansion state
+  const displayLines = useMemo(() => {
+    if (!needsCollapse || isExpanded) {
+      return diffLines;
+    }
+    return diffLines.slice(0, maxPreviewLines);
+  }, [diffLines, needsCollapse, isExpanded, maxPreviewLines]);
+
+  // Infer language from file extension
+  const detectedLanguage = inferLanguage(fileName);
 
   // Format summary
   const displayName = getFileName(fileName);
@@ -195,18 +304,13 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   return (
     <div className="border border-zinc-700/30 rounded-lg overflow-hidden">
       {/* Header */}
-      <div
-        onClick={handleToggle}
-        className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 hover:bg-zinc-800 cursor-pointer"
-      >
-        {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-        ) : (
-          <ChevronRight className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-        )}
+      <div className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50">
         <Pencil className="w-4 h-4 text-zinc-400 flex-shrink-0" />
         <span className="text-sm text-zinc-200 font-mono truncate">
           {displayName}
+        </span>
+        <span className="text-xs text-zinc-600 px-1.5 py-0.5 bg-zinc-800 rounded flex-shrink-0">
+          {detectedLanguage}
         </span>
         <span className="text-zinc-500 text-sm">-</span>
         <span className="text-sm flex-shrink-0">
@@ -223,26 +327,39 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       </div>
 
       {/* Diff content */}
-      {isExpanded && (
-        <div className="bg-zinc-900 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto">
-          <div className="inline-block min-w-full">
-            {diffLines.map((line, index) => (
-              <DiffLineRow key={index} line={line} />
-            ))}
-            {diffLines.length === 0 && (
-              <div className="px-3 py-2 text-zinc-500 italic">
-                No changes detected
-              </div>
-            )}
-          </div>
+      <div className={`bg-zinc-900 font-mono text-xs overflow-x-auto ${isExpanded ? 'max-h-96 overflow-y-auto' : ''}`}>
+        <div className="inline-block min-w-full">
+          {displayLines.map((line, index) => (
+            <DiffLineRow key={index} line={line} />
+          ))}
+          {diffLines.length === 0 && (
+            <div className="px-3 py-2 text-zinc-500 italic">
+              No changes detected
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Collapsed summary */}
-      {!isExpanded && (
-        <div className="px-3 py-1.5 text-xs text-zinc-500 bg-zinc-900/50">
-          Click to expand diff view
-        </div>
+      {/* Show more/less button */}
+      {needsCollapse && (
+        <button
+          onClick={handleToggle}
+          className="w-full flex items-center justify-center gap-1.5 py-2 px-3
+                     bg-zinc-800/30 hover:bg-zinc-800/50 border-t border-zinc-700/30
+                     text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
+        >
+          {isExpanded ? (
+            <>
+              <ChevronUp className="w-4 h-4" />
+              Show less
+            </>
+          ) : (
+            <>
+              <ChevronDown className="w-4 h-4" />
+              Show {totalLines - maxPreviewLines} more lines
+            </>
+          )}
+        </button>
       )}
     </div>
   );

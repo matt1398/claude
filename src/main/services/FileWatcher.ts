@@ -12,6 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import chokidar, { type FSWatcher } from 'chokidar';
 import { FileChangeEvent } from '../types/claude';
 import { DataCache } from './DataCache';
 import { getProjectsBasePath, getTodosBasePath } from '../utils/pathDecoder';
@@ -19,14 +20,19 @@ import { getProjectsBasePath, getTodosBasePath } from '../utils/pathDecoder';
 /** Debounce window for file change events */
 const DEBOUNCE_MS = 100;
 
+/** Debounce window for session file changes */
+const SESSION_DEBOUNCE_MS = 200;
+
 export class FileWatcher extends EventEmitter {
   private projectsWatcher: fs.FSWatcher | null = null;
   private todosWatcher: fs.FSWatcher | null = null;
+  private currentSessionWatcher: FSWatcher | null = null;
   private projectsPath: string;
   private todosPath: string;
   private dataCache: DataCache;
   private isWatching: boolean = false;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private sessionDebounceTimer: NodeJS.Timeout | null = null;
 
   constructor(dataCache: DataCache, projectsPath?: string, todosPath?: string) {
     super();
@@ -66,6 +72,9 @@ export class FileWatcher extends EventEmitter {
       this.todosWatcher.close();
       this.todosWatcher = null;
     }
+
+    // Stop session watcher
+    this.stopWatchingSession();
 
     // Clear any pending debounce timers
     for (const timer of this.debounceTimers.values()) {
@@ -122,6 +131,91 @@ export class FileWatcher extends EventEmitter {
       console.log(`FileWatcher: Started watching todos at ${this.todosPath}`);
     } catch (error) {
       console.error('FileWatcher: Error starting todos watcher:', error);
+    }
+  }
+
+  /**
+   * Starts watching a specific session file for changes.
+   * Stops any existing session watcher first.
+   *
+   * @param sessionPath - Absolute path to the session JSONL file
+   * @param onUpdate - Callback function to receive the updated file content
+   */
+  async startWatchingSession(
+    sessionPath: string,
+    onUpdate: (content: string) => void
+  ): Promise<void> {
+    try {
+      // Stop any existing session watcher
+      this.stopWatchingSession();
+
+      // Verify file exists
+      if (!fs.existsSync(sessionPath)) {
+        console.warn(`FileWatcher: Session file does not exist: ${sessionPath}`);
+        return;
+      }
+
+      // Create new chokidar watcher for this specific file
+      this.currentSessionWatcher = chokidar.watch(sessionPath, {
+        ignoreInitial: true, // Don't emit events for initial file scan
+        awaitWriteFinish: {
+          stabilityThreshold: SESSION_DEBOUNCE_MS,
+          pollInterval: 50
+        }
+      });
+
+      // Handle file changes with debouncing
+      this.currentSessionWatcher.on('change', (changedPath: string) => {
+        try {
+          // Clear existing debounce timer
+          if (this.sessionDebounceTimer) {
+            clearTimeout(this.sessionDebounceTimer);
+          }
+
+          // Set new debounce timer
+          this.sessionDebounceTimer = setTimeout(async () => {
+            try {
+              const content = await fs.promises.readFile(changedPath, 'utf-8');
+              onUpdate(content);
+              console.log(`FileWatcher: Session file updated: ${path.basename(changedPath)}`);
+            } catch (error) {
+              console.error('FileWatcher: Error reading session file:', error);
+            }
+            this.sessionDebounceTimer = null;
+          }, SESSION_DEBOUNCE_MS);
+        } catch (error) {
+          console.error('FileWatcher: Error handling session change:', error);
+        }
+      });
+
+      // Handle watcher errors
+      this.currentSessionWatcher.on('error', (error: unknown) => {
+        console.error('FileWatcher: Session watcher error:', error);
+      });
+
+      console.log(`FileWatcher: Started watching session: ${path.basename(sessionPath)}`);
+    } catch (error) {
+      console.error('FileWatcher: Error starting session watcher:', error);
+      this.stopWatchingSession();
+    }
+  }
+
+  /**
+   * Stops watching the current session file.
+   */
+  stopWatchingSession(): void {
+    if (this.currentSessionWatcher) {
+      this.currentSessionWatcher.close().catch((error: unknown) => {
+        console.error('FileWatcher: Error closing session watcher:', error);
+      });
+      this.currentSessionWatcher = null;
+      console.log('FileWatcher: Stopped watching session');
+    }
+
+    // Clear session debounce timer
+    if (this.sessionDebounceTimer) {
+      clearTimeout(this.sessionDebounceTimer);
+      this.sessionDebounceTimer = null;
     }
   }
 
