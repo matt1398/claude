@@ -26,6 +26,31 @@ export interface Project {
 }
 
 /**
+ * Cursor for session pagination.
+ * Uses timestamp + sessionId as a composite cursor for stable pagination.
+ */
+export interface SessionCursor {
+  /** Unix timestamp (birthtimeMs) of the session file */
+  timestamp: number;
+  /** Session ID for tie-breaking when timestamps are equal */
+  sessionId: string;
+}
+
+/**
+ * Result of paginated session listing.
+ */
+export interface PaginatedSessionsResult {
+  /** Sessions for this page */
+  sessions: Session[];
+  /** Cursor for next page (null if no more pages) */
+  nextCursor: string | null;
+  /** Whether there are more sessions to load */
+  hasMore: boolean;
+  /** Total count of sessions (for display purposes) */
+  totalCount: number;
+}
+
+/**
  * Session metadata.
  */
 export interface Session {
@@ -470,6 +495,7 @@ export interface ConversationGroup {
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>;
   getSessions: (projectId: string) => Promise<Session[]>;
+  getSessionsPaginated: (projectId: string, cursor: string | null, limit?: number) => Promise<PaginatedSessionsResult>;
   getSessionDetail: (projectId: string, sessionId: string) => Promise<SessionDetail | null>;
   getSessionMetrics: (projectId: string, sessionId: string) => Promise<SessionMetrics | null>;
   getWaterfallData: (projectId: string, sessionId: string) => Promise<WaterfallData | null>;

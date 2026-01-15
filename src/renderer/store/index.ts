@@ -22,6 +22,11 @@ interface AppState {
   selectedSessionId: string | null;
   sessionsLoading: boolean;
   sessionsError: string | null;
+  // Pagination state
+  sessionsCursor: string | null;
+  sessionsHasMore: boolean;
+  sessionsTotalCount: number;
+  sessionsLoadingMore: boolean;
 
   // Session detail state
   sessionDetail: SessionDetail | null;
@@ -73,6 +78,9 @@ interface AppState {
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
   fetchSessions: (projectId: string) => Promise<void>;
+  fetchSessionsInitial: (projectId: string) => Promise<void>;
+  fetchSessionsMore: () => Promise<void>;
+  resetSessionsPagination: () => void;
   selectSession: (id: string) => void;
   fetchSessionDetail: (projectId: string, sessionId: string) => Promise<void>;
   clearSelection: () => void;
@@ -122,6 +130,11 @@ export const useStore = create<AppState>((set, get) => ({
   selectedSessionId: null,
   sessionsLoading: false,
   sessionsError: null,
+  // Pagination state
+  sessionsCursor: null,
+  sessionsHasMore: false,
+  sessionsTotalCount: 0,
+  sessionsLoadingMore: false,
 
   sessionDetail: null,
   sessionDetailLoading: false,
@@ -176,7 +189,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Select a project and fetch its sessions
+  // Select a project and fetch its sessions (paginated)
   selectProject: (id: string) => {
     console.log('[Store] selectProject called with id:', id);
     set({
@@ -184,15 +197,20 @@ export const useStore = create<AppState>((set, get) => ({
       selectedSessionId: null,
       sessionDetail: null,
       sessions: [],
-      sessionsError: null
+      sessionsError: null,
+      // Reset pagination state
+      sessionsCursor: null,
+      sessionsHasMore: false,
+      sessionsTotalCount: 0,
+      sessionsLoadingMore: false
     });
     console.log('[Store] selectedProjectId set to:', id);
 
-    // Fetch sessions for this project
-    get().fetchSessions(id);
+    // Fetch sessions for this project (paginated)
+    get().fetchSessionsInitial(id);
   },
 
-  // Fetch sessions for a specific project
+  // Fetch sessions for a specific project (legacy - not paginated)
   fetchSessions: async (projectId: string) => {
     console.log('[Store] fetchSessions called for project:', projectId);
     set({ sessionsLoading: true, sessionsError: null });
@@ -208,6 +226,76 @@ export const useStore = create<AppState>((set, get) => ({
         sessionsLoading: false
       });
     }
+  },
+
+  // Fetch initial page of sessions (paginated)
+  fetchSessionsInitial: async (projectId: string) => {
+    console.log('[Store] fetchSessionsInitial called for project:', projectId);
+    set({
+      sessionsLoading: true,
+      sessionsError: null,
+      sessions: [],
+      sessionsCursor: null,
+      sessionsHasMore: false,
+      sessionsTotalCount: 0
+    });
+    try {
+      const result = await window.electronAPI.getSessionsPaginated(projectId, null, 20);
+      set({
+        sessions: result.sessions,
+        sessionsCursor: result.nextCursor,
+        sessionsHasMore: result.hasMore,
+        sessionsTotalCount: result.totalCount,
+        sessionsLoading: false
+      });
+      console.log('[Store] Fetched initial', result.sessions.length, 'sessions, hasMore:', result.hasMore, 'total:', result.totalCount);
+    } catch (error) {
+      set({
+        sessionsError: error instanceof Error ? error.message : 'Failed to fetch sessions',
+        sessionsLoading: false
+      });
+    }
+  },
+
+  // Fetch more sessions (next page)
+  fetchSessionsMore: async () => {
+    const state = get();
+    const { selectedProjectId, sessionsCursor, sessionsHasMore, sessionsLoadingMore } = state;
+
+    // Guard: don't fetch if already loading, no more pages, or no project
+    if (!selectedProjectId || !sessionsHasMore || sessionsLoadingMore || !sessionsCursor) {
+      return;
+    }
+
+    console.log('[Store] fetchSessionsMore called');
+    set({ sessionsLoadingMore: true });
+    try {
+      const result = await window.electronAPI.getSessionsPaginated(selectedProjectId, sessionsCursor, 20);
+      set((prevState) => ({
+        sessions: [...prevState.sessions, ...result.sessions],
+        sessionsCursor: result.nextCursor,
+        sessionsHasMore: result.hasMore,
+        sessionsLoadingMore: false
+      }));
+      console.log('[Store] Fetched more', result.sessions.length, 'sessions, hasMore:', result.hasMore);
+    } catch (error) {
+      set({
+        sessionsError: error instanceof Error ? error.message : 'Failed to fetch more sessions',
+        sessionsLoadingMore: false
+      });
+    }
+  },
+
+  // Reset pagination state
+  resetSessionsPagination: () => {
+    set({
+      sessions: [],
+      sessionsCursor: null,
+      sessionsHasMore: false,
+      sessionsTotalCount: 0,
+      sessionsLoadingMore: false,
+      sessionsError: null
+    });
   },
 
   // Select a session and fetch its detail
