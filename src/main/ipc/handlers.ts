@@ -26,6 +26,7 @@ import {
   SubagentDetail,
   ConversationGroup,
   PaginatedSessionsResult,
+  SearchSessionsResult,
 } from '../types/claude';
 import { ProjectScanner } from '../services/ProjectScanner';
 import { SessionParser } from '../services/SessionParser';
@@ -72,6 +73,9 @@ function registerHandlers(): void {
   ipcMain.handle('get-session-detail', handleGetSessionDetail);
   ipcMain.handle('get-session-groups', handleGetSessionGroups);
   ipcMain.handle('get-session-metrics', handleGetSessionMetrics);
+
+  // Search handlers
+  ipcMain.handle('search-sessions', handleSearchSessions);
 
   // Subagent handlers
   ipcMain.handle('get-subagent-detail', handleGetSubagentDetail);
@@ -157,6 +161,33 @@ async function handleGetSessionsPaginated(
   } catch (error) {
     console.error(`IPC: Error in get-sessions-paginated for project ${projectId}:`, error);
     return { sessions: [], nextCursor: null, hasMore: false, totalCount: 0 };
+  }
+}
+
+/**
+ * Handler for 'search-sessions' IPC call.
+ * Searches sessions in a project for a query string.
+ */
+async function handleSearchSessions(
+  _event: IpcMainInvokeEvent,
+  projectId: string,
+  query: string,
+  maxResults?: number
+): Promise<SearchSessionsResult> {
+  try {
+    console.log(`IPC: search-sessions for project ${projectId}, query: "${query}"`);
+
+    if (!projectId) {
+      console.error('IPC: search-sessions called with empty projectId');
+      return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+    }
+
+    const result = await projectScanner.searchSessions(projectId, query, maxResults);
+    console.log(`IPC: Found ${result.totalMatches} matches in ${result.sessionsSearched} sessions`);
+    return result;
+  } catch (error) {
+    console.error(`IPC: Error in search-sessions for project ${projectId}:`, error);
+    return { results: [], totalMatches: 0, sessionsSearched: 0, query };
   }
 }
 
@@ -460,6 +491,7 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-session-metrics');
   ipcMain.removeHandler('get-waterfall-data');
   ipcMain.removeHandler('get-subagent-detail');
+  ipcMain.removeHandler('search-sessions');
   ipcMain.removeHandler('validate-skill');
   ipcMain.removeHandler('validate-path');
   ipcMain.removeHandler('validate-mentions');

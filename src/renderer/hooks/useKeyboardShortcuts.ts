@@ -18,6 +18,7 @@ export function useKeyboardShortcuts() {
     selectedProjectId,
     selectedSessionId,
     fetchSessionDetail,
+    openCommandPalette,
   } = useStore();
 
   useEffect(() => {
@@ -119,10 +120,10 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+K: Search (placeholder for future implementation)
+      // Cmd+K: Open command palette for global search
       if (event.key === 'k') {
         event.preventDefault();
-        console.log('Search shortcut triggered (not yet implemented)');
+        openCommandPalette();
         return;
       }
 
@@ -156,5 +157,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail]);
+  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail, openCommandPalette]);
 }
