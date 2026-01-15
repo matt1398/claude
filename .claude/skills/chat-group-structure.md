@@ -6,16 +6,22 @@ This skill provides knowledge about how chat messages are grouped and displayed 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  ConversationTurn                                       │
+│  ChatHistory (flat list of independent items)           │
+│                                                         │
 │  ┌────────────────────────────────────────────────────┐ │
 │  │              [You · 10:23:45 AM]                   │ │ ← UserChatGroup
-│  │                    ┌─────────────────────────────┐ │ │   (right-aligned, blue bubble)
+│  │                    ┌─────────────────────────────┐ │ │   (RIGHT side, blue bubble)
 │  │                    │ Help me debug this function │ │ │
 │  │                    └─────────────────────────────┘ │ │
 │  └────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────┐ │
-│  │ 🤖 Claude · 3 tool calls, 1 message    ▼          │ │ ← AIChatGroup header
-│  │ ──────────────────────────────────────────────────│ │   (left-aligned, collapsible)
+│  │ ⚙ System · /model                                  │ │ ← SystemChatGroup (NEW!)
+│  │ ──────────────────────────────────────────────────│ │   (LEFT side, gray styling)
+│  │  Set model to claude-sonnet-4-20250514             │ │
+│  └────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │ Claude · Opus 4.5 · 3 tool calls, 1 message    ▼  │ │ ← AIChatGroup header
+│  │ ──────────────────────────────────────────────────│ │   (LEFT side, collapsible)
 │  │  [Expandable: thinking, tools, subagents...]      │ │
 │  │ ──────────────────────────────────────────────────│ │
 │  │  ✓ Last Output (always visible)                   │ │ ← LastOutputDisplay
@@ -24,6 +30,91 @@ This skill provides knowledge about how chat messages are grouped and displayed 
 └─────────────────────────────────────────────────────────┘
 ```
 
+## Key Architecture Change: Flat ChatItem List
+
+**OLD Architecture (REMOVED):**
+```typescript
+// ConversationTurn paired UserGroup + AIGroup
+interface ConversationTurn {
+  userGroup: UserGroup;
+  aiGroup: AIGroup;
+}
+SessionConversation { turns: ConversationTurn[] }
+```
+
+**NEW Architecture (CURRENT):**
+```typescript
+// Flat list of independent items
+type ChatItem =
+  | { type: 'user'; group: UserGroup }
+  | { type: 'system'; group: SystemGroup }
+  | { type: 'ai'; group: AIGroup };
+
+interface SessionConversation {
+  sessionId: string;
+  items: ChatItem[];
+  totalUserGroups: number;
+  totalSystemGroups: number;
+  totalAIGroups: number;
+}
+```
+
+**Key difference:** Each item is independent - no pairing between user and AI chunks.
+
+## 4-Category Message Classification
+
+Messages are classified into exactly 4 categories:
+
+### 1. USER Messages (create UserChunks)
+- **Detection:** `isParsedUserChunkMessage(msg)`
+- **Criteria:**
+  - `type='user'`
+  - `isMeta!=true`
+  - Has text/image content
+  - Content does NOT contain: `<local-command-stdout>`, `<local-command-caveat>`, `<system-reminder>`
+  - Content MAY contain: `<command-name>` (slash commands ARE user input)
+- **Rendering:** RIGHT side, blue styling
+- **Examples:**
+  ```
+  "Help me debug this code"
+  "<command-name>/model</command-name> Switch to sonnet"
+  ```
+
+### 2. SYSTEM Messages (create SystemChunks)
+- **Detection:** `isParsedSystemChunkMessage(msg)`
+- **Criteria:**
+  - `type='user'` (confusingly, command output comes as user entries in JSONL)
+  - Contains `<local-command-stdout>` tag
+- **Rendering:** LEFT side, gray styling
+- **Examples:**
+  ```json
+  {
+    "type": "user",
+    "content": "<local-command-stdout>Set model to sonnet...</local-command-stdout>"
+  }
+  ```
+
+### 3. HARD NOISE Messages (filtered out)
+- **Detection:** `isParsedHardNoiseMessage(msg)`
+- **Criteria:**
+  - Entry types: `system`, `summary`, `file-history-snapshot`, `queue-operation`
+  - User messages with ONLY `<local-command-caveat>` or `<system-reminder>` tags
+  - Synthetic assistant messages with `model='<synthetic>'`
+- **Rendering:** NEVER rendered - completely invisible
+- **Examples:**
+  ```json
+  {"type": "summary", "summary": "..."}
+  {"type": "user", "content": "<local-command-caveat>...</local-command-caveat>"}
+  {"type": "assistant", "message": {"model": "<synthetic>", ...}}
+  ```
+
+### 4. AI Messages (create AIChunks)
+- **Detection:** Everything else that's not User/System/HardNoise
+- **Includes:** Assistant messages, tool results, interruptions, internal messages
+- **Grouping:** Consecutive AI messages are buffered and grouped into single AIChunk
+- **Rendering:** LEFT side, existing dark styling
+- **Independence:** AIChunks are INDEPENDENT - no longer paired with UserChunks
+
 ## Key Types
 
 ### Location: `src/renderer/types/groups.ts`
@@ -31,9 +122,10 @@ This skill provides knowledge about how chat messages are grouped and displayed 
 | Type | Purpose |
 |------|---------|
 | **UserGroup** | User's input message with parsed content (commands, images, @references) |
+| **SystemGroup** | Command output from slash commands (NEW!) |
 | **AIGroup** | AI response: steps (thinking, tools, output), tokens, subagents, status |
-| **ConversationTurn** | Pairs one UserGroup with one AIGroup |
-| **SessionConversation** | Array of all ConversationTurn objects |
+| **ChatItem** | Discriminated union: user \| system \| ai |
+| **SessionConversation** | Flat list of ChatItem objects |
 
 ### UserGroup Structure
 ```typescript
@@ -46,29 +138,45 @@ interface UserGroup {
 }
 ```
 
+### SystemGroup Structure (NEW!)
+```typescript
+interface SystemGroup {
+  id: string;
+  message: ParsedMessage;
+  timestamp: Date;
+  commandOutput: string;  // Extracted from <local-command-stdout>
+  commandName?: string;   // Optional: extracted command name
+}
+```
+
 ### AIGroup Structure
 ```typescript
 interface AIGroup {
   id: string;
-  userGroupId: string;
+  // NOTE: No userChunkId - AIGroups are independent!
   startTime: Date;
   endTime: Date;
   durationMs: number;
-  steps: SemanticStep[];      // thinking, tool_call, tool_result, output, subagent
-  tokens: { input, output, cached, thinking };
+  steps: SemanticStep[];
+  tokens: AIGroupTokens;
   summary: AIGroupSummary;
-  status: 'complete' | 'interrupted' | 'error' | 'in_progress';
-  subagents: Subagent[];
+  status: AIGroupStatus;
+  processes: Process[];
+  chunkId: string;
+  metrics: SessionMetrics;
 }
 ```
 
-### EnhancedAIGroup (Display-Ready)
+### EnhancedAIGroup (Display-Ready with Model Info)
 ```typescript
 interface EnhancedAIGroup extends AIGroup {
-  lastOutput: AIGroupLastOutput | null;   // Always visible final output
+  lastOutput: AIGroupLastOutput | null;
+  displayItems: AIGroupDisplayItem[];
   linkedTools: Map<string, LinkedToolItem>;
-  displayItems: AIGroupDisplayItem[];     // Flattened chronological list
-  itemsSummary: string;                   // "3 tool calls, 1 message"
+  itemsSummary: string;
+  // Model information (NEW!)
+  mainModel: ModelInfo | null;      // Model used by main agent
+  subagentModels: ModelInfo[];      // Unique models used by subagents
 }
 ```
 
@@ -79,27 +187,25 @@ JSONL File
     ↓
 SessionParser (src/main/services/SessionParser.ts)
     ↓
-ParsedMessage[] + Subagent[]
+ParsedMessage[] + Process[]
     ↓
 ChunkBuilder.buildChunks() (src/main/services/ChunkBuilder.ts)
     ↓
-EnhancedChunk[] (separated: EnhancedUserChunk + EnhancedAIChunk pairs)
+EnhancedChunk[] (independent: EnhancedUserChunk, EnhancedSystemChunk, EnhancedAIChunk)
     ↓
 groupTransformer.transformChunksToConversation() (src/renderer/utils/groupTransformer.ts)
     ↓
-SessionConversation { turns: ConversationTurn[] }
+SessionConversation { items: ChatItem[] }
     ↓
 Zustand Store (src/renderer/store/index.ts)
     ↓
-ChatHistory → UserChatGroup + AIChatGroup
+ChatHistory → UserChatGroup / SystemChatGroup / AIChatGroup
 ```
 
-### Chunk Separation Model
-
-The ChunkBuilder produces **separated chunks** where user input and AI responses are distinct entities:
+### Chunk Types
 
 ```typescript
-// UserChunk - Contains only user input (no AI responses)
+// User Chunk - single user input (RIGHT side)
 interface UserChunk {
   chunkType: 'user';
   id: string;
@@ -110,13 +216,25 @@ interface UserChunk {
   metrics: SessionMetrics;
 }
 
-// AIChunk - Contains only AI responses (linked to UserChunk)
+// System Chunk - command output (LEFT side)
+interface SystemChunk {
+  chunkType: 'system';
+  id: string;
+  message: ParsedMessage;
+  commandOutput: string;  // Extracted from <local-command-stdout>
+  startTime: Date;
+  endTime: Date;
+  durationMs: number;
+  metrics: SessionMetrics;
+}
+
+// AI Chunk - assistant responses (LEFT side)
+// NOTE: No userChunkId - independent!
 interface AIChunk {
   chunkType: 'ai';
   id: string;
-  userChunkId: string;        // Links to parent UserChunk
   responses: ParsedMessage[];
-  subagents: Subagent[];
+  processes: Process[];
   sidechainMessages: ParsedMessage[];
   toolExecutions: ToolExecution[];
   startTime: Date;
@@ -125,61 +243,101 @@ interface AIChunk {
   metrics: SessionMetrics;
 }
 
-// EnhancedChunk = EnhancedUserChunk | EnhancedAIChunk
-// - EnhancedAIChunk adds: semanticSteps, rawMessages
-// - EnhancedUserChunk adds: rawMessages
+// EnhancedChunk = EnhancedUserChunk | EnhancedSystemChunk | EnhancedAIChunk
 ```
+
+## Key Type Guards
+
+### Current Type Guards (4-Category System)
+
+| Guard | Purpose | Detects |
+|-------|---------|---------|
+| `isParsedUserChunkMessage(msg)` | User chunks | Real user input starting User chunks |
+| `isParsedSystemChunkMessage(msg)` | System chunks | Command output with `<local-command-stdout>` |
+| `isParsedHardNoiseMessage(msg)` | Filtered noise | System metadata to exclude |
+| `isParsedAssistantMessage(msg)` | AI messages | Assistant responses |
+| `isParsedInternalUserMessage(msg)` | AI flow | Tool results (isMeta: true) |
+
+### Removed Type Guards (OLD)
+
+These are NO LONGER used in the 4-category system:
+- ~~`isParsedTriggerMessage`~~ - replaced by `isParsedUserChunkMessage`
+- ~~`isParsedNoiseMessage`~~ - replaced by `isParsedHardNoiseMessage`
+- ~~`isParsedSoftNoiseMessage`~~ - removed (all noise is now "hard")
+
+### Chunk Type Guards
+
+| Guard | Purpose |
+|-------|---------|
+| `isUserChunk(chunk)` | UserChunk with `chunkType: 'user'` |
+| `isAIChunk(chunk)` | AIChunk with `chunkType: 'ai'` |
+| `isSystemChunk(chunk)` | SystemChunk with `chunkType: 'system'` |
+| `isEnhancedUserChunk(chunk)` | EnhancedUserChunk (has rawMessages) |
+| `isEnhancedAIChunk(chunk)` | EnhancedAIChunk (has semanticSteps) |
+| `isEnhancedSystemChunk(chunk)` | EnhancedSystemChunk (has rawMessages) |
 
 ## Key Files
 
 | File | Role |
 |------|------|
 | `src/renderer/types/groups.ts` | Type definitions for display groups |
+| `src/renderer/types/data.ts` | Renderer type definitions + type guards |
+| `src/main/types/claude.ts` | Complete type definitions (JSONL + app types) |
 | `src/renderer/utils/groupTransformer.ts` | Transforms chunks → conversation |
 | `src/renderer/utils/aiGroupEnhancer.ts` | Enhances AIGroup with display-ready data |
-| `src/renderer/components/chat/ChatHistory.tsx` | Entry point, maps turns to UI |
+| `src/renderer/components/chat/ChatHistory.tsx` | Entry point, maps items to UI |
 | `src/renderer/components/chat/UserChatGroup.tsx` | Right-aligned user bubble |
+| `src/renderer/components/chat/SystemChatGroup.tsx` | Left-aligned system output (NEW!) |
 | `src/renderer/components/chat/AIChatGroup.tsx` | Collapsible AI response card |
 | `src/renderer/components/chat/DisplayItemList.tsx` | Renders expanded items |
 | `src/renderer/components/chat/LastOutputDisplay.tsx` | Always-visible last output |
 | `src/main/services/ChunkBuilder.ts` | Groups messages into chunks |
 | `src/main/services/SubagentResolver.ts` | Links Task calls to subagents |
+| `src/shared/utils/modelParser.ts` | Parses model strings into ModelInfo |
 
 ## Grouping Logic
 
-### Core Rules
-1. **One AIGroup per user message** - Each user request gets exactly one toggleable AI response
-2. **Trigger messages start groups** - Only `isTriggerMessage()` messages create new UserChunks
-3. **Internal messages are responses** - `isMeta: true` messages belong to the AIChunk
-4. **Last output always visible** - The final text or tool result is never hidden
-5. **Separated chunks** - UserChunk contains only user input; AIChunk contains only AI responses
+### Core Rules (NEW 4-Category System)
+1. **User messages START UserChunks** - Render on RIGHT side
+2. **System messages START SystemChunks** - Render on LEFT side
+3. **AI messages are GROUPED into independent AIChunks** - Render on LEFT side
+4. **Hard noise messages are FILTERED OUT** - Never rendered
+5. **AIChunks are INDEPENDENT** - No longer paired with UserChunks
 
-### Message Classification
+### Message Classification Flow
 
 ```typescript
-// REAL USER MESSAGE - starts new group
-{ type: "user", isMeta: false, message: { content: "string" } }
-
-// INTERNAL MESSAGE - part of AI response flow
-{ type: "user", isMeta: true, message: { content: [tool_result] } }
-
-// ASSISTANT MESSAGE - AI response
-{ type: "assistant", message: { content: [text, thinking, tool_use] } }
+// Classification priority (checked in order):
+if (isParsedHardNoiseMessage(msg)) → FILTER OUT (invisible)
+if (isParsedUserChunkMessage(msg)) → USER CHUNK (right side)
+if (isParsedSystemChunkMessage(msg)) → SYSTEM CHUNK (left side)
+// Everything else → buffer into AI CHUNK (left side)
 ```
 
-### Type Guards (from `src/main/types/claude.ts`)
+### Example Classification
 
-**Message Type Guards:**
-- `isTriggerMessage(msg)` - Real user input that starts a new group
-- `isRealUserMessage(msg)` - isMeta: false, string content
-- `isInternalUserMessage(msg)` - isMeta: true, tool results
-- `isParsedNoiseMessage(msg)` - System metadata to filter out
+```
+Input: "Help me debug this code"
+→ USER CHUNK (right)
 
-**Chunk Type Guards:**
-- `isUserChunk(chunk)` - UserChunk with `chunkType: 'user'`
-- `isAIChunk(chunk)` - AIChunk with `chunkType: 'ai'`
-- `isEnhancedUserChunk(chunk)` - EnhancedUserChunk (has rawMessages)
-- `isEnhancedAIChunk(chunk)` - EnhancedAIChunk (has semanticSteps)
+Input: "<command-name>/model</command-name>"
+→ USER CHUNK (right) - slash commands ARE user input
+
+Output: "<local-command-stdout>Set model to sonnet...</local-command-stdout>"
+→ SYSTEM CHUNK (left)
+
+Entry: {"type": "summary", "summary": "..."}
+→ HARD NOISE (filtered)
+
+Entry: "<local-command-caveat>Long messages may be truncated</local-command-caveat>"
+→ HARD NOISE (filtered)
+
+Entry: {"type": "assistant", "message": {"model": "<synthetic>", ...}}
+→ HARD NOISE (filtered)
+
+Assistant responses, tool results, interruptions
+→ AI CHUNK (left, grouped with consecutive messages)
+```
 
 ## Display Items (Expanded View)
 
@@ -188,7 +346,7 @@ interface AIChunk {
 | `thinking` | ThinkingItem | Extended thinking text |
 | `output` | TextItem | Intermediate text output |
 | `tool` | LinkedToolItem | Tool call paired with result |
-| `subagent` | SubagentItem | Nested agent execution |
+| `subagent` | SubagentItem | Nested agent execution (with model info) |
 
 ### LinkedToolItem Structure
 ```typescript
@@ -203,8 +361,27 @@ interface LinkedToolItem {
   endTime?: Date;
   durationMs?: number;
   isOrphaned: boolean;
+  sourceModel?: string;  // Model used for the tool call
 }
 ```
+
+## Model Information Display
+
+### Model Info Structure
+```typescript
+interface ModelInfo {
+  displayName: string;    // "Opus 4.5", "Sonnet 4"
+  fullId: string;         // "claude-opus-4-5-20250514"
+  isOpus: boolean;
+  isSonnet: boolean;
+  isHaiku: boolean;
+}
+```
+
+### Where Model is Displayed
+- **AIChatGroup Header:** Shows main model + "(+ N subagent models)" if different
+- **SubagentItem Header:** Shows subagent's model
+- **SubagentItem Metrics:** Shows model info alongside tokens/duration
 
 ## Task/Subagent Deduplication
 
@@ -225,7 +402,8 @@ Task tool calls spawn subagents in separate JSONL files. To avoid duplicate entr
    - Skip last output step (shown separately)
    - Skip orphaned result steps (already in LinkedToolItem)
    - Filter Task calls with subagents
-4. **buildSummary()** - Generate "X thinking, Y tool calls, Z messages"
+4. **extractModelInfo()** - Extract main model and subagent models
+5. **buildSummary()** - Generate "X thinking, Y tool calls, Z messages"
 
 ## Content Parsing
 
@@ -258,15 +436,25 @@ Task tool calls spawn subagents in separate JSONL files. To avoid duplicate entr
 
 ```
 ChatHistory
-├── ConversationTurn[] map
-│   ├── UserChatGroup
+├── ChatItem[] map
+│   ├── UserChatGroup (type === 'user')
 │   │   └── HighlightedText (commands, @paths)
-│   └── AIChatGroup
-│       ├── Header (Claude icon, summary, chevron)
+│   ├── SystemChatGroup (type === 'system')  ← NEW!
+│   │   └── CommandOutput text
+│   └── AIChatGroup (type === 'ai')
+│       ├── Header (Claude icon, model, summary, chevron)
 │       ├── DisplayItemList (when expanded)
 │       │   ├── ThinkingItem
 │       │   ├── TextItem
 │       │   ├── LinkedToolItem
-│       │   └── SubagentItem
+│       │   └── SubagentItem (with model info)
 │       └── LastOutputDisplay (always visible)
 ```
+
+## Visual Layout Summary
+
+| Chat Type | Side | Styling | Component |
+|-----------|------|---------|-----------|
+| User | RIGHT | Blue bubble | UserChatGroup |
+| System | LEFT | Gray/neutral | SystemChatGroup |
+| AI | LEFT | Dark card | AIChatGroup |

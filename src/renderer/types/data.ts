@@ -275,7 +275,8 @@ export function isCommandOutputMessage(msg: ParsedMessage): boolean {
   if (msg.type !== 'user') return false;
   const content = msg.content;
   if (typeof content === 'string') {
-    return content.includes('<local-command-stdout>');
+    return content.startsWith('<local-command-stdout>') || content.startsWith('<local-command-stderr>');
+
   }
   return false;
 }

@@ -27,7 +27,14 @@ const NOISE_TAG_PATTERNS = [
  */
 function extractCommandOutput(content: string): string | null {
   const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/i);
-  return match ? match[1].trim() : null;
+  const matchStderr = content.match(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/i);
+  if (match) {
+    return match[1].trim();
+  }
+  if (matchStderr) {
+    return matchStderr[1].trim();
+  }
+  return null;
 }
 
 /**
@@ -51,14 +58,14 @@ function extractCommandDisplay(content: string): string | null {
  * Check if content is primarily a command message.
  */
 export function isCommandContent(content: string): boolean {
-  return content.includes('<command-name>');
+  return content.startsWith('<command-name>');
 }
 
 /**
  * Check if content is a command output message.
  */
 export function isCommandOutputContent(content: string): boolean {
-  return content.includes('<local-command-stdout>');
+  return content.startsWith('<local-command-stdout>') || content.startsWith('<local-command-stderr>');
 }
 
 /**

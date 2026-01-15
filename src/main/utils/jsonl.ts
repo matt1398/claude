@@ -27,7 +27,7 @@ import {
   isParsedUserChunkMessage,
   isTextContent,
 } from '../types/claude';
-import { sanitizeDisplayContent } from '../../shared/utils/contentSanitizer';
+import { isCommandOutputContent, sanitizeDisplayContent } from '../../shared/utils/contentSanitizer';
 
 // =============================================================================
 // Core Parsing Functions
@@ -385,12 +385,12 @@ export async function extractFirstUserMessage(
       const content = entry.message?.content;
       if (typeof content === 'string') {
         // Skip output/caveat messages entirely
-        if (content.includes('<local-command-stdout>') || content.includes('caveat')) {
+        if (isCommandOutputContent(content)) {
           continue;
         }
 
         // Check if it's a command message
-        const isCommand = content.includes('<command-name>');
+        const isCommand = content.startsWith('<command-name>');
 
         if (isCommand) {
           // Store as fallback if we haven't found one yet
@@ -424,7 +424,7 @@ export async function extractFirstUserMessage(
           .map((b) => b.text)
           .join(' ');
 
-        if (textContent && !textContent.includes('<command-name>')) {
+        if (textContent && !textContent.startsWith('<command-name>')) {
           // Apply sanitization for display
           const sanitized = sanitizeDisplayContent(textContent);
           if (sanitized.length > 0) {

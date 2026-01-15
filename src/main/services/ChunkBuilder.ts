@@ -218,7 +218,14 @@ export class ChunkBuilder {
   private extractCommandOutput(message: ParsedMessage): string {
     const content = typeof message.content === 'string' ? message.content : '';
     const match = content.match(/<local-command-stdout>([\s\S]*?)<\/local-command-stdout>/);
-    return match ? match[1] : content;
+    const matchStderr = content.match(/<local-command-stderr>([\s\S]*?)<\/local-command-stderr>/);
+    if (match) {
+      return match[1];
+    }
+    if (matchStderr) {
+      return matchStderr[1];
+    }
+    return content;
   }
 
   /**

@@ -1270,13 +1270,14 @@ export function isParsedUserChunkMessage(msg: ParsedMessage): boolean {
     // Exclude messages that are system output or system metadata
     // These tags indicate system-generated content, not user input
     const excludeTags = [
+      '<local-command-stderr>',
       '<local-command-stdout>',
       '<local-command-caveat>',
       '<system-reminder>'
     ];
 
     for (const tag of excludeTags) {
-      if (trimmed.includes(tag)) {
+      if (trimmed.startsWith(tag)) {
         return false;
       }
     }
@@ -1299,6 +1300,7 @@ export function isParsedUserChunkMessage(msg: ParsedMessage): boolean {
 
     // Check text blocks for excluded tags
     const excludeTags = [
+      '<local-command-stderr>',
       '<local-command-stdout>',
       '<local-command-caveat>',
       '<system-reminder>'
@@ -1308,7 +1310,7 @@ export function isParsedUserChunkMessage(msg: ParsedMessage): boolean {
       if (block.type === 'text') {
         const textBlock = block as TextContent;
         for (const tag of excludeTags) {
-          if (textBlock.text.includes(tag)) {
+          if (textBlock.text.startsWith(tag)) {
             return false;
           }
         }
@@ -1344,13 +1346,16 @@ export function isParsedSystemChunkMessage(msg: ParsedMessage): boolean {
   const content = msg.content;
 
   if (typeof content === 'string') {
-    return content.includes('<local-command-stdout>');
+    return (
+      content.startsWith('<local-command-stdout>') ||
+      content.startsWith('<local-command-stderr>')
+    );
   }
 
   // Array content - check text blocks
   if (Array.isArray(content)) {
     return content.some(block =>
-      block.type === 'text' && (block as TextContent).text.includes('<local-command-stdout>')
+      block.type === 'text' && (block as TextContent).text.startsWith('<local-command-stdout>')
     );
   }
 
@@ -1383,7 +1388,7 @@ export function isParsedCommandOutputMessage(msg: ParsedMessage): boolean {
   if (msg.type !== 'user') return false;
   const content = msg.content;
   if (typeof content === 'string') {
-    return content.includes('<local-command-stdout>');
+    return content.startsWith('<local-command-stdout>');
   }
   return false;
 }
@@ -1437,6 +1442,10 @@ export function isParsedAssistantMessage(msg: ParsedMessage): boolean {
 /**
  * Hard noise message (ParsedMessage version) - NEVER rendered or counted in the UI.
  * This wraps isHardNoiseMessage() but works with ParsedMessage instead of ChatHistoryEntry.
+ *
+ * Filtered messages:
+ * - Messages with parentUuid: null (orphaned/root messages that shouldn't display)
+ *   - e.g., compact_boundary system messages, root-level meta messages
  *
  * Filtered types:
  * - 'system' entries

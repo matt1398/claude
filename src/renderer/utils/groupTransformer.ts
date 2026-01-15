@@ -36,6 +36,7 @@ import {
   isRealUserMessage,
   isEnhancedUserChunk,
   isEnhancedAIChunk,
+  isEnhancedSystemChunk,
 } from '../types/data';
 import { sanitizeDisplayContent, isCommandContent } from '../../shared/utils/contentSanitizer';
 
@@ -53,17 +54,6 @@ const COMMAND_PATTERN = /\/([a-z-]+)(?:\s+(.+?))?(?=\s*\/|\s*$)/gi;
  * Maximum characters to extract for thinking preview.
  */
 const THINKING_PREVIEW_LENGTH = 100;
-
-// =============================================================================
-// Type Guard for EnhancedSystemChunk
-// =============================================================================
-
-/**
- * Type guard to check if a chunk is an EnhancedSystemChunk.
- */
-function isEnhancedSystemChunk(chunk: EnhancedChunk): chunk is EnhancedSystemChunk {
-  return 'chunkType' in chunk && chunk.chunkType === 'system';
-}
 
 // =============================================================================
 // Main Transformation Function
@@ -99,12 +89,22 @@ export function transformChunksToConversation(
   let aiCount = 0;
 
   for (const chunk of chunks) {
+    // Debug: Log chunk type info
+    const chunkType = 'chunkType' in chunk ? chunk.chunkType : 'unknown';
+    const hasRawMessages = 'rawMessages' in chunk;
+
     if (isEnhancedUserChunk(chunk)) {
       items.push({
         type: 'user',
         group: createUserGroupFromChunk(chunk, userCount++),
       });
     } else if (isEnhancedSystemChunk(chunk)) {
+      // Debug: Log when a chunk becomes system
+      console.warn(`[groupTransformer] Chunk classified as system:`, {
+        chunkType,
+        hasRawMessages,
+        id: chunk.id,
+      });
       items.push({
         type: 'system',
         group: createSystemGroup(chunk, systemCount++),
