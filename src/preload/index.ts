@@ -8,6 +8,8 @@ const electronAPI: ElectronAPI = {
   getSessions: (projectId: string) => ipcRenderer.invoke('get-sessions', projectId),
   getSessionsPaginated: (projectId: string, cursor: string | null, limit?: number) =>
     ipcRenderer.invoke('get-sessions-paginated', projectId, cursor, limit),
+  searchSessions: (projectId: string, query: string, maxResults?: number) =>
+    ipcRenderer.invoke('search-sessions', projectId, query, maxResults),
   getSessionDetail: (projectId: string, sessionId: string) =>
     ipcRenderer.invoke('get-session-detail', projectId, sessionId),
   getSessionMetrics: (projectId: string, sessionId: string) =>

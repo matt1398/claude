@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import { Project, Session, ChatHistoryEntry, isHardNoiseMessage, PaginatedSessionsResult, SessionCursor } from '../types/claude';
+import { Project, Session, ChatHistoryEntry, isHardNoiseMessage, PaginatedSessionsResult, SessionCursor, SearchResult, SearchSessionsResult, isParsedHardNoiseMessage, ParsedMessage } from '../types/claude';
 import {
   decodePath,
   isValidEncodedPath,
@@ -631,5 +631,192 @@ export class ProjectScanner {
    */
   projectsDirExists(): boolean {
     return fs.existsSync(this.projectsDir);
+  }
+
+  // ===========================================================================
+  // Search
+  // ===========================================================================
+
+  /**
+   * Searches sessions in a project for a query string.
+   * Filters out noise messages and returns matching content.
+   *
+   * @param projectId - The project ID to search in
+   * @param query - Search query string
+   * @param maxResults - Maximum number of results to return (default 50)
+   */
+  async searchSessions(
+    projectId: string,
+    query: string,
+    maxResults: number = 50
+  ): Promise<SearchSessionsResult> {
+    const results: SearchResult[] = [];
+    let sessionsSearched = 0;
+
+    if (!query || query.trim().length === 0) {
+      return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+    }
+
+    const normalizedQuery = query.toLowerCase().trim();
+
+    try {
+      const projectPath = path.join(this.projectsDir, projectId);
+
+      if (!fs.existsSync(projectPath)) {
+        return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+      }
+
+      // Get all session files
+      const entries = fs.readdirSync(projectPath, { withFileTypes: true });
+      const sessionFiles = entries.filter(
+        (entry) => entry.isFile() && entry.name.endsWith('.jsonl')
+      );
+
+      // Search each session file
+      for (const file of sessionFiles) {
+        if (results.length >= maxResults) break;
+
+        const sessionId = extractSessionId(file.name);
+        const filePath = path.join(projectPath, file.name);
+        sessionsSearched++;
+
+        try {
+          const sessionResults = await this.searchSessionFile(
+            projectId,
+            sessionId,
+            filePath,
+            normalizedQuery,
+            maxResults - results.length
+          );
+          results.push(...sessionResults);
+        } catch (error) {
+          // Skip files we can't read
+          continue;
+        }
+      }
+
+      return {
+        results,
+        totalMatches: results.length,
+        sessionsSearched,
+        query,
+      };
+    } catch (error) {
+      console.error(`Error searching sessions for project ${projectId}:`, error);
+      return { results: [], totalMatches: 0, sessionsSearched: 0, query };
+    }
+  }
+
+  /**
+   * Searches a single session file for a query string.
+   */
+  private async searchSessionFile(
+    projectId: string,
+    sessionId: string,
+    filePath: string,
+    query: string,
+    maxResults: number
+  ): Promise<SearchResult[]> {
+    const results: SearchResult[] = [];
+    let sessionTitle: string | undefined;
+
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: fs.createReadStream(filePath),
+        crlfDelay: Infinity,
+      });
+
+      rl.on('line', (line) => {
+        if (results.length >= maxResults) {
+          rl.close();
+          return;
+        }
+
+        try {
+          const entry = JSON.parse(line) as ChatHistoryEntry;
+
+          // Convert to ParsedMessage-like for noise filtering
+          const parsedMsg: ParsedMessage = {
+            uuid: entry.uuid || '',
+            parentUuid: null,
+            type: entry.type as any,
+            content: entry.type === 'user' || entry.type === 'assistant'
+              ? entry.message?.content || ''
+              : '',
+            timestamp: entry.timestamp ? new Date(entry.timestamp) : new Date(),
+            model: entry.type === 'assistant' ? (entry as any).message?.model : undefined,
+            isMeta: entry.type === 'user' ? (entry as any).isMeta : undefined,
+            isSidechain: false,
+            toolCalls: [],
+            toolResults: [],
+          };
+
+          // Skip noise messages
+          if (isParsedHardNoiseMessage(parsedMsg)) {
+            return;
+          }
+
+          // Extract searchable text
+          let searchableText = '';
+
+          if (entry.type === 'user' && entry.message?.content) {
+            if (typeof entry.message.content === 'string') {
+              searchableText = entry.message.content;
+            } else if (Array.isArray(entry.message.content)) {
+              searchableText = entry.message.content
+                .filter((c: any) => c.type === 'text')
+                .map((c: any) => c.text)
+                .join(' ');
+            }
+
+            // Capture first user message as session title
+            if (!sessionTitle && searchableText) {
+              sessionTitle = searchableText.slice(0, 100);
+            }
+          } else if (entry.type === 'assistant' && entry.message?.content) {
+            if (Array.isArray(entry.message.content)) {
+              searchableText = entry.message.content
+                .filter((c: any) => c.type === 'text')
+                .map((c: any) => c.text)
+                .join(' ');
+            }
+          }
+
+          // Search for query
+          if (searchableText) {
+            const lowerText = searchableText.toLowerCase();
+            const matchIndex = lowerText.indexOf(query);
+
+            if (matchIndex !== -1) {
+              // Extract context around match
+              const contextStart = Math.max(0, matchIndex - 50);
+              const contextEnd = Math.min(searchableText.length, matchIndex + query.length + 50);
+              const context = searchableText.slice(contextStart, contextEnd);
+              const matchedText = searchableText.slice(matchIndex, matchIndex + query.length);
+
+              results.push({
+                sessionId,
+                projectId,
+                sessionTitle: sessionTitle || 'Untitled Session',
+                matchedText,
+                context: (contextStart > 0 ? '...' : '') + context + (contextEnd < searchableText.length ? '...' : ''),
+                messageType: entry.type as 'user' | 'assistant',
+                timestamp: entry.timestamp ? new Date(entry.timestamp).getTime() : Date.now(),
+              });
+            }
+          }
+        } catch {
+          // Skip invalid JSON lines
+        }
+      });
+
+      rl.on('close', () => {
+        resolve(results);
+      });
+
+      rl.on('error', () => {
+        resolve(results);
+      });
+    });
   }
 }

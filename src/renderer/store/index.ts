@@ -74,6 +74,9 @@ interface AppState {
   searchResultCount: number;
   currentSearchIndex: number;
 
+  // Command palette state
+  commandPaletteOpen: boolean;
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -117,6 +120,11 @@ interface AppState {
   hideSearch: () => void;
   nextSearchResult: () => void;
   previousSearchResult: () => void;
+
+  // Command palette actions
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
+  navigateToSession: (projectId: string, sessionId: string) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -170,6 +178,9 @@ export const useStore = create<AppState>((set, get) => ({
   searchVisible: false,
   searchResultCount: 0,
   currentSearchIndex: -1,
+
+  // Command palette state
+  commandPaletteOpen: false,
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -687,5 +698,34 @@ export const useStore = create<AppState>((set, get) => ({
       const newIndex = prevIndex < 0 ? state.searchResultCount - 1 : prevIndex;
       set({ currentSearchIndex: newIndex });
     }
+  },
+
+  // Command palette actions
+  openCommandPalette: () => {
+    set({ commandPaletteOpen: true });
+  },
+
+  closeCommandPalette: () => {
+    set({ commandPaletteOpen: false });
+  },
+
+  navigateToSession: (projectId: string, sessionId: string) => {
+    const state = get();
+
+    // If different project, select it first
+    if (state.selectedProjectId !== projectId) {
+      state.selectProject(projectId);
+    }
+
+    // Open the session in a new tab
+    state.openTab({
+      type: 'session',
+      label: 'Loading...',
+      projectId,
+      sessionId,
+    });
+
+    // Fetch session detail
+    state.fetchSessionDetail(projectId, sessionId);
   },
 }));

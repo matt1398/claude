@@ -3,7 +3,7 @@
  * Supports tab switching, closing, and horizontal scrolling on overflow.
  */
 
-import { X, Plus, LayoutDashboard, FileText, RefreshCw } from 'lucide-react';
+import { X, Plus, LayoutDashboard, FileText, RefreshCw, Search } from 'lucide-react';
 import { useStore } from '../../store';
 
 export function TabBar() {
@@ -14,6 +14,7 @@ export function TabBar() {
     closeTab,
     openDashboard,
     fetchSessionDetail,
+    openCommandPalette,
   } = useStore();
 
   // Get the active tab
@@ -27,9 +28,9 @@ export function TabBar() {
   };
 
   return (
-    <div className="h-10 flex items-center border-b border-claude-dark-border bg-claude-dark-bg px-2">
+    <div className="h-10 flex items-center justify-between border-b border-claude-dark-border bg-claude-dark-bg px-2">
       {/* Tab list with horizontal scroll and new tab button */}
-      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none">
+      <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 min-w-0">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const Icon = tab.type === 'dashboard' ? LayoutDashboard : FileText;
@@ -83,6 +84,17 @@ export function TabBar() {
           <Plus className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Search button - right side (Notion style) */}
+      <button
+        onClick={openCommandPalette}
+        className="flex items-center gap-2 px-3 py-1.5 ml-2 rounded-md text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface transition-colors flex-shrink-0"
+        title="Search (⌘K)"
+      >
+        <Search className="w-4 h-4" />
+        <span className="text-xs hidden sm:inline">Search</span>
+        <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-claude-dark-surface border border-claude-dark-border rounded">⌘K</kbd>
+      </button>
     </div>
   );
 }

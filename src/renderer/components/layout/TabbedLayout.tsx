@@ -13,6 +13,7 @@ import { Sidebar } from './Sidebar';
 import { TabBar } from './TabBar';
 import { DashboardView } from '../dashboard/DashboardView';
 import { MiddlePanel } from './MiddlePanel';
+import { CommandPalette } from '../search/CommandPalette';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
@@ -52,6 +53,9 @@ export function TabbedLayout() {
 
   return (
     <div className="flex h-screen bg-claude-dark-bg text-claude-dark-text">
+      {/* Command Palette (Cmd+K) */}
+      <CommandPalette />
+
       {/* Sidebar - Project dropdown + Sessions (280px) */}
       <Sidebar />
 

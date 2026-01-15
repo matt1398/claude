@@ -51,6 +51,40 @@ export interface PaginatedSessionsResult {
 }
 
 /**
+ * A single search result from searching sessions.
+ */
+export interface SearchResult {
+  /** Session ID where match was found */
+  sessionId: string;
+  /** Project ID */
+  projectId: string;
+  /** Session title/first message */
+  sessionTitle: string;
+  /** The matched text (trimmed) */
+  matchedText: string;
+  /** Context around the match */
+  context: string;
+  /** Message type (user/assistant) */
+  messageType: 'user' | 'assistant';
+  /** Timestamp of the message */
+  timestamp: number;
+}
+
+/**
+ * Result of a search operation.
+ */
+export interface SearchSessionsResult {
+  /** Search results */
+  results: SearchResult[];
+  /** Total matches found */
+  totalMatches: number;
+  /** Sessions searched */
+  sessionsSearched: number;
+  /** Search query used */
+  query: string;
+}
+
+/**
  * Session metadata.
  */
 export interface Session {
@@ -496,6 +530,7 @@ export interface ElectronAPI {
   getProjects: () => Promise<Project[]>;
   getSessions: (projectId: string) => Promise<Session[]>;
   getSessionsPaginated: (projectId: string, cursor: string | null, limit?: number) => Promise<PaginatedSessionsResult>;
+  searchSessions: (projectId: string, query: string, maxResults?: number) => Promise<SearchSessionsResult>;
   getSessionDetail: (projectId: string, sessionId: string) => Promise<SessionDetail | null>;
   getSessionMetrics: (projectId: string, sessionId: string) => Promise<SessionMetrics | null>;
   getWaterfallData: (projectId: string, sessionId: string) => Promise<WaterfallData | null>;
