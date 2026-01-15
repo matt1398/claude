@@ -143,17 +143,17 @@ const DiffLineRow: React.FC<DiffLineRowProps> = ({ line }) => {
   const style = styles[line.type];
 
   return (
-    <div className={`flex ${style.bg} border-l-[3px] ${style.border}`}>
+    <div className={`flex min-w-full ${style.bg} border-l-[3px] ${style.border}`}>
       {/* Line number */}
-      <span className="w-10 flex-shrink-0 px-2 text-right text-zinc-600 select-none">
+      <span className="w-10 flex-shrink-0 px-2 text-right text-zinc-600 select-none bg-inherit">
         {line.lineNumber}
       </span>
       {/* Prefix */}
-      <span className={`w-6 flex-shrink-0 ${style.text} select-none`}>
+      <span className={`w-6 flex-shrink-0 ${style.text} select-none bg-inherit`}>
         {style.prefix}
       </span>
       {/* Content */}
-      <span className={`flex-1 ${style.text} whitespace-pre`}>
+      <span className={`flex-1 ${style.text} whitespace-pre bg-inherit`}>
         {line.content || ' '}
       </span>
     </div>
@@ -225,14 +225,16 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       {/* Diff content */}
       {isExpanded && (
         <div className="bg-zinc-900 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto">
-          {diffLines.map((line, index) => (
-            <DiffLineRow key={index} line={line} />
-          ))}
-          {diffLines.length === 0 && (
-            <div className="px-3 py-2 text-zinc-500 italic">
-              No changes detected
-            </div>
-          )}
+          <div className="inline-block min-w-full">
+            {diffLines.map((line, index) => (
+              <DiffLineRow key={index} line={line} />
+            ))}
+            {diffLines.length === 0 && (
+              <div className="px-3 py-2 text-zinc-500 italic">
+                No changes detected
+              </div>
+            )}
+          </div>
         </div>
       )}
 

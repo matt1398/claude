@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageSquare, ChevronRight } from 'lucide-react';
 import type { SemanticStep } from '../../../types/data';
+import { MarkdownViewer } from './MarkdownViewer';
 
 interface TextItemProps {
   step: SemanticStep;
@@ -30,10 +31,11 @@ export const TextItem: React.FC<TextItemProps> = ({ step, preview, onClick, isEx
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-1 mb-2">
-          <div className="text-zinc-200 whitespace-pre-wrap">
-            {fullContent}
-          </div>
+        <div className="pl-4 ml-2 mt-1 mb-2">
+          <MarkdownViewer
+            content={fullContent}
+            maxHeight="max-h-96"
+          />
         </div>
       )}
     </div>

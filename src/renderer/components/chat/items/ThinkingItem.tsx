@@ -1,6 +1,7 @@
 import React from 'react';
 import { Brain, ChevronRight } from 'lucide-react';
 import type { SemanticStep } from '../../../types/data';
+import { MarkdownViewer } from './MarkdownViewer';
 
 interface ThinkingItemProps {
   step: SemanticStep;
@@ -30,10 +31,11 @@ export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onCli
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-1 mb-2">
-          <div className="text-zinc-300 text-sm whitespace-pre-wrap">
-            {fullContent}
-          </div>
+        <div className="pl-4 ml-2 mt-1 mb-2">
+          <MarkdownViewer
+            content={fullContent}
+            maxHeight="max-h-96"
+          />
         </div>
       )}
     </div>

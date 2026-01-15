@@ -5,6 +5,7 @@ import type { AIGroupDisplayItem } from '../../../types/groups';
 import { ThinkingItem } from './ThinkingItem';
 import { TextItem } from './TextItem';
 import { LinkedToolItem } from './LinkedToolItem';
+import { MarkdownViewer } from './MarkdownViewer';
 import { buildDisplayItemsFromMessages, buildSummary, truncateText } from '../../../utils/aiGroupEnhancer';
 import { parseModelString, getModelColorClass } from '../../../../shared/utils/modelParser';
 
@@ -235,9 +236,12 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
       {/* Expanded Content */}
       {isExpanded && (
         <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-1 mb-2">
-          {/* Full description */}
-          <div className="text-zinc-300 text-sm whitespace-pre-wrap mb-3">
-            {description}
+          {/* Full description with markdown support */}
+          <div className="mb-3">
+            <MarkdownViewer
+              content={description}
+              maxHeight="max-h-64"
+            />
           </div>
 
           {/* Metrics card */}
