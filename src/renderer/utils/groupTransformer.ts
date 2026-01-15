@@ -94,9 +94,12 @@ export function transformChunksToConversation(
   let compactCount = 0;
 
   for (const chunk of chunks) {
-    // Debug: Log chunk type info
-    const chunkType = 'chunkType' in chunk ? chunk.chunkType : 'unknown';
-    const hasRawMessages = 'rawMessages' in chunk;
+    // DEBUG: Log every chunk
+    console.log('[groupTransformer] Chunk:', {
+      chunkType: 'chunkType' in chunk ? (chunk as any).chunkType : 'unknown',
+      hasRawMessages: 'rawMessages' in chunk,
+      id: chunk.id
+    });
 
     if (isEnhancedUserChunk(chunk)) {
       items.push({
@@ -106,8 +109,8 @@ export function transformChunksToConversation(
     } else if (isEnhancedSystemChunk(chunk)) {
       // Debug: Log when a chunk becomes system
       console.warn(`[groupTransformer] Chunk classified as system:`, {
-        chunkType,
-        hasRawMessages,
+        chunkType: 'chunkType' in chunk ? (chunk as any).chunkType : 'unknown',
+        hasRawMessages: 'rawMessages' in chunk,
         id: chunk.id,
       });
       items.push({
@@ -120,12 +123,17 @@ export function transformChunksToConversation(
         group: createAIGroupFromChunk(chunk, aiCount++),
       });
     } else if (isEnhancedCompactChunk(chunk)) {
+      console.log('[groupTransformer] Found compact chunk, creating group');
       items.push({
         type: 'compact',
         group: createCompactGroup(chunk, compactCount++),
       });
+    } else {
+      console.warn('[groupTransformer] Unhandled chunk type:', (chunk as any).chunkType);
     }
   }
+
+  console.log('[groupTransformer] Final counts:', { userCount, systemCount, aiCount, compactCount });
 
   return {
     sessionId: chunks[0]?.id || 'unknown',
