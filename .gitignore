@@ -35,3 +35,4 @@ yarn-error.log*
 *.tsbuildinfo
 
 .pnpm-store/
+notification_example/

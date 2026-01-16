@@ -385,6 +385,19 @@ export const useStore = create<AppState>((set, get) => ({
       const firstAIGroup = firstAIItem?.type === 'ai' ? firstAIItem.group : null;
       console.log('[Store] Setting visibleAIGroupId to:', firstAIGroupId);
 
+      // Update tab label if this session is open in a tab
+      const currentState = get();
+      const existingTab = findTabBySession(currentState.openTabs, sessionId);
+      if (existingTab && detail) {
+        const newLabel = detail.session.firstMessage
+          ? truncateLabel(detail.session.firstMessage)
+          : `Session ${sessionId.slice(0, 8)}`;
+        const updatedTabs = currentState.openTabs.map(tab =>
+          tab.id === existingTab.id ? { ...tab, label: newLabel } : tab
+        );
+        set({ openTabs: updatedTabs });
+      }
+
       set({
         sessionDetail: detail,
         sessionDetailLoading: false,
