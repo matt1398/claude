@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConfig } from '../types/data';
-import type { SessionConversation, AIGroup, AIGroupExpansionLevel, AIGroupDisplayItem } from '../types/groups';
+import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
 import { transformChunksToConversation } from '../utils/groupTransformer';
-import { buildDisplayItems, buildDisplayItemsFromMessages, findLastOutput } from '../utils/aiGroupEnhancer';
+import { findLastOutput } from '../utils/aiGroupEnhancer';
 import type { Tab, TabInput } from '../types/tabs';
 import { isSessionOpenInTabs, findTabBySession, truncateLabel } from '../types/tabs';
 
@@ -13,24 +13,19 @@ interface BreadcrumbItem {
 
 /**
  * Represents a single search match in the conversation.
+ * Only searches: user message text and AI lastOutput text (not tool results, thinking, or subagents)
  */
 export interface SearchMatch {
   /** ID of the chat item containing this match */
   itemId: string;
-  /** Type of item ('user' | 'system' | 'ai') */
-  itemType: 'user' | 'system' | 'ai';
+  /** Type of item ('user' | 'ai') - system items are not searched */
+  itemType: 'user' | 'ai';
   /** Which match within this item (0-based) */
   matchIndexInItem: number;
   /** Global index across all matches */
   globalIndex: number;
-  /** For AI groups: whether this match requires expanding the group */
-  requiresExpansion?: boolean;
-  /** Display item ID within the AI group (e.g., "thinking-0", "output-1", "tool-xxx-2") */
+  /** Display item ID within the AI group (e.g., "lastOutput") */
   displayItemId?: string;
-  /** For subagent content: the subagent ID if match is inside subagent execution trace */
-  subagentId?: string;
-  /** Item ID within the subagent's ExecutionTrace (e.g., "subagent-thinking-0", "subagent-tool-xxx") */
-  subagentDisplayItemId?: string;
 }
 
 /**
@@ -801,6 +796,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
 
     // Build search matches by scanning conversation
+    // ONLY searches: user message text and AI lastOutput text (not tool results)
     const matches: SearchMatch[] = [];
     const lowerQuery = query.toLowerCase();
     let globalIndex = 0;
@@ -809,11 +805,9 @@ export const useStore = create<AppState>((set, get) => ({
     const findMatchesInText = (
       text: string,
       itemId: string,
-      itemType: 'user' | 'system' | 'ai',
+      itemType: 'user' | 'ai',
       matchIndexInItem: { value: number },
-      displayItemId?: string,
-      subagentId?: string,
-      subagentDisplayItemId?: string
+      displayItemId?: string
     ) => {
       const lowerText = text.toLowerCase();
       let pos = 0;
@@ -823,10 +817,7 @@ export const useStore = create<AppState>((set, get) => ({
           itemType,
           matchIndexInItem: matchIndexInItem.value,
           globalIndex,
-          requiresExpansion: itemType === 'ai',
           displayItemId,
-          subagentId,
-          subagentDisplayItemId,
         });
         matchIndexInItem.value++;
         globalIndex++;
@@ -838,114 +829,22 @@ export const useStore = create<AppState>((set, get) => ({
       const matchIndexInItem = { value: 0 };
 
       if (item.type === 'user') {
+        // Search user message text
         const text = item.group.content.rawText || item.group.content.text || '';
         findMatchesInText(text, item.group.id, 'user', matchIndexInItem);
-      } else if (item.type === 'system') {
-        findMatchesInText(item.group.commandOutput || '', item.group.id, 'system', matchIndexInItem);
       } else if (item.type === 'ai') {
+        // For AI items: ONLY search lastOutput text (not tool results, thinking, or subagents)
         const aiGroup = item.group;
         const itemId = aiGroup.id;
-
-        // Build display items using the same logic as the UI (critical for index alignment)
         const lastOutput = findLastOutput(aiGroup.steps);
-        const displayItems = buildDisplayItems(aiGroup.steps, lastOutput, aiGroup.processes);
 
-        // Scan display items for matches
-        for (let idx = 0; idx < displayItems.length; idx++) {
-          const displayItem = displayItems[idx];
-
-          switch (displayItem.type) {
-            case 'thinking': {
-              const displayItemId = `thinking-${idx}`;
-              findMatchesInText(displayItem.content, itemId, 'ai', matchIndexInItem, displayItemId);
-              break;
-            }
-            case 'output': {
-              const displayItemId = `output-${idx}`;
-              findMatchesInText(displayItem.content, itemId, 'ai', matchIndexInItem, displayItemId);
-              break;
-            }
-            case 'tool': {
-              const displayItemId = `tool-${displayItem.tool.id}-${idx}`;
-              // Search in tool result content
-              const toolResultContent = typeof displayItem.tool.result?.content === 'string'
-                ? displayItem.tool.result.content
-                : '';
-              findMatchesInText(toolResultContent, itemId, 'ai', matchIndexInItem, displayItemId);
-              break;
-            }
-            case 'subagent': {
-              const subagent = displayItem.subagent;
-              const subagentId = subagent.id;
-              const subagentDisplayItemId_parent = `subagent-${subagentId}-${idx}`;
-
-              // Build display items for subagent using buildDisplayItemsFromMessages
-              const subagentDisplayItems = buildDisplayItemsFromMessages(subagent.messages || [], []);
-
-              // Scan subagent's display items for matches
-              for (let subIdx = 0; subIdx < subagentDisplayItems.length; subIdx++) {
-                const subItem = subagentDisplayItems[subIdx];
-
-                switch (subItem.type) {
-                  case 'thinking': {
-                    const subagentDisplayItemId = `subagent-thinking-${subIdx}`;
-                    findMatchesInText(
-                      subItem.content,
-                      itemId,
-                      'ai',
-                      matchIndexInItem,
-                      subagentDisplayItemId_parent,
-                      subagentId,
-                      subagentDisplayItemId
-                    );
-                    break;
-                  }
-                  case 'output': {
-                    const subagentDisplayItemId = `subagent-output-${subIdx}`;
-                    findMatchesInText(
-                      subItem.content,
-                      itemId,
-                      'ai',
-                      matchIndexInItem,
-                      subagentDisplayItemId_parent,
-                      subagentId,
-                      subagentDisplayItemId
-                    );
-                    break;
-                  }
-                  case 'tool': {
-                    const subagentDisplayItemId = `subagent-tool-${subItem.tool.id}`;
-                    const subToolContent = typeof subItem.tool.result?.content === 'string'
-                      ? subItem.tool.result.content
-                      : '';
-                    findMatchesInText(
-                      subToolContent,
-                      itemId,
-                      'ai',
-                      matchIndexInItem,
-                      subagentDisplayItemId_parent,
-                      subagentId,
-                      subagentDisplayItemId
-                    );
-                    break;
-                  }
-                }
-              }
-              break;
-            }
-          }
+        if (lastOutput && lastOutput.type === 'text' && lastOutput.text) {
+          // Last output text - displayItemId indicates this is lastOutput content
+          findMatchesInText(lastOutput.text, itemId, 'ai', matchIndexInItem, 'lastOutput');
         }
-
-        // Also scan lastOutput if it exists (always visible, but still searchable)
-        if (lastOutput) {
-          if (lastOutput.type === 'text' && lastOutput.text) {
-            // Last output text - no displayItemId needed since it's always visible
-            findMatchesInText(lastOutput.text, itemId, 'ai', matchIndexInItem);
-          } else if (lastOutput.type === 'tool_result' && lastOutput.toolResult) {
-            findMatchesInText(lastOutput.toolResult, itemId, 'ai', matchIndexInItem);
-          }
-        }
+        // Skip tool_result type - only searching text output
       }
+      // Skip system items entirely
     }
 
     set({
@@ -954,11 +853,6 @@ export const useStore = create<AppState>((set, get) => ({
       currentSearchIndex: matches.length > 0 ? 0 : -1,
       searchMatches: matches
     });
-
-    // Auto-expand for the first search result if there are matches
-    if (matches.length > 0) {
-      get().expandForCurrentSearchResult();
-    }
   },
 
   showSearch: () => {
@@ -1009,33 +903,15 @@ export const useStore = create<AppState>((set, get) => ({
     const currentMatch = searchMatches[currentSearchIndex];
     if (!currentMatch) return;
 
-    // If this is an AI group match, add it to the expanded set
+    // For AI group matches, track the display item ID for highlighting
+    // Since we only search lastOutput text (always visible), no expansion needed
     if (currentMatch.itemType === 'ai') {
-      const newExpandedAIGroups = new Set(state.searchExpandedAIGroupIds);
-      newExpandedAIGroups.add(currentMatch.itemId);
-
-      // Set the current display item ID for precise expansion within the AI group
-      const displayItemId = currentMatch.displayItemId || null;
-
-      // If there's a subagent ID, also expand that subagent's trace
-      if (currentMatch.subagentId) {
-        const newExpandedSubagents = new Set(state.searchExpandedSubagentIds);
-        newExpandedSubagents.add(currentMatch.subagentId);
-        set({
-          searchExpandedAIGroupIds: newExpandedAIGroups,
-          searchExpandedSubagentIds: newExpandedSubagents,
-          searchCurrentDisplayItemId: displayItemId,
-          searchCurrentSubagentItemId: currentMatch.subagentDisplayItemId || null,
-        });
-      } else {
-        set({
-          searchExpandedAIGroupIds: newExpandedAIGroups,
-          searchCurrentDisplayItemId: displayItemId,
-          searchCurrentSubagentItemId: null,
-        });
-      }
+      set({
+        searchCurrentDisplayItemId: currentMatch.displayItemId || null,
+        searchCurrentSubagentItemId: null,
+      });
     } else {
-      // For user/system matches, clear the display item IDs
+      // For user matches, clear display item IDs
       set({
         searchCurrentDisplayItemId: null,
         searchCurrentSubagentItemId: null,

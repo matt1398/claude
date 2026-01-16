@@ -9,6 +9,9 @@ import { SettingsTabs, type SettingsSection } from './SettingsTabs';
 import type { AppConfig } from '../../types/data';
 import { useStore } from '../../store';
 
+// Get the setState function from the store to update appConfig globally
+const setStoreState = useStore.setState;
+
 // Snooze duration options
 const SNOOZE_OPTIONS = [
   { value: 15, label: '15 minutes' },
@@ -301,6 +304,8 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.update(section, data);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      // Update global store so other components (like useTheme) see the change
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       // Revert optimistic update on error
       setOptimisticConfig(config);
@@ -342,6 +347,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.snooze(minutes);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to snooze notifications');
     } finally {
@@ -356,6 +362,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.clearSnooze();
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear snooze');
     } finally {
@@ -370,6 +377,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.addIgnoreRegex(pattern);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add pattern');
     } finally {
@@ -384,6 +392,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.removeIgnoreRegex(pattern);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove pattern');
     } finally {
@@ -398,6 +407,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.addIgnoreProject(projectId);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add project');
     } finally {
@@ -412,6 +422,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.removeIgnoreProject(projectId);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove project');
     } finally {
@@ -454,6 +465,7 @@ export function SettingsView() {
       const updatedConfig = await window.electronAPI.config.update('display', defaultConfig.display);
       setConfig(updatedConfig);
       setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset settings');
     } finally {
@@ -504,6 +516,7 @@ export function SettingsView() {
         const updatedConfig = await window.electronAPI.config.get();
         setConfig(updatedConfig);
         setOptimisticConfig(updatedConfig);
+        setStoreState({ appConfig: updatedConfig });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to import config');
       } finally {

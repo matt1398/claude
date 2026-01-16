@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
@@ -23,6 +24,22 @@ interface LastOutputDisplayProps {
  */
 export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayProps) {
   const searchQuery = useStore((s) => s.searchQuery);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Auto-expand when search matches hidden content
+  useEffect(() => {
+    if (searchQuery && lastOutput?.type === 'text' && lastOutput.text) {
+      const isLong = lastOutput.text.length > 500;
+      if (isLong) {
+        const lowerText = lastOutput.text.toLowerCase();
+        const lowerQuery = searchQuery.toLowerCase();
+        const matchIndex = lowerText.indexOf(lowerQuery);
+        if (matchIndex >= 500) {
+          setIsExpanded(true);
+        }
+      }
+    }
+  }, [searchQuery, lastOutput]);
 
   if (!lastOutput) {
     return null;
@@ -32,6 +49,12 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
 
   // Render text output
   if (type === 'text' && lastOutput.text) {
+    const textContent = lastOutput.text || '';
+    const isLongContent = textContent.length > 500;
+    const displayText = isLongContent && !isExpanded
+      ? textContent.slice(0, 500) + '...'
+      : textContent;
+
     return (
       <div
         className="rounded-lg px-4 py-3"
@@ -45,13 +68,22 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
         </div>
         <div className="prose prose-sm max-w-none" style={{ color: 'var(--prose-body)' }}>
           {searchQuery ? (
-            <SearchHighlight text={lastOutput.text} itemId={aiGroupId} />
+            <SearchHighlight text={displayText} itemId={aiGroupId} />
           ) : (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {lastOutput.text}
+              {displayText}
             </ReactMarkdown>
           )}
         </div>
+        {isLongContent && (
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs mt-2 underline hover:opacity-80"
+            style={{ color: 'var(--color-text-muted)' }}
+          >
+            {isExpanded ? 'Show less' : 'Show more'}
+          </button>
+        )}
       </div>
     );
   }

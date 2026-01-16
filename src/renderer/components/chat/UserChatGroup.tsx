@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { User } from 'lucide-react';
 import type { UserGroup } from '../../types/groups';
@@ -34,6 +34,19 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
   // Use rawText to preserve /commands inline (HighlightedText will highlight them)
   const textContent = content.rawText || content.text || '';
   const isLongContent = textContent.length > 500;
+
+  // Auto-expand when search matches content in the truncated portion
+  useEffect(() => {
+    if (searchQuery && isLongContent) {
+      const lowerText = textContent.toLowerCase();
+      const lowerQuery = searchQuery.toLowerCase();
+      const matchIndex = lowerText.indexOf(lowerQuery);
+      // If match is in the truncated portion (after char 500), expand
+      if (matchIndex >= 500) {
+        setIsExpanded(true);
+      }
+    }
+  }, [searchQuery, textContent, isLongContent]);
 
   // Determine display text
   const displayText = isLongContent && !isExpanded
