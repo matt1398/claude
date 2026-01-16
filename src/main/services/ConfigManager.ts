@@ -52,11 +52,16 @@ export type ConfigSection = keyof AppConfig;
 // Default Configuration
 // ===========================================================================
 
+// Default regex patterns for common non-actionable notifications
+const DEFAULT_IGNORED_REGEX = [
+  "The user doesn't want to proceed with this tool use\\.",
+];
+
 const DEFAULT_CONFIG: AppConfig = {
   notifications: {
     enabled: true,
     soundEnabled: true,
-    ignoredRegex: [],
+    ignoredRegex: [...DEFAULT_IGNORED_REGEX],
     ignoredProjects: [],
     snoozedUntil: null,
     snoozeMinutes: 30,

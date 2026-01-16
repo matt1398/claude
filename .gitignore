@@ -36,3 +36,4 @@ yarn-error.log*
 
 .pnpm-store/
 notification_example/
+temp/

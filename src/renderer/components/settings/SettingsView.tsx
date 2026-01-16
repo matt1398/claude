@@ -438,11 +438,15 @@ export function SettingsView() {
     try {
       setSaving(true);
       // Reset each section to defaults
+      // Note: These default ignored patterns match ConfigManager's DEFAULT_IGNORED_REGEX
+      const defaultIgnoredRegex = [
+        "The user doesn't want to proceed with this tool use\\.",
+      ];
       const defaultConfig: AppConfig = {
         notifications: {
           enabled: true,
           soundEnabled: true,
-          ignoredRegex: [],
+          ignoredRegex: defaultIgnoredRegex,
           ignoredProjects: [],
           snoozedUntil: null,
           snoozeMinutes: 30,

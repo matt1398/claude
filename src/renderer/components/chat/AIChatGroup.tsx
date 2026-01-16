@@ -4,6 +4,7 @@ import type { AIGroup, EnhancedAIGroup, AIGroupDisplayItem } from '../../types/g
 import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
 import { DisplayItemList } from './DisplayItemList';
+import { ClaudeMdBadge } from './ClaudeMdBadge';
 import { getModelColorClass } from '../../../shared/utils/modelParser';
 import { TokenUsageDisplay } from '../common/TokenUsageDisplay';
 import { useStore } from '../../store';
@@ -48,8 +49,12 @@ function containsToolUseId(items: AIGroupDisplayItem[], toolUseId: string): bool
  * - Manages local expansion state and inline item expansion
  */
 export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
+  // Get CLAUDE.md stats from store for this group
+  const sessionClaudeMdStats = useStore((s) => s.sessionClaudeMdStats);
+  const claudeMdStats = sessionClaudeMdStats?.get(aiGroup.id);
+
   // Enhance the AI group to get display-ready data
-  const enhanced: EnhancedAIGroup = enhanceAIGroup(aiGroup);
+  const enhanced: EnhancedAIGroup = enhanceAIGroup(aiGroup, claudeMdStats);
 
   // Check if this group should be expanded for search results
   const searchExpandedAIGroupIds = useStore((s) => s.searchExpandedAIGroupIds);
@@ -197,6 +202,11 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
             </>
           )}
 
+          {/* CLAUDE.md injection badge */}
+          {enhanced.claudeMdStats && enhanced.claudeMdStats.newCount > 0 && (
+            <ClaudeMdBadge stats={enhanced.claudeMdStats} />
+          )}
+
           {/* Token usage - show last assistant message's usage (context window snapshot) */}
           {lastUsage && (
             <TokenUsageDisplay
@@ -207,6 +217,7 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
               modelName={enhanced.mainModel?.name}
               modelFamily={enhanced.mainModel?.family}
               size="sm"
+              claudeMdStats={enhanced.claudeMdStats || undefined}
             />
           )}
 

@@ -16,6 +16,7 @@ import type {
   AIGroupDisplayItem
 } from '../types/groups';
 import type { SemanticStep, Process, ParsedMessage, ContentBlock } from '../types/data';
+import type { ClaudeMdStats } from '../types/claudeMd';
 import { parseModelString, type ModelInfo } from '../../shared/utils/modelParser';
 
 /**
@@ -446,9 +447,13 @@ export function buildDisplayItems(
  * to produce a display-ready enhanced group.
  *
  * @param aiGroup - Base AI Group to enhance
+ * @param claudeMdStats - Optional CLAUDE.md injection stats for this group
  * @returns Enhanced AI Group with display data
  */
-export function enhanceAIGroup(aiGroup: AIGroup): EnhancedAIGroup {
+export function enhanceAIGroup(
+  aiGroup: AIGroup,
+  claudeMdStats?: ClaudeMdStats
+): EnhancedAIGroup {
   const lastOutput = findLastOutput(aiGroup.steps);
   const linkedTools = linkToolCallsToResults(aiGroup.steps);
   const displayItems = buildDisplayItems(aiGroup.steps, lastOutput, aiGroup.processes);
@@ -464,6 +469,7 @@ export function enhanceAIGroup(aiGroup: AIGroup): EnhancedAIGroup {
     itemsSummary: summary,
     mainModel,
     subagentModels,
+    claudeMdStats: claudeMdStats || null,
   };
 }
 

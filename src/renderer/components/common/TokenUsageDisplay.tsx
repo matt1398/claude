@@ -11,6 +11,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { getModelColorClass } from '../../../shared/utils/modelParser';
 import type { ModelInfo } from '../../../shared/utils/modelParser';
+import type { ClaudeMdStats } from '../../types/claudeMd';
 
 export interface TokenUsageDisplayProps {
   /** Input tokens count */
@@ -27,6 +28,8 @@ export interface TokenUsageDisplayProps {
   modelFamily?: ModelInfo['family'];
   /** Size variant - 'sm' for compact, 'md' for slightly larger */
   size?: 'sm' | 'md';
+  /** Optional CLAUDE.md injection statistics */
+  claudeMdStats?: ClaudeMdStats;
 }
 
 /**
@@ -54,6 +57,7 @@ export function TokenUsageDisplay({
   modelName,
   modelFamily,
   size = 'sm',
+  claudeMdStats,
 }: TokenUsageDisplayProps) {
   const totalTokens = inputTokens + cacheReadTokens + cacheCreationTokens + outputTokens;
   const formattedTotal = formatTokens(totalTokens);
@@ -177,6 +181,24 @@ export function TokenUsageDisplay({
                   <span style={{ color: 'var(--color-text-muted)' }}>Model</span>
                   <span className={`font-medium ${modelColorClass}`} style={!modelColorClass ? { color: 'var(--color-text-secondary)' } : {}}>
                     {modelName}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* CLAUDE.md Stats (optional) */}
+            {claudeMdStats && (
+              <>
+                <div className="my-1" style={{ borderTop: '1px dashed var(--color-border-subtle, var(--color-border))' }} />
+                <div className="flex justify-between items-center opacity-75">
+                  <span style={{ color: 'var(--color-text-muted)' }}>
+                    CLAUDE.md ({claudeMdStats.accumulatedCount})
+                  </span>
+                  <span className="font-medium tabular-nums italic" style={{ color: 'var(--color-text-secondary)' }}>
+                    ~{formatTokens(claudeMdStats.totalEstimatedTokens)}
+                    <span className="text-xs ml-1 opacity-60">
+                      ({claudeMdStats.percentageOfContext.toFixed(1)}%)
+                    </span>
                   </span>
                 </div>
               </>

@@ -4,6 +4,7 @@ import { UserChatGroup } from './UserChatGroup';
 import { AIChatGroup } from './AIChatGroup';
 import { SystemChatGroup } from './SystemChatGroup';
 import { CompactBoundary } from './CompactBoundary';
+import { SessionClaudeMdPanel } from './SessionClaudeMdPanel';
 import { useStore } from '../../store';
 import { useVisibleAIGroup } from '../../hooks/useVisibleAIGroup';
 
@@ -92,6 +93,10 @@ export function ChatHistory(): JSX.Element {
   const activeTabId = useStore((s) => s.activeTabId);
   const clearTabDeepLink = useStore((s) => s.clearTabDeepLink);
   const setSearchQuery = useStore((s) => s.setSearchQuery);
+  const sessionClaudeMdStats = useStore((s) => s.sessionClaudeMdStats);
+
+  // State for CLAUDE.md panel visibility
+  const [showClaudeMdPanel, setShowClaudeMdPanel] = useState(false);
 
   // Get current tab to access deep link props
   const currentTab = activeTabId ? openTabs.find(t => t.id === activeTabId) : null;
@@ -100,6 +105,14 @@ export function ChatHistory(): JSX.Element {
   const errorTimestamp = currentTab?.errorTimestamp;
   const highlightToolUseId = currentTab?.highlightToolUseId;
   const searchContext = currentTab?.searchContext;
+
+  // Compute all accumulated CLAUDE.md injections (from the last AI group's stats)
+  const allInjections = useMemo(() => {
+    if (!sessionClaudeMdStats) return [];
+    const statsArray = Array.from(sessionClaudeMdStats.values());
+    const lastStats = statsArray[statsArray.length - 1];
+    return lastStats?.accumulatedInjections || [];
+  }, [sessionClaudeMdStats]);
 
   // State for highlighted AI group
   const [highlightedGroupId, setHighlightedGroupId] = useState<string | null>(null);
@@ -412,12 +425,42 @@ export function ChatHistory(): JSX.Element {
 
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-6 py-8">
-          <div className="space-y-6">
-            {conversation.items.map(renderItem)}
+      {/* Header with CLAUDE.md toggle button */}
+      {allInjections.length > 0 && (
+        <div className="flex items-center justify-end px-6 py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+          <button
+            onClick={() => setShowClaudeMdPanel(!showClaudeMdPanel)}
+            className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-opacity-80 transition-colors"
+            style={{
+              backgroundColor: showClaudeMdPanel ? 'var(--color-accent)' : 'var(--color-surface-raised)',
+              color: showClaudeMdPanel ? 'var(--color-text-on-accent, white)' : 'var(--color-text-secondary)',
+            }}
+          >
+            CLAUDE.md ({allInjections.length})
+          </button>
+        </div>
+      )}
+
+      {/* Main content area with optional sidebar */}
+      <div className="flex-1 overflow-hidden flex">
+        {/* Chat content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-5xl mx-auto px-6 py-8">
+            <div className="space-y-6">
+              {conversation.items.map(renderItem)}
+            </div>
           </div>
         </div>
+
+        {/* CLAUDE.md panel sidebar */}
+        {showClaudeMdPanel && allInjections.length > 0 && (
+          <div className="w-80 flex-shrink-0">
+            <SessionClaudeMdPanel
+              injections={allInjections}
+              onClose={() => setShowClaudeMdPanel(false)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,7 +4,9 @@
  */
 
 import type { ParsedMessage, SemanticStep, Process, SessionMetrics, ToolUseResultData } from './data';
+export type { SemanticStep };
 import type { ModelInfo } from '../../shared/utils/modelParser';
+import type { ClaudeMdStats } from './claudeMd';
 
 // =============================================================================
 // Expansion Levels
@@ -216,6 +218,8 @@ export interface EnhancedAIGroup extends AIGroup {
   mainModel: ModelInfo | null;
   /** Unique models used by subagents (if different from main) */
   subagentModels: ModelInfo[];
+  /** CLAUDE.md injection statistics for this group */
+  claudeMdStats: ClaudeMdStats | null;
 }
 
 /**

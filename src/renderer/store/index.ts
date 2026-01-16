@@ -3,6 +3,8 @@ import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConf
 import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
 import { transformChunksToConversation } from '../utils/groupTransformer';
 import { findLastOutput } from '../utils/aiGroupEnhancer';
+import { processSessionClaudeMd } from '../utils/claudeMdTracker';
+import type { ClaudeMdStats } from '../types/claudeMd';
 import type { Tab, TabInput } from '../types/tabs';
 import { isSessionOpenInTabs, findTabBySession, truncateLabel } from '../types/tabs';
 
@@ -72,6 +74,9 @@ interface AppState {
   // Conversation state (new chat architecture)
   conversation: SessionConversation | null;
   conversationLoading: boolean;
+
+  // CLAUDE.md stats (injection tracking per AI group)
+  sessionClaudeMdStats: Map<string, ClaudeMdStats> | null;
 
   // Visible AI Group (for Gantt sync)
   visibleAIGroupId: string | null;
@@ -223,6 +228,9 @@ export const useStore = create<AppState>((set, get) => ({
 
   conversation: null,
   conversationLoading: false,
+
+  // CLAUDE.md stats (injection tracking per AI group)
+  sessionClaudeMdStats: null,
 
   visibleAIGroupId: null,
   selectedAIGroup: null,
@@ -455,6 +463,14 @@ export const useStore = create<AppState>((set, get) => ({
       const firstAIGroup = firstAIItem?.type === 'ai' ? firstAIItem.group : null;
       console.log('[Store] Setting visibleAIGroupId to:', firstAIGroupId);
 
+      // Compute CLAUDE.md stats for the session
+      const projectRoot = detail?.session?.projectPath || '';
+      let claudeMdStats: Map<string, ClaudeMdStats> | null = null;
+      if (conversation?.items) {
+        claudeMdStats = processSessionClaudeMd(conversation.items, projectRoot);
+        console.log('[Store] Computed CLAUDE.md stats for', claudeMdStats.size, 'AI groups');
+      }
+
       // Update tab label if this session is open in a tab
       const currentState = get();
       const existingTab = findTabBySession(currentState.openTabs, sessionId);
@@ -474,7 +490,8 @@ export const useStore = create<AppState>((set, get) => ({
         conversation,
         conversationLoading: false,
         visibleAIGroupId: firstAIGroupId,
-        selectedAIGroup: firstAIGroup
+        selectedAIGroup: firstAIGroup,
+        sessionClaudeMdStats: claudeMdStats
       });
       console.log('[Store] fetchSessionDetail completed successfully');
     } catch (error) {
