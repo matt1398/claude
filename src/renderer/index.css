@@ -149,6 +149,11 @@
   --interruption-border: #b91c1c;
   --interruption-text: #fca5a5;
 
+  /* Warning/Amber colors (for interruption banner) */
+  --warning-bg: rgba(245, 158, 11, 0.15);
+  --warning-border: rgba(245, 158, 11, 0.4);
+  --warning-text: #fbbf24;
+
   /* Error highlight (pulsing) */
   --error-highlight-ring: #ef4444;
   --error-highlight-bg: rgba(239, 68, 68, 0.2);
@@ -304,6 +309,11 @@
   --interruption-bg: #fef2f2;
   --interruption-border: #f87171;
   --interruption-text: #b91c1c;
+
+  /* Warning/Amber colors (for interruption banner) */
+  --warning-bg: #fef3c7;
+  --warning-border: #f59e0b;
+  --warning-text: #b45309;
 
   /* Error highlight (pulsing) */
   --error-highlight-ring: #dc2626;

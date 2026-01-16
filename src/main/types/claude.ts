@@ -227,9 +227,12 @@ export function isRealUserMessage(entry: ChatHistoryEntry): entry is UserEntry {
   // Array content format (newer sessions)
   if (Array.isArray(content)) {
     // Filter out system-generated interruption messages
+    // These have exactly 1 text block with content like "[Request interrupted by user]"
+    // or "[Request interrupted by user for tool use]"
     if (content.length === 1 &&
         content[0].type === 'text' &&
-        content[0].text === '[Request interrupted by user for tool use]') {
+        typeof content[0].text === 'string' &&
+        content[0].text.startsWith('[Request interrupted by user')) {
       return false;
     }
 
@@ -688,6 +691,8 @@ export interface Session {
   hasSubagents: boolean;
   /** Total message count in the session */
   messageCount: number;
+  /** Whether the session is ongoing (last AI response has no output yet) */
+  isOngoing?: boolean;
 }
 
 /**
@@ -1022,6 +1027,7 @@ export interface SemanticStep {
     subagentDescription?: string;
     outputText?: string;        // For output
     sourceModel?: string;       // For tool_call - model from source assistant message
+    interruptionText?: string;  // For interruption - the interruption message text
   };
 
   /** Token attribution */
@@ -1380,6 +1386,16 @@ export function isParsedUserChunkMessage(msg: ParsedMessage): boolean {
     );
 
     if (!hasUserContent) {
+      return false;
+    }
+
+    // Filter out user interruption messages (should be part of AI response flow)
+    // These have exactly 1 text block with content like "[Request interrupted by user]"
+    // or "[Request interrupted by user for tool use]"
+    if (content.length === 1 &&
+        content[0].type === 'text' &&
+        typeof (content[0] as TextContent).text === 'string' &&
+        (content[0] as TextContent).text.startsWith('[Request interrupted by user')) {
       return false;
     }
 

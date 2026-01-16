@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -360,6 +360,30 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
             )}
           </pre>
         </div>
+      </div>
+    );
+  }
+
+  // Render interruption as a simple horizontal banner
+  if (type === 'interruption') {
+    return (
+      <div
+        className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg"
+        style={{
+          backgroundColor: 'var(--warning-bg, rgba(245, 158, 11, 0.1))',
+          border: '1px solid var(--warning-border, rgba(245, 158, 11, 0.3))',
+        }}
+      >
+        <AlertTriangle
+          className="w-4 h-4 flex-shrink-0"
+          style={{ color: 'var(--warning-text, #f59e0b)' }}
+        />
+        <span
+          className="text-sm"
+          style={{ color: 'var(--warning-text, #f59e0b)' }}
+        >
+          Request interrupted by user
+        </span>
       </div>
     );
   }

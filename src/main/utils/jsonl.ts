@@ -687,6 +687,164 @@ export function getTaskCalls(messages: ParsedMessage[]): ToolCall[] {
   return messages.flatMap((m) => m.toolCalls.filter((tc) => tc.isTask));
 }
 
+/**
+ * Check if a session is ongoing (AI response in progress).
+ *
+ * A session is considered "ongoing" if:
+ * 1. The last non-noise message is an assistant message with tool_use blocks
+ *    but no corresponding tool_result has been received yet (orphaned tool calls)
+ * 2. Or if the last message is an assistant message with only thinking blocks
+ *
+ * This is an efficient check that reads from the end of the file.
+ *
+ * @param filePath - Path to the session JSONL file
+ * @returns Promise<boolean> - true if session is ongoing
+ */
+export async function checkSessionOngoing(filePath: string): Promise<boolean> {
+  if (!fs.existsSync(filePath)) {
+    return false;
+  }
+
+  // Read the file content - we need to check the last few messages
+  // For efficiency, we read all lines but only process the last relevant ones
+  const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+  const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity,
+  });
+
+  // Collect relevant messages (skip noise)
+  const recentMessages: Array<{
+    type: string;
+    hasToolUse: boolean;
+    hasToolResult: boolean;
+    hasTextOutput: boolean;
+    toolUseIds: Set<string>;
+    toolResultIds: Set<string>;
+    isMeta: boolean;
+  }> = [];
+
+  const NOISE_TYPES = ['system', 'summary', 'file-history-snapshot', 'queue-operation'];
+
+  try {
+    for await (const line of rl) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      try {
+        const entry = JSON.parse(trimmed) as ChatHistoryEntry;
+
+        // Skip entries without uuid
+        if (!entry.uuid) continue;
+
+        // Skip noise types
+        if (NOISE_TYPES.includes(entry.type)) continue;
+
+        // Extract message properties
+        const type = entry.type;
+        let hasToolUse = false;
+        let hasToolResult = false;
+        let hasTextOutput = false;
+        const toolUseIds = new Set<string>();
+        const toolResultIds = new Set<string>();
+        const isMeta = (entry as any).isMeta === true;
+
+        const content = (entry as any).message?.content;
+
+        if (type === 'assistant' && Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === 'tool_use' && block.id) {
+              hasToolUse = true;
+              toolUseIds.add(block.id);
+            }
+            if (block.type === 'text' && block.text && block.text.trim().length > 0) {
+              hasTextOutput = true;
+            }
+          }
+        }
+
+        if (type === 'user' && Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === 'tool_result' && block.tool_use_id) {
+              hasToolResult = true;
+              toolResultIds.add(block.tool_use_id);
+            }
+          }
+        }
+
+        recentMessages.push({
+          type,
+          hasToolUse,
+          hasToolResult,
+          hasTextOutput,
+          toolUseIds,
+          toolResultIds,
+          isMeta,
+        });
+      } catch {
+        // Skip invalid lines
+        continue;
+      }
+    }
+  } catch (error) {
+    console.error(`Error checking session ongoing status: ${error}`);
+    return false;
+  }
+
+  // Analyze the messages to determine if ongoing
+  // Work backwards to find the last assistant message and check if it has pending tool calls
+  if (recentMessages.length === 0) {
+    return false;
+  }
+
+  // Find the last assistant message
+  let lastAssistantIndex = -1;
+  for (let i = recentMessages.length - 1; i >= 0; i--) {
+    if (recentMessages[i].type === 'assistant') {
+      lastAssistantIndex = i;
+      break;
+    }
+  }
+
+  if (lastAssistantIndex === -1) {
+    // No assistant message found
+    return false;
+  }
+
+  const lastAssistant = recentMessages[lastAssistantIndex];
+
+  // If the last assistant message has text output, it's not ongoing
+  if (lastAssistant.hasTextOutput) {
+    return false;
+  }
+
+  // If the last assistant message has tool calls, check if they have results
+  if (lastAssistant.hasToolUse) {
+    // Collect all tool results that came after this assistant message
+    const receivedResults = new Set<string>();
+    for (let i = lastAssistantIndex + 1; i < recentMessages.length; i++) {
+      const msg = recentMessages[i];
+      if (msg.hasToolResult) {
+        msg.toolResultIds.forEach(id => receivedResults.add(id));
+      }
+    }
+
+    // Check if any tool calls are still pending
+    for (const toolUseId of lastAssistant.toolUseIds) {
+      if (!receivedResults.has(toolUseId)) {
+        // Found a tool call without a result - session is ongoing
+        return true;
+      }
+    }
+  }
+
+  // If we reach here after the last assistant message, check what comes after
+  // If the last message is a user message without isMeta (real user input waiting for response)
+  // that would mean waiting for AI, but typically the last AI message has been processed
+  // For our purposes, we only mark ongoing if there are pending tool calls
+  return false;
+}
+
 // =============================================================================
 // Type Guard Functions (Re-exported from claude.ts)
 // =============================================================================

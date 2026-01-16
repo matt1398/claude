@@ -18,6 +18,7 @@ export function useKeyboardShortcuts() {
     selectedProjectId,
     selectedSessionId,
     fetchSessionDetail,
+    fetchSessions,
     openCommandPalette,
     openSettingsTab,
   } = useStore();
@@ -153,11 +154,14 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Cmd+R: Refresh current session
+      // Cmd+R: Refresh current session and sidebar session list
       if (event.key === 'r') {
         event.preventDefault();
         if (selectedProjectId && selectedSessionId) {
-          fetchSessionDetail(selectedProjectId, selectedSessionId);
+          Promise.all([
+            fetchSessionDetail(selectedProjectId, selectedSessionId),
+            fetchSessions(selectedProjectId),
+          ]);
         }
         return;
       }
@@ -165,5 +169,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail, openCommandPalette, openSettingsTab]);
+  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail, fetchSessions, openCommandPalette, openSettingsTab]);
 }

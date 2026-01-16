@@ -146,6 +146,8 @@ export interface Session {
   hasSubagents: boolean;
   /** Total message count */
   messageCount: number;
+  /** Whether the session is ongoing (last AI response has no output yet) */
+  isOngoing?: boolean;
 }
 
 // =============================================================================
@@ -687,6 +689,7 @@ export interface SemanticStep {
     subagentDescription?: string;
     outputText?: string;        // For output
     sourceModel?: string;       // For tool_call - model from source assistant message
+    interruptionText?: string;  // For interruption - the interruption message text
   };
 
   /** Token attribution */

@@ -73,7 +73,8 @@ export function formatToolResult(content: string | unknown[]): string {
  * 1. Iterate through steps in reverse order
  * 2. Find the last 'output' step with outputText
  * 3. If no output found, find the last 'tool_result' step
- * 4. Return null if neither exists
+ * 4. If no tool_result found, find the last 'interruption' step
+ * 5. Return null if none exists
  *
  * @param steps - Semantic steps from the AI Group
  * @returns The last output or null
@@ -100,6 +101,18 @@ export function findLastOutput(steps: SemanticStep[]): AIGroupLastOutput | null 
         toolName: step.content.toolName,
         toolResult: step.content.toolResultContent,
         isError: step.content.isError || false,
+        timestamp: step.startTime,
+      };
+    }
+  }
+
+  // Third pass: look for last 'interruption' step
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i];
+    if (step.type === 'interruption' && step.content.interruptionText) {
+      return {
+        type: 'interruption',
+        interruptionMessage: step.content.interruptionText,
         timestamp: step.startTime,
       };
     }
@@ -344,6 +357,10 @@ export function buildDisplayItems(
         lastOutputStepId = step.id;
         break;
       }
+      if (lastOutput.type === 'interruption' && step.type === 'interruption' && step.content.interruptionText === lastOutput.interruptionMessage) {
+        lastOutputStepId = step.id;
+        break;
+      }
     }
   }
 
@@ -408,7 +425,13 @@ export function buildDisplayItems(
         break;
 
       case 'interruption':
-        // Could add interruption handling here if needed
+        if (step.content.interruptionText) {
+          displayItems.push({
+            type: 'output',
+            content: step.content.interruptionText,
+            timestamp: step.startTime,
+          });
+        }
         break;
     }
   }

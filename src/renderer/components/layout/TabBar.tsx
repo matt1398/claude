@@ -14,6 +14,7 @@ export function TabBar() {
     closeTab,
     openDashboard,
     fetchSessionDetail,
+    fetchSessions,
     openCommandPalette,
     unreadCount,
     openNotificationsTab,
@@ -23,10 +24,13 @@ export function TabBar() {
   // Get the active tab
   const activeTab = openTabs.find(tab => tab.id === activeTabId);
 
-  // Handle refresh for active session tab
+  // Handle refresh for active session tab - refreshes both session detail and sidebar session list
   const handleRefresh = async () => {
     if (activeTab?.type === 'session' && activeTab.projectId && activeTab.sessionId) {
-      await fetchSessionDetail(activeTab.projectId, activeTab.sessionId);
+      await Promise.all([
+        fetchSessionDetail(activeTab.projectId, activeTab.sessionId),
+        fetchSessions(activeTab.projectId),
+      ]);
     }
   };
 

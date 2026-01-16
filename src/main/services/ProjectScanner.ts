@@ -25,7 +25,7 @@ import {
   extractSessionId,
   isAmbiguousEncoding,
 } from '../utils/pathDecoder';
-import { extractFirstUserMessage, extractCwd, countTriggerMessages } from '../utils/jsonl';
+import { extractFirstUserMessage, extractCwd, countTriggerMessages, checkSessionOngoing } from '../utils/jsonl';
 
 export class ProjectScanner {
   private readonly projectsDir: string;
@@ -401,6 +401,9 @@ export class ProjectScanner {
     // Load todo data if exists
     const todoData = await this.loadTodoData(sessionId);
 
+    // Check if session is ongoing (AI response in progress)
+    const isOngoing = await checkSessionOngoing(filePath);
+
     return {
       id: sessionId,
       projectId,
@@ -411,6 +414,7 @@ export class ProjectScanner {
       messageTimestamp: firstMsgData?.timestamp,
       hasSubagents,
       messageCount,
+      isOngoing,
     };
   }
 

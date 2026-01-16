@@ -4,13 +4,26 @@
  */
 
 import { format, formatDistanceToNow } from 'date-fns';
-import { MessageSquare, Bot } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import type { Session } from '../../types/data';
 import { useStore } from '../../store';
 
 interface SessionItemProps {
   session: Session;
   isActive?: boolean;
+}
+
+/**
+ * Pulsing green dot indicator for ongoing sessions.
+ * Shows when a session has an AI response in progress.
+ */
+function OngoingIndicator() {
+  return (
+    <span className="relative flex h-2.5 w-2.5 flex-shrink-0" title="Session in progress">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500" />
+    </span>
+  );
 }
 
 export function SessionItem({ session, isActive }: SessionItemProps) {
@@ -54,12 +67,7 @@ export function SessionItem({ session, isActive }: SessionItemProps) {
             {session.firstMessage || 'Empty session'}
           </p>
         </div>
-        {session.hasSubagents && (
-          <span className="text-xs text-claude-dark-text-secondary bg-claude-dark-border px-2 py-0.5 rounded flex-shrink-0 flex items-center gap-1">
-            <Bot className="w-3 h-3" />
-            <span>Subagents</span>
-          </span>
-        )}
+        {session.isOngoing && <OngoingIndicator />}
       </div>
       <div className="flex items-center gap-2 text-xs text-claude-dark-text-secondary/60">
         <MessageSquare className="w-3 h-3" />

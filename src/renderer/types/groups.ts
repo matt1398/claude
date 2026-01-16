@@ -180,11 +180,11 @@ export type AIGroupDisplayItem =
 
 /**
  * The last output in an AI Group - what user sees as "the answer".
- * Either text output or the last tool result.
+ * Either text output, the last tool result, or an interruption.
  */
 export interface AIGroupLastOutput {
   /** Output type */
-  type: 'text' | 'tool_result';
+  type: 'text' | 'tool_result' | 'interruption';
   /** Text content if type === 'text' */
   text?: string;
   /** Tool name if type === 'tool_result' */
@@ -193,6 +193,8 @@ export interface AIGroupLastOutput {
   toolResult?: string;
   /** Whether the tool result was an error */
   isError?: boolean;
+  /** Interruption message text if type === 'interruption' */
+  interruptionMessage?: string;
   /** Timestamp of this output */
   timestamp: Date;
 }
