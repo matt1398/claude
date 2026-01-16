@@ -34,6 +34,7 @@ const THEME_OPTIONS = [
 
 /**
  * Toggle switch component for boolean settings.
+ * Uses inline styles for the dynamic parts to ensure immediate visual feedback.
  */
 function Toggle({
   enabled,
@@ -44,28 +45,31 @@ function Toggle({
   onChange: (value: boolean) => void;
   disabled?: boolean;
 }) {
+  const handleClick = () => {
+    if (!disabled) {
+      onChange(!enabled);
+    }
+  };
+
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
       disabled={disabled}
-      onClick={() => onChange(!enabled)}
-      className={`
-        relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full
-        border-2 border-transparent transition-colors duration-200 ease-in-out
-        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-        focus:ring-offset-claude-dark-bg
-        ${enabled ? 'bg-blue-500' : 'bg-claude-dark-border'}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-      `}
+      onClick={handleClick}
+      className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-claude-dark-bg"
+      style={{
+        backgroundColor: enabled ? '#3b82f6' : '#404040',
+        opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+      }}
     >
       <span
-        className={`
-          pointer-events-none inline-block h-5 w-5 transform rounded-full
-          bg-white shadow ring-0 transition duration-200 ease-in-out
-          ${enabled ? 'translate-x-5' : 'translate-x-0'}
-        `}
+        className="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+        style={{
+          transform: enabled ? 'translateX(1.25rem)' : 'translateX(0)',
+        }}
       />
     </button>
   );
@@ -280,8 +284,6 @@ export function SettingsView() {
     section: keyof AppConfig,
     data: Partial<AppConfig[keyof AppConfig]>
   ) => {
-    if (!optimisticConfig) return;
-
     // Optimistic update - immediately reflect the change in UI
     setOptimisticConfig(prev => {
       if (!prev) return prev;
@@ -306,7 +308,7 @@ export function SettingsView() {
     } finally {
       setSaving(false);
     }
-  }, [optimisticConfig, config]);
+  }, [config]);
 
   // Handle toggle changes for notifications
   const handleNotificationToggle = useCallback((key: keyof AppConfig['notifications'], value: boolean) => {

@@ -19,6 +19,7 @@ export function useKeyboardShortcuts() {
     selectedSessionId,
     fetchSessionDetail,
     openCommandPalette,
+    openSettingsTab,
   } = useStore();
 
   useEffect(() => {
@@ -127,6 +128,13 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Cmd+,: Open settings (standard macOS shortcut)
+      if (event.key === ',') {
+        event.preventDefault();
+        openSettingsTab();
+        return;
+      }
+
       // Cmd+F: Find in session
       if (event.key === 'f') {
         event.preventDefault();
@@ -157,5 +165,5 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail, openCommandPalette]);
+  }, [openTabs, activeTabId, openDashboard, closeTab, setActiveTab, showSearch, getActiveTab, selectedProjectId, selectedSessionId, fetchSessionDetail, openCommandPalette, openSettingsTab]);
 }

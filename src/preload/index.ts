@@ -57,23 +57,55 @@ const electronAPI: ElectronAPI = {
     },
   },
 
-  // Config API
+  // Config API - unwraps { success, data, error } responses from IPC handlers
   config: {
-    get: () => ipcRenderer.invoke('config:get'),
-    update: (section: string, data: object) =>
-      ipcRenderer.invoke('config:update', section, data),
-    addIgnoreRegex: (pattern: string) =>
-      ipcRenderer.invoke('config:addIgnoreRegex', pattern),
-    removeIgnoreRegex: (pattern: string) =>
-      ipcRenderer.invoke('config:removeIgnoreRegex', pattern),
-    addIgnoreProject: (projectId: string) =>
-      ipcRenderer.invoke('config:addIgnoreProject', projectId),
-    removeIgnoreProject: (projectId: string) =>
-      ipcRenderer.invoke('config:removeIgnoreProject', projectId),
-    snooze: (minutes: number) =>
-      ipcRenderer.invoke('config:snooze', minutes),
-    clearSnooze: () =>
-      ipcRenderer.invoke('config:clearSnooze'),
+    get: async () => {
+      const result = await ipcRenderer.invoke('config:get');
+      if (!result.success) throw new Error(result.error || 'Failed to get config');
+      return result.data;
+    },
+    update: async (section: string, data: object) => {
+      const result = await ipcRenderer.invoke('config:update', section, data);
+      if (!result.success) throw new Error(result.error || 'Failed to update config');
+      return result.data;
+    },
+    addIgnoreRegex: async (pattern: string) => {
+      const result = await ipcRenderer.invoke('config:addIgnoreRegex', pattern);
+      if (!result.success) throw new Error(result.error || 'Failed to add ignore regex');
+      // Re-fetch config after mutation
+      const configResult = await ipcRenderer.invoke('config:get');
+      return configResult.data;
+    },
+    removeIgnoreRegex: async (pattern: string) => {
+      const result = await ipcRenderer.invoke('config:removeIgnoreRegex', pattern);
+      if (!result.success) throw new Error(result.error || 'Failed to remove ignore regex');
+      const configResult = await ipcRenderer.invoke('config:get');
+      return configResult.data;
+    },
+    addIgnoreProject: async (projectId: string) => {
+      const result = await ipcRenderer.invoke('config:addIgnoreProject', projectId);
+      if (!result.success) throw new Error(result.error || 'Failed to add ignore project');
+      const configResult = await ipcRenderer.invoke('config:get');
+      return configResult.data;
+    },
+    removeIgnoreProject: async (projectId: string) => {
+      const result = await ipcRenderer.invoke('config:removeIgnoreProject', projectId);
+      if (!result.success) throw new Error(result.error || 'Failed to remove ignore project');
+      const configResult = await ipcRenderer.invoke('config:get');
+      return configResult.data;
+    },
+    snooze: async (minutes: number) => {
+      const result = await ipcRenderer.invoke('config:snooze', minutes);
+      if (!result.success) throw new Error(result.error || 'Failed to snooze');
+      const configResult = await ipcRenderer.invoke('config:get');
+      return configResult.data;
+    },
+    clearSnooze: async () => {
+      const result = await ipcRenderer.invoke('config:clearSnooze');
+      if (!result.success) throw new Error(result.error || 'Failed to clear snooze');
+      const configResult = await ipcRenderer.invoke('config:get');
+      return configResult.data;
+    },
   },
 
   // Deep link navigation

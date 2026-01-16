@@ -76,21 +76,23 @@ async function handleGetConfig(
 /**
  * Handler for 'config:update' IPC call.
  * Updates a specific section of the configuration.
+ * Returns the full updated config.
  */
 async function handleUpdateConfig(
   _event: IpcMainInvokeEvent,
   section: keyof AppConfig,
   data: Partial<AppConfig[keyof AppConfig]>
-): Promise<ConfigResult> {
+): Promise<ConfigResult<AppConfig>> {
   try {
-    console.log(`IPC: config:update section=${section}`);
+    console.log(`IPC: config:update section=${section}`, data);
 
     if (!section) {
       return { success: false, error: 'Section is required' };
     }
 
     configManager.updateConfig(section, data);
-    return { success: true };
+    const updatedConfig = configManager.getConfig();
+    return { success: true, data: updatedConfig };
   } catch (error) {
     console.error('IPC: Error in config:update:', error);
     return { success: false, error: String(error) };

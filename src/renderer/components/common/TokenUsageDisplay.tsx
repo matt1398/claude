@@ -7,6 +7,7 @@
  * - Optional model information
  */
 
+import { useState } from 'react';
 import { Info } from 'lucide-react';
 import { getModelColorClass } from '../../../shared/utils/modelParser';
 import type { ModelInfo } from '../../../shared/utils/modelParser';
@@ -66,27 +67,36 @@ export function TokenUsageDisplay({
   // Model color based on family
   const modelColorClass = modelFamily ? getModelColorClass(modelFamily) : 'text-zinc-400';
 
+  // Use React state for hover instead of CSS group-hover to avoid
+  // interference with parent components that also use the 'group' class
+  const [showPopover, setShowPopover] = useState(false);
+
   return (
     <div
       className={`inline-flex items-center gap-1 ${textSize} ${textColor}`}
       onClick={(e) => e.stopPropagation()}
     >
       <span className="font-medium">{formattedTotal}</span>
-      <div className="relative group">
+      <div
+        className="relative"
+        onMouseEnter={() => setShowPopover(true)}
+        onMouseLeave={() => setShowPopover(false)}
+      >
         <Info
           className={`${iconSize} cursor-help text-zinc-500 hover:text-zinc-400 transition-colors`}
         />
-        {/* Popover - shown on hover, positioned to the left to avoid sidebar overlap */}
-        <div
-          className="
-            absolute z-50 hidden group-hover:block
-            left-0 top-full mt-1
-            min-w-[200px] max-w-[280px]
-            bg-zinc-900 border border-zinc-700 rounded-lg
-            shadow-xl shadow-black/50
-            p-3
-          "
-        >
+        {/* Popover - shown on hover over info icon only */}
+        {showPopover && (
+          <div
+            className="
+              absolute z-50
+              left-0 top-full mt-1
+              min-w-[200px] max-w-[280px]
+              bg-zinc-900 border border-zinc-700 rounded-lg
+              shadow-xl shadow-black/50
+              p-3
+            "
+          >
           {/* Arrow pointer - positioned on left side to match popover alignment */}
           <div className="absolute -top-1 left-2 w-2 h-2 bg-zinc-900 border-l border-t border-zinc-700 rotate-45" />
 
@@ -140,6 +150,7 @@ export function TokenUsageDisplay({
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
