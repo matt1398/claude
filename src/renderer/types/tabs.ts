@@ -45,6 +45,16 @@ export interface Tab {
 
   /** Tool use ID for precise highlighting of the specific errored tool item (type === 'session') */
   highlightToolUseId?: string;
+
+  /** Search context for navigating from Command Palette search results */
+  searchContext?: {
+    /** The search query */
+    query: string;
+    /** Timestamp of the message containing the search match */
+    messageTimestamp: number;
+    /** The matched text */
+    matchedText: string;
+  };
 }
 
 /**

@@ -97,8 +97,13 @@ export function CommandPalette() {
   // Handle result click
   const handleResultClick = useCallback((result: SearchResult) => {
     closeCommandPalette();
-    navigateToSession(result.projectId, result.sessionId, true); // fromSearch = true
-  }, [closeCommandPalette, navigateToSession]);
+    // Pass search context for navigation with highlighting
+    navigateToSession(result.projectId, result.sessionId, true, {
+      query: query.trim(),
+      messageTimestamp: result.timestamp,
+      matchedText: result.matchedText,
+    });
+  }, [closeCommandPalette, navigateToSession, query]);
 
   // Handle backdrop click
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {

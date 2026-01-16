@@ -12,6 +12,8 @@ interface DisplayItemListProps {
   aiGroupId: string;
   /** Tool use ID to highlight for error deep linking */
   highlightToolUseId?: string;
+  /** Force expand all nested content (code blocks, diffs) for search results */
+  forceExpandContent?: boolean;
 }
 
 /**
@@ -35,7 +37,7 @@ function truncateText(text: string, maxLength: number): string {
  *
  * The list is completely flat with no nested toggles or hierarchies.
  */
-export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds, aiGroupId, highlightToolUseId }) => {
+export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds, aiGroupId, highlightToolUseId, forceExpandContent }) => {
   if (!items || items.length === 0) {
     return (
       <div className="px-3 py-2 text-sm text-claude-dark-text-secondary italic">
@@ -125,6 +127,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
                 onClick={handleClick}
                 isExpanded={isExpanded}
                 isHighlighted={isHighlighted}
+                forceExpandContent={forceExpandContent}
               />
             );
           }

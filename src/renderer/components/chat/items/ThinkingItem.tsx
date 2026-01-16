@@ -24,28 +24,46 @@ export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onCli
       {/* Clickable Header */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 py-1.5 px-2 hover:bg-zinc-800/50 rounded cursor-pointer"
+        className="flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer hover:opacity-80"
+        style={{ backgroundColor: 'transparent' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-surface-overlay)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
       >
-        <Brain className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-        <span className="font-medium text-zinc-300">Thinking</span>
-        <span className="text-zinc-600">·</span>
-        <span className="text-zinc-500 truncate flex-1">{truncatedPreview}</span>
-        <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+        <Brain className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+        <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>Thinking</span>
+        <span style={{ color: 'var(--color-text-muted)' }}>·</span>
+        <span className="truncate flex-1" style={{ color: 'var(--color-text-muted)' }}>{truncatedPreview}</span>
+        <ChevronRight
+          className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+          style={{ color: 'var(--color-text-muted)' }}
+        />
       </div>
 
-      {/* Expanded Content */}
+      {/* Expanded Content - Card style matching CodeBlockViewer */}
       {isExpanded && (
         <div className="pl-4 ml-2 mt-1 mb-2">
-          {searchQuery ? (
-            <div className="rounded-lg border border-zinc-700/30 bg-zinc-900/50 p-4 max-h-96 overflow-y-auto">
-              <SearchHighlight text={fullContent} itemId={aiGroupId} className="text-sm text-zinc-300 whitespace-pre-wrap" />
+          <div
+            className="rounded-lg shadow-sm overflow-hidden"
+            style={{
+              backgroundColor: 'var(--code-bg)',
+              border: '1px solid var(--code-border)',
+            }}
+          >
+            <div className="p-4 max-h-96 overflow-y-auto">
+              {searchQuery ? (
+                <SearchHighlight
+                  text={fullContent}
+                  itemId={aiGroupId}
+                  className="text-sm whitespace-pre-wrap"
+                />
+              ) : (
+                <MarkdownViewer
+                  content={fullContent}
+                  maxHeight="max-h-96"
+                />
+              )}
             </div>
-          ) : (
-            <MarkdownViewer
-              content={fullContent}
-              maxHeight="max-h-96"
-            />
-          )}
+          </div>
         </div>
       )}
     </div>

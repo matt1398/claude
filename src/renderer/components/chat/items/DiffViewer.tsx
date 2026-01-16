@@ -12,6 +12,7 @@ interface DiffViewerProps {
   maxPreviewLines?: number;   // Default 15 - show this many before collapse
   isExpanded?: boolean;       // Initial expansion state
   onToggle?: () => void;      // Optional expansion callback
+  forceExpanded?: boolean;    // Force expand for search results (overrides internal state)
 }
 
 interface DiffLine {
@@ -263,10 +264,19 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   newString,
   maxPreviewLines = 15,
   isExpanded: controlledExpanded,
-  onToggle
+  onToggle,
+  forceExpanded = false
 }) => {
   // Support both controlled and uncontrolled expansion
-  const [internalExpanded, setInternalExpanded] = useState(false);
+  const [internalExpanded, setInternalExpanded] = useState(forceExpanded);
+
+  // Update expansion state when forceExpanded changes
+  React.useEffect(() => {
+    if (forceExpanded) {
+      setInternalExpanded(true);
+    }
+  }, [forceExpanded]);
+
   const isExpanded = controlledExpanded ?? internalExpanded;
 
   const handleToggle = () => {

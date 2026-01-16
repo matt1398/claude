@@ -4,13 +4,15 @@ interface HighlightedTextProps {
   text: string;
   projectPath?: string;
   className?: string;
+  /** Use user bubble tag styling (elegant white with border in light mode) */
+  variant?: 'default' | 'user-bubble';
 }
 
 // Patterns
 const SKILL_PATTERN = /\/([a-zA-Z][a-zA-Z0-9-]*)/g;
 const PATH_PATTERN = /@([^\s,)}\]]+)/g;
 
-export function HighlightedText({ text, projectPath, className = '' }: HighlightedTextProps) {
+export function HighlightedText({ text, projectPath, className = '', variant = 'default' }: HighlightedTextProps) {
   const [validatedMentions, setValidatedMentions] = useState<Record<string, boolean>>({});
 
   // Extract all mentions from text
@@ -82,13 +84,34 @@ export function HighlightedText({ text, projectPath, className = '' }: Highlight
       const isValid = validatedMentions[key] === true;
 
       if (isValid) {
-        // Only highlight if validated
-        const highlightClass = isSkill
-          ? 'bg-amber-900/30 text-amber-200 px-0.5 rounded'
-          : 'bg-orange-900/30 text-orange-300 px-0.5 rounded';
+        // Use CSS custom properties for theme-aware highlighting
+        // User bubble variant uses elegant white tags with border
+        const highlightStyle: React.CSSProperties = variant === 'user-bubble'
+          ? {
+              backgroundColor: 'var(--chat-user-tag-bg)',
+              color: 'var(--chat-user-tag-text)',
+              padding: '0.125rem 0.375rem',
+              borderRadius: '0.25rem',
+              border: '1px solid var(--chat-user-tag-border)',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              fontSize: '0.8125em',
+            }
+          : isSkill
+          ? {
+              backgroundColor: 'var(--skill-highlight-bg)',
+              color: 'var(--skill-highlight-text)',
+              padding: '0 0.125rem',
+              borderRadius: '0.25rem',
+            }
+          : {
+              backgroundColor: 'var(--path-highlight-bg)',
+              color: 'var(--path-highlight-text)',
+              padding: '0 0.125rem',
+              borderRadius: '0.25rem',
+            };
 
         parts.push(
-          <span key={match.index} className={highlightClass}>
+          <span key={match.index} style={highlightStyle}>
             {fullMatch}
           </span>
         );

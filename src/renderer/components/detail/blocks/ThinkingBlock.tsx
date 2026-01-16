@@ -14,13 +14,20 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ step, isExpanded }
     : thinkingText;
 
   return (
-    <div className="rounded-lg border bg-purple-900/20 border-purple-800/40 text-purple-300">
+    <div
+      className="rounded-lg"
+      style={{
+        backgroundColor: 'var(--thinking-bg)',
+        border: '1px solid var(--thinking-border)',
+        color: 'var(--thinking-text)',
+      }}
+    >
       <div className="flex items-start gap-2 px-3 py-2">
         <Brain size={16} className="mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="font-medium text-sm mb-1">Thinking</div>
           {!isExpanded && thinkingText && (
-            <div className="text-xs text-purple-200/80 line-clamp-2">
+            <div className="text-xs line-clamp-2" style={{ color: 'var(--thinking-text-muted)' }}>
               {preview}
             </div>
           )}
@@ -28,8 +35,14 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({ step, isExpanded }
       </div>
 
       {isExpanded && thinkingText && (
-        <div className="px-3 py-2 border-t border-purple-800/30">
-          <pre className="whitespace-pre-wrap text-xs text-purple-100 font-mono max-h-96 overflow-y-auto">
+        <div
+          className="px-3 py-2"
+          style={{ borderTop: '1px solid var(--thinking-content-border)' }}
+        >
+          <pre
+            className="whitespace-pre-wrap text-xs font-mono max-h-96 overflow-y-auto"
+            style={{ color: 'var(--thinking-content-text)' }}
+          >
             {thinkingText}
           </pre>
         </div>

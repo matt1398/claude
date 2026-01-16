@@ -10,6 +10,8 @@ interface LinkedToolItemProps {
   isExpanded: boolean;
   /** Whether this item should be highlighted for error deep linking */
   isHighlighted?: boolean;
+  /** Force expand all nested content (code blocks, diffs) for search results */
+  forceExpandContent?: boolean;
 }
 
 // =============================================================================
@@ -389,7 +391,7 @@ function renderOutput(content: string | unknown[]): React.ReactNode {
  * Renders the Read tool result using CodeBlockViewer.
  * Prefers enriched toolUseResult data which has cleaner content without line number prefixes.
  */
-const ReadToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedTool }) => {
+const ReadToolViewer: React.FC<{ linkedTool: LinkedToolItemType; forceExpanded?: boolean }> = ({ linkedTool, forceExpanded }) => {
   const filePath = linkedTool.input.file_path as string;
 
   // Prefer enriched toolUseResult data
@@ -429,6 +431,7 @@ const ReadToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedTo
       content={content}
       startLine={startLine}
       endLine={endLine}
+      forceExpanded={forceExpanded}
     />
   );
 };
@@ -437,7 +440,7 @@ const ReadToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedTo
  * Renders the Write tool result.
  * Shows the created file path and a preview of the content.
  */
-const WriteToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedTool }) => {
+const WriteToolViewer: React.FC<{ linkedTool: LinkedToolItemType; forceExpanded?: boolean }> = ({ linkedTool, forceExpanded }) => {
   const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
 
   // Get file path from toolUseResult or input
@@ -458,6 +461,7 @@ const WriteToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedT
         fileName={filePath}
         content={content}
         startLine={1}
+        forceExpanded={forceExpanded}
       />
     </div>
   );
@@ -467,7 +471,7 @@ const WriteToolViewer: React.FC<{ linkedTool: LinkedToolItemType }> = ({ linkedT
  * Renders the Edit tool with DiffViewer.
  * Uses enriched toolUseResult data when available.
  */
-const EditToolViewer: React.FC<{ linkedTool: LinkedToolItemType; status: ToolStatus }> = ({ linkedTool, status }) => {
+const EditToolViewer: React.FC<{ linkedTool: LinkedToolItemType; status: ToolStatus; forceExpanded?: boolean }> = ({ linkedTool, status, forceExpanded }) => {
   const toolUseResult = linkedTool.result?.toolUseResult as Record<string, unknown> | undefined;
 
   // Get file path from toolUseResult or input
@@ -483,6 +487,7 @@ const EditToolViewer: React.FC<{ linkedTool: LinkedToolItemType; status: ToolSta
         fileName={filePath}
         oldString={oldString}
         newString={newString}
+        forceExpanded={forceExpanded}
       />
 
       {/* Show result status if available */}
@@ -562,7 +567,7 @@ function hasWriteContent(linkedTool: LinkedToolItemType): boolean {
 // Main Component
 // =============================================================================
 
-export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick, isExpanded, isHighlighted }) => {
+export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick, isExpanded, isHighlighted, forceExpandContent }) => {
   const status = getToolStatus(linkedTool);
   const summary = getToolSummary(linkedTool.name, linkedTool.input);
   const elementRef = useRef<HTMLDivElement>(null);
@@ -588,38 +593,47 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
       {/* Collapsed: One-liner view */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800/50 cursor-pointer rounded group"
+        className="flex items-center gap-2 px-2 py-1.5 cursor-pointer rounded group"
+        style={{ backgroundColor: 'transparent' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--tool-item-hover-bg)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
       >
-        <Wrench className={`w-4 h-4 flex-shrink-0 ${isHighlighted ? 'text-red-400' : 'text-zinc-400'}`} />
-        <span className="font-mono text-sm text-zinc-200">
+        <Wrench
+          className="w-4 h-4 flex-shrink-0"
+          style={{ color: isHighlighted ? 'var(--badge-error-bg)' : 'var(--tool-item-muted)' }}
+        />
+        <span className="font-mono text-sm" style={{ color: 'var(--tool-item-name)' }}>
           {linkedTool.name}
         </span>
-        <span className="text-zinc-500 text-sm">-</span>
-        <span className="text-sm text-zinc-400 truncate flex-1">
+        <span className="text-sm" style={{ color: 'var(--tool-item-muted)' }}>-</span>
+        <span className="text-sm truncate flex-1" style={{ color: 'var(--tool-item-summary)' }}>
           {summary}
         </span>
         <StatusDot status={status} />
-        <span className="text-xs text-zinc-500 flex-shrink-0">
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--tool-item-muted)' }}>
           {formatDuration(linkedTool.durationMs)}
         </span>
       </div>
 
       {/* Expanded: Full content */}
       {isExpanded && (
-        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-2 space-y-3">
+        <div
+          className="pl-4 ml-2 mt-2 space-y-3"
+          style={{ borderLeft: '2px solid var(--color-border)' }}
+        >
           {/* Special rendering for Read tool with CodeBlockViewer */}
           {linkedTool.name === 'Read' && hasReadContent(linkedTool) && !linkedTool.result?.isError && (
-            <ReadToolViewer linkedTool={linkedTool} />
+            <ReadToolViewer linkedTool={linkedTool} forceExpanded={forceExpandContent} />
           )}
 
           {/* Special rendering for Edit tool with DiffViewer */}
           {linkedTool.name === 'Edit' && hasEditContent(linkedTool) && (
-            <EditToolViewer linkedTool={linkedTool} status={status} />
+            <EditToolViewer linkedTool={linkedTool} status={status} forceExpanded={forceExpandContent} />
           )}
 
           {/* Special rendering for Write tool */}
           {linkedTool.name === 'Write' && hasWriteContent(linkedTool) && !linkedTool.result?.isError && (
-            <WriteToolViewer linkedTool={linkedTool} />
+            <WriteToolViewer linkedTool={linkedTool} forceExpanded={forceExpandContent} />
           )}
 
           {/* Default rendering for other tools or fallback cases */}
@@ -629,8 +643,15 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
             <>
               {/* Input Section */}
               <div>
-                <div className="text-xs text-zinc-500 mb-1">Input</div>
-                <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-96 overflow-y-auto">
+                <div className="text-xs mb-1" style={{ color: 'var(--tool-item-muted)' }}>Input</div>
+                <div
+                  className="rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto"
+                  style={{
+                    backgroundColor: 'var(--code-bg)',
+                    border: '1px solid var(--code-border)',
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
                   {renderInput(linkedTool.name, linkedTool.input)}
                 </div>
               </div>
@@ -638,13 +659,18 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
               {/* Output Section */}
               {!linkedTool.isOrphaned && linkedTool.result && (
                 <div>
-                  <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+                  <div className="text-xs mb-1 flex items-center gap-2" style={{ color: 'var(--tool-item-muted)' }}>
                     Output
                     <StatusDot status={status} />
                   </div>
-                  <div className={`bg-zinc-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto ${
-                    status === 'error' ? 'text-red-400' : 'text-zinc-300'
-                  }`}>
+                  <div
+                    className="rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto"
+                    style={{
+                      backgroundColor: 'var(--code-bg)',
+                      border: '1px solid var(--code-border)',
+                      color: status === 'error' ? 'var(--tool-result-error-text)' : 'var(--color-text-secondary)',
+                    }}
+                  >
                     {renderOutput(linkedTool.result.content)}
                   </div>
                 </div>
@@ -655,11 +681,18 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
           {/* Output section for Read tool errors */}
           {linkedTool.name === 'Read' && linkedTool.result?.isError && (
             <div>
-              <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+              <div className="text-xs mb-1 flex items-center gap-2" style={{ color: 'var(--tool-item-muted)' }}>
                 Error
                 <StatusDot status="error" />
               </div>
-              <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-red-400 overflow-x-auto max-h-96 overflow-y-auto">
+              <div
+                className="rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto"
+                style={{
+                  backgroundColor: 'var(--code-bg)',
+                  border: '1px solid var(--code-border)',
+                  color: 'var(--tool-result-error-text)',
+                }}
+              >
                 {renderOutput(linkedTool.result.content)}
               </div>
             </div>
@@ -668,11 +701,18 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
           {/* Output section for Write tool errors */}
           {linkedTool.name === 'Write' && linkedTool.result?.isError && (
             <div>
-              <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+              <div className="text-xs mb-1 flex items-center gap-2" style={{ color: 'var(--tool-item-muted)' }}>
                 Error
                 <StatusDot status="error" />
               </div>
-              <div className="bg-zinc-900 rounded p-3 font-mono text-xs text-red-400 overflow-x-auto max-h-96 overflow-y-auto">
+              <div
+                className="rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto"
+                style={{
+                  backgroundColor: 'var(--code-bg)',
+                  border: '1px solid var(--code-border)',
+                  color: 'var(--tool-result-error-text)',
+                }}
+              >
                 {renderOutput(linkedTool.result.content)}
               </div>
             </div>
@@ -680,14 +720,14 @@ export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onCl
 
           {/* Orphaned indicator */}
           {linkedTool.isOrphaned && (
-            <div className="text-xs text-zinc-500 italic flex items-center gap-2">
+            <div className="text-xs italic flex items-center gap-2" style={{ color: 'var(--tool-item-muted)' }}>
               <StatusDot status="orphaned" />
               No result received
             </div>
           )}
 
           {/* Timing */}
-          <div className="text-xs text-zinc-500">
+          <div className="text-xs" style={{ color: 'var(--tool-item-muted)' }}>
             Duration: {formatDuration(linkedTool.durationMs)}
           </div>
         </div>

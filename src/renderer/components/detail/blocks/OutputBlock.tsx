@@ -14,28 +14,40 @@ export const OutputBlock: React.FC<OutputBlockProps> = ({ step, isExpanded }) =>
     : outputText;
 
   return (
-    <div className="rounded-lg border bg-gray-800/30 border-gray-700 text-gray-200">
-      <div className="flex items-start gap-2 px-3 py-2">
-        <MessageSquare size={16} className="mt-0.5 flex-shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="font-medium text-sm mb-1">Output</div>
-          {!isExpanded && outputText && (
-            <div className="text-xs text-gray-400 line-clamp-3">
-              {preview}
-            </div>
-          )}
-        </div>
+    <div
+      className="rounded-lg shadow-sm overflow-hidden"
+      style={{
+        backgroundColor: 'var(--code-bg)',
+        border: '1px solid var(--code-border)',
+      }}
+    >
+      {/* Header - matches CodeBlockViewer style */}
+      <div
+        className="flex items-center gap-2 px-3 py-2"
+        style={{
+          backgroundColor: 'var(--code-header-bg)',
+          borderBottom: '1px solid var(--code-border)',
+        }}
+      >
+        <MessageSquare size={16} className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+        <span className="font-medium text-sm" style={{ color: 'var(--color-text-secondary)' }}>Output</span>
       </div>
 
-      {isExpanded && outputText && (
-        <div className="px-3 py-2 border-t border-gray-700/50">
-          <div className="prose prose-invert prose-sm max-w-none">
-            <div className="text-xs text-gray-200 whitespace-pre-wrap max-h-96 overflow-y-auto">
-              {outputText}
-            </div>
+      {/* Content */}
+      <div className="px-4 py-3">
+        {!isExpanded && outputText ? (
+          <div className="text-sm line-clamp-3" style={{ color: 'var(--color-text-secondary)' }}>
+            {preview}
           </div>
-        </div>
-      )}
+        ) : outputText ? (
+          <div
+            className="text-sm whitespace-pre-wrap max-h-96 overflow-y-auto"
+            style={{ color: 'var(--color-text)' }}
+          >
+            {outputText}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 };

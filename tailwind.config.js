@@ -7,23 +7,23 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Surface colors for dark mode
+        // Theme-aware surface colors (use CSS variables)
         surface: {
-          DEFAULT: '#18181b', // zinc-900 - main background
-          raised: '#27272a',  // zinc-800 - cards, panels
-          overlay: '#3f3f46', // zinc-700 - modals, dropdowns
+          DEFAULT: 'var(--color-surface)',
+          raised: 'var(--color-surface-raised)',
+          overlay: 'var(--color-surface-overlay)',
         },
-        // Border colors
+        // Theme-aware border colors (use CSS variables)
         border: {
-          DEFAULT: '#3f3f46', // zinc-700 - primary borders
-          subtle: '#27272a',  // zinc-800 - subtle dividers
-          emphasis: '#52525b', // zinc-600 - emphasized borders
+          DEFAULT: 'var(--color-border)',
+          subtle: 'var(--color-border-subtle)',
+          emphasis: 'var(--color-border-emphasis)',
         },
-        // Text colors
+        // Theme-aware text colors (use CSS variables)
         text: {
-          DEFAULT: '#fafafa',    // zinc-50 - primary text
-          secondary: '#a1a1aa',  // zinc-400 - secondary text
-          muted: '#71717a',      // zinc-500 - muted/placeholder
+          DEFAULT: 'var(--color-text)',
+          secondary: 'var(--color-text-secondary)',
+          muted: 'var(--color-text-muted)',
         },
         // Semantic colors (only for status, not containers)
         semantic: {
@@ -32,13 +32,14 @@ module.exports = {
           warning: '#f59e0b',  // amber-500
           info: '#3b82f6',     // blue-500
         },
-        // Legacy aliases for backward compatibility (gradual migration)
+        // Theme-aware colors using CSS variables
+        // These aliases enable all existing components to automatically support light/dark mode
         'claude-dark': {
-          bg: '#18181b',
-          surface: '#27272a',
-          border: '#3f3f46',
-          text: '#fafafa',
-          'text-secondary': '#a1a1aa'
+          bg: 'var(--color-surface)',
+          surface: 'var(--color-surface-raised)',
+          border: 'var(--color-border)',
+          text: 'var(--color-text)',
+          'text-secondary': 'var(--color-text-secondary)'
         }
       }
     }

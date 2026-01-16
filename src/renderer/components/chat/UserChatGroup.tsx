@@ -44,27 +44,40 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
     <div className="flex justify-end">
       <div className="max-w-[85%] space-y-2">
         {/* Header - right aligned */}
-        <div className="flex items-center justify-end gap-2 text-xs text-zinc-400">
+        <div
+          className="flex items-center justify-end gap-2 text-xs"
+          style={{ color: 'var(--color-text-muted)' }}
+        >
           <span>{format(timestamp, 'h:mm:ss a')}</span>
           <span>·</span>
-          <span className="font-medium text-zinc-300">You</span>
-          <User className="w-3.5 h-3.5 text-zinc-400" />
+          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>You</span>
+          <User className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
         </div>
 
-        {/* Content - subtle bubble style */}
+        {/* Content - theme-aware bubble style */}
         {textContent && (
-          <div className="bg-blue-600/15 rounded-2xl rounded-br-sm px-4 py-3">
-            <div className="text-zinc-100 text-sm whitespace-pre-wrap break-words">
+          <div
+            className="rounded-2xl rounded-br-sm px-4 py-3"
+            style={{
+              backgroundColor: 'var(--chat-user-bg)',
+              border: '1px solid var(--chat-user-border)',
+            }}
+          >
+            <div
+              className="text-sm whitespace-pre-wrap break-words"
+              style={{ color: 'var(--chat-user-text)' }}
+            >
               {searchQuery ? (
                 <SearchHighlight text={displayText} itemId={groupId} />
               ) : (
-                <HighlightedText text={displayText} projectPath={projectPath} />
+                <HighlightedText text={displayText} projectPath={projectPath} variant="user-bubble" />
               )}
             </div>
             {isLongContent && (
               <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="text-xs text-zinc-400 hover:text-zinc-300 mt-2 underline"
+                className="text-xs mt-2 underline hover:opacity-80"
+                style={{ color: 'var(--color-text-muted)' }}
               >
                 {isExpanded ? 'Show less' : 'Show more'}
               </button>
@@ -74,7 +87,7 @@ export function UserChatGroup({ userGroup }: UserChatGroupProps) {
 
         {/* Images indicator */}
         {hasImages && (
-          <div className="text-xs text-zinc-400 text-right">
+          <div className="text-xs text-right" style={{ color: 'var(--color-text-muted)' }}>
             {content.images.length} image{content.images.length > 1 ? 's' : ''} attached
           </div>
         )}

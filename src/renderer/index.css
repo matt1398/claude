@@ -2,6 +2,277 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme CSS Custom Properties */
+:root {
+  /* Dark theme (default) */
+  --color-surface: #18181b;
+  --color-surface-raised: #27272a;
+  --color-surface-overlay: #3f3f46;
+  --color-border: #3f3f46;
+  --color-border-subtle: #27272a;
+  --color-border-emphasis: #52525b;
+  --color-text: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: #71717a;
+
+  /* Scrollbar colors */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
+  --scrollbar-thumb-active: rgba(255, 255, 255, 0.35);
+
+  /* Search highlights */
+  --highlight-bg: rgba(202, 138, 4, 0.7);
+  --highlight-bg-inactive: rgba(113, 63, 18, 0.5);
+  --highlight-text: #fef9c3;
+  --highlight-text-inactive: #fef08a;
+  --highlight-ring: #facc15;
+
+  /* User chat bubble */
+  --chat-user-bg: rgba(37, 99, 235, 0.15);
+  --chat-user-text: #e4e4e7;
+  --chat-user-border: transparent;
+
+  /* User bubble inline tags */
+  --chat-user-tag-bg: rgba(255, 255, 255, 0.1);
+  --chat-user-tag-text: #fde68a;
+  --chat-user-tag-border: rgba(255, 255, 255, 0.15);
+
+  /* Tool items */
+  --tool-item-name: #e4e4e7;
+  --tool-item-summary: #a1a1aa;
+  --tool-item-muted: #71717a;
+  --tool-item-hover-bg: rgba(39, 39, 42, 0.5);
+
+  /* System chat bubble */
+  --chat-system-bg: rgba(39, 39, 42, 0.5);
+  --chat-system-text: #d4d4d8;
+
+  /* AI message styling */
+  --chat-ai-border: rgba(63, 63, 70, 0.6);
+  --chat-ai-icon: #71717a;
+
+  /* Code blocks */
+  --code-bg: rgba(24, 24, 27, 0.5);
+  --code-header-bg: rgba(39, 39, 42, 0.5);
+  --code-border: rgba(63, 63, 70, 0.3);
+  --code-line-number: #52525b;
+  --code-filename: #60a5fa;
+
+  /* Syntax highlighting - Dark theme */
+  --syntax-string: #4ade80;
+  --syntax-comment: #71717a;
+  --syntax-number: #fb923c;
+  --syntax-keyword: #c084fc;
+  --syntax-type: #facc15;
+  --syntax-operator: #a1a1aa;
+  --syntax-function: #60a5fa;
+
+  /* Inline code */
+  --inline-code-bg: #27272a;
+  --inline-code-text: #fbbf24;
+
+  /* Thinking blocks */
+  --thinking-bg: rgba(88, 28, 135, 0.2);
+  --thinking-border: rgba(107, 33, 168, 0.4);
+  --thinking-text: #d8b4fe;
+  --thinking-text-muted: #e9d5ff;
+  --thinking-content-border: rgba(107, 33, 168, 0.3);
+  --thinking-content-text: #f3e8ff;
+
+  /* Tool call blocks */
+  --tool-call-bg: rgba(120, 53, 15, 0.2);
+  --tool-call-border: rgba(146, 64, 14, 0.4);
+  --tool-call-text: #fcd34d;
+  --tool-call-code-bg: rgba(69, 26, 3, 0.5);
+  --tool-call-content-border: rgba(146, 64, 14, 0.3);
+
+  /* Tool result blocks */
+  --tool-result-success-bg: rgba(20, 83, 45, 0.2);
+  --tool-result-success-border: rgba(22, 101, 52, 0.4);
+  --tool-result-success-text: #86efac;
+  --tool-result-error-bg: rgba(127, 29, 29, 0.2);
+  --tool-result-error-border: rgba(153, 27, 27, 0.4);
+  --tool-result-error-text: #fca5a5;
+
+  /* Output blocks */
+  --output-bg: rgba(31, 41, 55, 0.3);
+  --output-border: #374151;
+  --output-text: #e5e7eb;
+  --output-content-border: rgba(55, 65, 81, 0.5);
+
+  /* Badges */
+  --badge-error-bg: #dc2626;
+  --badge-error-text: #ffffff;
+  --badge-warning-bg: #ca8a04;
+  --badge-warning-text: #ffffff;
+  --badge-success-bg: #16a34a;
+  --badge-success-text: #ffffff;
+  --badge-info-bg: #2563eb;
+  --badge-info-text: #ffffff;
+  --badge-neutral-bg: #3f3f46;
+  --badge-neutral-text: #e4e4e7;
+
+  /* Language/tag badges */
+  --tag-bg: #27272a;
+  --tag-text: #a1a1aa;
+  --tag-border: transparent;
+
+  /* Highlighted text (skills, paths) */
+  --skill-highlight-bg: rgba(120, 53, 15, 0.3);
+  --skill-highlight-text: #fde68a;
+  --path-highlight-bg: rgba(124, 45, 18, 0.3);
+  --path-highlight-text: #fdba74;
+
+  /* Interruption badge */
+  --interruption-bg: rgba(127, 29, 29, 0.3);
+  --interruption-border: #b91c1c;
+  --interruption-text: #fca5a5;
+
+  /* Error highlight (pulsing) */
+  --error-highlight-ring: #ef4444;
+  --error-highlight-bg: rgba(239, 68, 68, 0.2);
+
+  /* Keyboard hints */
+  --kbd-bg: #3f3f46;
+  --kbd-border: #52525b;
+  --kbd-text: #d4d4d8;
+}
+
+/* Light theme overrides - High contrast for accessibility */
+:root.light {
+  --color-surface: #ffffff;
+  --color-surface-raised: #f8fafc;
+  --color-surface-overlay: #f1f5f9;
+  --color-border: #cbd5e1;
+  --color-border-subtle: #e2e8f0;
+  --color-border-emphasis: #94a3b8;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  /* Scrollbar colors for light mode */
+  --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+  --scrollbar-thumb-active: rgba(0, 0, 0, 0.5);
+
+  /* Search highlights - High saturation yellow */
+  --highlight-bg: #facc15;
+  --highlight-bg-inactive: #fef08a;
+  --highlight-text: #1c1917;
+  --highlight-text-inactive: #422006;
+  --highlight-ring: #ca8a04;
+
+  /* User chat bubble - Modern slate/gray (Direction A: Clean) */
+  --chat-user-bg: #f1f5f9;
+  --chat-user-text: #0f172a;
+  --chat-user-border: #e2e8f0;
+
+  /* User bubble inline tags - Elegant white with border */
+  --chat-user-tag-bg: #ffffff;
+  --chat-user-tag-text: #9a3412;
+  --chat-user-tag-border: #d4d4d8;
+
+  /* Tool items - High contrast for light mode */
+  --tool-item-name: #0f172a;
+  --tool-item-summary: #475569;
+  --tool-item-muted: #64748b;
+  --tool-item-hover-bg: #f1f5f9;
+
+  /* System chat bubble */
+  --chat-system-bg: #f1f5f9;
+  --chat-system-text: #334155;
+
+  /* AI message styling */
+  --chat-ai-border: #cbd5e1;
+  --chat-ai-icon: #64748b;
+
+  /* Code blocks - Light theme optimized */
+  --code-bg: #f8fafc;
+  --code-header-bg: #f1f5f9;
+  --code-border: #e2e8f0;
+  --code-line-number: #94a3b8;
+  --code-filename: #2563eb;
+
+  /* Syntax highlighting - GitHub Light inspired */
+  --syntax-string: #0a3069;
+  --syntax-comment: #6e7781;
+  --syntax-number: #0550ae;
+  --syntax-keyword: #cf222e;
+  --syntax-type: #8250df;
+  --syntax-operator: #24292f;
+  --syntax-function: #8250df;
+
+  /* Inline code */
+  --inline-code-bg: #f1f5f9;
+  --inline-code-text: #c2410c;
+
+  /* Thinking blocks - Visible purple */
+  --thinking-bg: #faf5ff;
+  --thinking-border: #d8b4fe;
+  --thinking-text: #6b21a8;
+  --thinking-text-muted: #7c3aed;
+  --thinking-content-border: #e9d5ff;
+  --thinking-content-text: #581c87;
+
+  /* Tool call blocks - Visible amber */
+  --tool-call-bg: #fffbeb;
+  --tool-call-border: #fcd34d;
+  --tool-call-text: #92400e;
+  --tool-call-code-bg: #fef3c7;
+  --tool-call-content-border: #fde68a;
+
+  /* Tool result blocks */
+  --tool-result-success-bg: #f0fdf4;
+  --tool-result-success-border: #86efac;
+  --tool-result-success-text: #166534;
+  --tool-result-error-bg: #fef2f2;
+  --tool-result-error-border: #fca5a5;
+  --tool-result-error-text: #991b1b;
+
+  /* Output blocks */
+  --output-bg: #f8fafc;
+  --output-border: #e2e8f0;
+  --output-text: #1e293b;
+  --output-content-border: #cbd5e1;
+
+  /* Badges - High contrast */
+  --badge-error-bg: #dc2626;
+  --badge-error-text: #ffffff;
+  --badge-warning-bg: #d97706;
+  --badge-warning-text: #ffffff;
+  --badge-success-bg: #16a34a;
+  --badge-success-text: #ffffff;
+  --badge-info-bg: #2563eb;
+  --badge-info-text: #ffffff;
+  --badge-neutral-bg: #e2e8f0;
+  --badge-neutral-text: #334155;
+
+  /* Language/tag badges - With border for visibility */
+  --tag-bg: #f1f5f9;
+  --tag-text: #475569;
+  --tag-border: #cbd5e1;
+
+  /* Highlighted text (skills, paths) */
+  --skill-highlight-bg: #fef3c7;
+  --skill-highlight-text: #92400e;
+  --path-highlight-bg: #ffedd5;
+  --path-highlight-text: #9a3412;
+
+  /* Interruption badge */
+  --interruption-bg: #fef2f2;
+  --interruption-border: #f87171;
+  --interruption-text: #b91c1c;
+
+  /* Error highlight (pulsing) */
+  --error-highlight-ring: #dc2626;
+  --error-highlight-bg: rgba(220, 38, 38, 0.15);
+
+  /* Keyboard hints - Distinct from background */
+  --kbd-bg: #f1f5f9;
+  --kbd-border: #94a3b8;
+  --kbd-text: #334155;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -14,8 +285,9 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #1a1a1a;
-  color: #e5e5e5;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 #root {
@@ -57,21 +329,21 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
   transition: background 0.2s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--scrollbar-thumb-hover);
 }
 
 ::-webkit-scrollbar-thumb:active {
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--scrollbar-thumb-active);
 }
 
 /* Firefox scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }

@@ -14,6 +14,7 @@ interface CodeBlockViewerProps {
   maxPreviewLines?: number;   // Default 15 - show this many before collapse
   isExpanded?: boolean;       // Initial expansion state
   onToggle?: () => void;      // Optional expansion callback
+  forceExpanded?: boolean;    // Force expand for search results (overrides internal state)
 }
 
 // =============================================================================
@@ -181,7 +182,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
       if (endQuote !== -1) {
         const str = remaining.slice(0, endQuote + 1);
         segments.push(
-          <span key={currentPos} className="text-green-400">{str}</span>
+          <span key={currentPos} style={{ color: 'var(--syntax-string)' }}>{str}</span>
         );
         currentPos += str.length;
         continue;
@@ -194,7 +195,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
       if (endQuote !== -1) {
         const str = remaining.slice(0, endQuote + 1);
         segments.push(
-          <span key={currentPos} className="text-green-400">{str}</span>
+          <span key={currentPos} style={{ color: 'var(--syntax-string)' }}>{str}</span>
         );
         currentPos += str.length;
         continue;
@@ -207,7 +208,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
       if (endQuote !== -1) {
         const str = remaining.slice(0, endQuote + 1);
         segments.push(
-          <span key={currentPos} className="text-green-400">{str}</span>
+          <span key={currentPos} style={{ color: 'var(--syntax-string)' }}>{str}</span>
         );
         currentPos += str.length;
         continue;
@@ -217,7 +218,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
     // Check for comment (// style)
     if (remaining.startsWith('//')) {
       segments.push(
-        <span key={currentPos} className="text-zinc-500 italic">{remaining}</span>
+        <span key={currentPos} style={{ color: 'var(--syntax-comment)', fontStyle: 'italic' }}>{remaining}</span>
       );
       break;
     }
@@ -225,7 +226,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
     // Check for comment (# style for Python/Shell)
     if ((language === 'python' || language === 'bash') && remaining[0] === '#') {
       segments.push(
-        <span key={currentPos} className="text-zinc-500 italic">{remaining}</span>
+        <span key={currentPos} style={{ color: 'var(--syntax-comment)', fontStyle: 'italic' }}>{remaining}</span>
       );
       break;
     }
@@ -234,7 +235,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
     const numberMatch = remaining.match(/^(\d+\.?\d*)/);
     if (numberMatch && (currentPos === 0 || /\W/.test(line[currentPos - 1]))) {
       segments.push(
-        <span key={currentPos} className="text-orange-400">{numberMatch[1]}</span>
+        <span key={currentPos} style={{ color: 'var(--syntax-number)' }}>{numberMatch[1]}</span>
       );
       currentPos += numberMatch[1].length;
       continue;
@@ -246,12 +247,12 @@ function highlightLine(line: string, language: string): React.ReactNode {
       const word = wordMatch[1];
       if (keywords.has(word)) {
         segments.push(
-          <span key={currentPos} className="text-purple-400 font-medium">{word}</span>
+          <span key={currentPos} style={{ color: 'var(--syntax-keyword)', fontWeight: 500 }}>{word}</span>
         );
       } else if (word[0] === word[0].toUpperCase() && word.length > 1) {
         // Likely a type/class name
         segments.push(
-          <span key={currentPos} className="text-yellow-400">{word}</span>
+          <span key={currentPos} style={{ color: 'var(--syntax-type)' }}>{word}</span>
         );
       } else {
         segments.push(word);
@@ -264,7 +265,7 @@ function highlightLine(line: string, language: string): React.ReactNode {
     const opMatch = remaining.match(/^([=<>!+\-*/%&|^~?:;,.{}()[\]])/);
     if (opMatch) {
       segments.push(
-        <span key={currentPos} className="text-zinc-400">{opMatch[1]}</span>
+        <span key={currentPos} style={{ color: 'var(--syntax-operator)' }}>{opMatch[1]}</span>
       );
       currentPos += 1;
       continue;
@@ -290,9 +291,17 @@ export const CodeBlockViewer: React.FC<CodeBlockViewerProps> = ({
   endLine,
   maxPreviewLines = 15,
   isExpanded: initialExpanded = false,
-  onToggle
+  onToggle,
+  forceExpanded = false
 }) => {
-  const [isExpanded, setIsExpanded] = useState(initialExpanded);
+  const [isExpanded, setIsExpanded] = useState(initialExpanded || forceExpanded);
+
+  // Update expansion state when forceExpanded changes
+  React.useEffect(() => {
+    if (forceExpanded) {
+      setIsExpanded(true);
+    }
+  }, [forceExpanded]);
   const [isCopied, setIsCopied] = useState(false);
 
   // Infer language from file extension if not provided
@@ -337,20 +346,43 @@ export const CodeBlockViewer: React.FC<CodeBlockViewerProps> = ({
   const displayFileName = fileName.split('/').pop() || fileName;
 
   return (
-    <div className="rounded-lg border border-zinc-700/30 bg-zinc-900/50 shadow-sm overflow-hidden">
+    <div
+      className="rounded-lg shadow-sm overflow-hidden"
+      style={{
+        backgroundColor: 'var(--code-bg)',
+        border: '1px solid var(--code-border)',
+      }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-zinc-800/50 border-b border-zinc-700/30">
+      <div
+        className="flex items-center justify-between px-3 py-2"
+        style={{
+          backgroundColor: 'var(--code-header-bg)',
+          borderBottom: '1px solid var(--code-border)',
+        }}
+      >
         <div className="flex items-center gap-2 min-w-0">
-          <FileCode className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-          <span className="font-mono text-sm text-blue-400 truncate" title={fileName}>
+          <FileCode className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+          <span
+            className="font-mono text-sm truncate"
+            title={fileName}
+            style={{ color: 'var(--code-filename)' }}
+          >
             {displayFileName}
           </span>
           {(startLine > 1 || endLine) && (
-            <span className="text-xs text-zinc-500 flex-shrink-0">
+            <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
               (lines {startLine}-{actualEndLine})
             </span>
           )}
-          <span className="text-xs text-zinc-600 px-1.5 py-0.5 bg-zinc-800 rounded flex-shrink-0">
+          <span
+            className="text-xs px-1.5 py-0.5 rounded flex-shrink-0"
+            style={{
+              backgroundColor: 'var(--tag-bg)',
+              color: 'var(--tag-text)',
+              border: '1px solid var(--tag-border)',
+            }}
+          >
             {detectedLanguage}
           </span>
         </div>
@@ -358,13 +390,14 @@ export const CodeBlockViewer: React.FC<CodeBlockViewerProps> = ({
         {/* Copy button */}
         <button
           onClick={handleCopy}
-          className="p-1 hover:bg-zinc-700/50 rounded transition-colors"
+          className="p-1 rounded transition-colors hover:opacity-80"
           title="Copy to clipboard"
+          style={{ backgroundColor: 'transparent' }}
         >
           {isCopied ? (
-            <Check className="w-4 h-4 text-green-400" />
+            <Check className="w-4 h-4" style={{ color: 'var(--badge-success-bg)' }} />
           ) : (
-            <Copy className="w-4 h-4 text-zinc-400 hover:text-zinc-300" />
+            <Copy className="w-4 h-4" style={{ color: 'var(--color-text-muted)' }} />
           )}
         </button>
       </div>
@@ -376,13 +409,28 @@ export const CodeBlockViewer: React.FC<CodeBlockViewerProps> = ({
             {displayLines.map((line, index) => {
               const lineNumber = startLine + index;
               return (
-                <div key={index} className="flex hover:bg-zinc-800/30">
+                <div
+                  key={index}
+                  className="flex"
+                  style={{ backgroundColor: 'transparent' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-surface-overlay)'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
                   {/* Line number */}
-                  <span className="flex-shrink-0 w-12 px-3 py-0.5 text-right text-zinc-600 select-none border-r border-zinc-800">
+                  <span
+                    className="flex-shrink-0 w-12 px-3 py-0.5 text-right select-none"
+                    style={{
+                      color: 'var(--code-line-number)',
+                      borderRight: '1px solid var(--code-border)',
+                    }}
+                  >
                     {lineNumber}
                   </span>
                   {/* Code line */}
-                  <span className="flex-1 px-4 py-0.5 text-zinc-200 whitespace-pre">
+                  <span
+                    className="flex-1 px-4 py-0.5 whitespace-pre"
+                    style={{ color: 'var(--color-text)' }}
+                  >
                     {highlightLine(line, detectedLanguage)}
                   </span>
                 </div>
@@ -396,9 +444,12 @@ export const CodeBlockViewer: React.FC<CodeBlockViewerProps> = ({
       {needsCollapse && (
         <button
           onClick={handleToggle}
-          className="w-full flex items-center justify-center gap-1.5 py-2 px-3
-                     bg-zinc-800/30 hover:bg-zinc-800/50 border-t border-zinc-700/30
-                     text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-sm transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: 'var(--code-header-bg)',
+            borderTop: '1px solid var(--code-border)',
+            color: 'var(--color-text-muted)',
+          }}
         >
           {isExpanded ? (
             <>

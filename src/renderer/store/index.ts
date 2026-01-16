@@ -22,6 +22,22 @@ export interface SearchMatch {
   matchIndexInItem: number;
   /** Global index across all matches */
   globalIndex: number;
+  /** For AI groups: whether this match requires expanding the group */
+  requiresExpansion?: boolean;
+  /** For subagent content: the subagent ID if match is inside subagent execution trace */
+  subagentId?: string;
+}
+
+/**
+ * Search context for navigating from Command Palette results.
+ */
+export interface SearchNavigationContext {
+  /** The search query */
+  query: string;
+  /** Timestamp of the message containing the search match */
+  messageTimestamp: number;
+  /** The matched text */
+  matchedText: string;
 }
 
 interface AppState {
@@ -89,6 +105,12 @@ interface AppState {
   currentSearchIndex: number;
   searchMatches: SearchMatch[];
 
+  // Auto-expand state for search results
+  /** AI group IDs that should be expanded to show search results */
+  searchExpandedAIGroupIds: Set<string>;
+  /** Subagent IDs within AI groups that should show their execution trace */
+  searchExpandedSubagentIds: Set<string>;
+
   // Command palette state
   commandPaletteOpen: boolean;
 
@@ -147,11 +169,13 @@ interface AppState {
   hideSearch: () => void;
   nextSearchResult: () => void;
   previousSearchResult: () => void;
+  /** Expand AI groups and subagents needed to show the current search result */
+  expandForCurrentSearchResult: () => void;
 
   // Command palette actions
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
-  navigateToSession: (projectId: string, sessionId: string, fromSearch?: boolean) => void;
+  navigateToSession: (projectId: string, sessionId: string, fromSearch?: boolean, searchContext?: SearchNavigationContext) => void;
 
   // Notification actions
   fetchNotifications: () => Promise<void>;
@@ -219,6 +243,10 @@ export const useStore = create<AppState>((set, get) => ({
   searchResultCount: 0,
   currentSearchIndex: -1,
   searchMatches: [],
+
+  // Auto-expand state for search results (initial values)
+  searchExpandedAIGroupIds: new Set(),
+  searchExpandedSubagentIds: new Set(),
 
   // Command palette state
   commandPaletteOpen: false,
@@ -722,12 +750,12 @@ export const useStore = create<AppState>((set, get) => ({
     return isSessionOpenInTabs(state.openTabs, sessionId);
   },
 
-  // Clear deep link props (scrollToLine, highlightErrorId, errorTimestamp, highlightToolUseId) from a tab after scrolling
+  // Clear deep link props (scrollToLine, highlightErrorId, errorTimestamp, highlightToolUseId, searchContext) from a tab after scrolling
   clearTabDeepLink: (tabId: string) => {
     const state = get();
     const updatedTabs = state.openTabs.map((tab) =>
       tab.id === tabId
-        ? { ...tab, scrollToLine: undefined, highlightErrorId: undefined, errorTimestamp: undefined, highlightToolUseId: undefined }
+        ? { ...tab, scrollToLine: undefined, highlightErrorId: undefined, errorTimestamp: undefined, highlightToolUseId: undefined, searchContext: undefined }
         : tab
     );
     set({ openTabs: updatedTabs });
@@ -806,6 +834,8 @@ export const useStore = create<AppState>((set, get) => ({
             itemType,
             matchIndexInItem,
             globalIndex,
+            // AI group matches require expansion to be visible
+            requiresExpansion: itemType === 'ai',
           });
           matchIndexInItem++;
           globalIndex++;
@@ -820,6 +850,11 @@ export const useStore = create<AppState>((set, get) => ({
       currentSearchIndex: matches.length > 0 ? 0 : -1,
       searchMatches: matches
     });
+
+    // Auto-expand for the first search result if there are matches
+    if (matches.length > 0) {
+      get().expandForCurrentSearchResult();
+    }
   },
 
   showSearch: () => {
@@ -832,7 +867,9 @@ export const useStore = create<AppState>((set, get) => ({
       searchQuery: '',
       searchResultCount: 0,
       currentSearchIndex: -1,
-      searchMatches: []
+      searchMatches: [],
+      searchExpandedAIGroupIds: new Set(),
+      searchExpandedSubagentIds: new Set(),
     });
   },
 
@@ -841,6 +878,8 @@ export const useStore = create<AppState>((set, get) => ({
     if (state.searchResultCount > 0) {
       const nextIndex = (state.currentSearchIndex + 1) % state.searchResultCount;
       set({ currentSearchIndex: nextIndex });
+      // Auto-expand any collapsed sections containing the result
+      get().expandForCurrentSearchResult();
     }
   },
 
@@ -850,6 +889,32 @@ export const useStore = create<AppState>((set, get) => ({
       const prevIndex = state.currentSearchIndex - 1;
       const newIndex = prevIndex < 0 ? state.searchResultCount - 1 : prevIndex;
       set({ currentSearchIndex: newIndex });
+      // Auto-expand any collapsed sections containing the result
+      get().expandForCurrentSearchResult();
+    }
+  },
+
+  expandForCurrentSearchResult: () => {
+    const state = get();
+    const { currentSearchIndex, searchMatches } = state;
+
+    if (currentSearchIndex < 0 || searchMatches.length === 0) return;
+
+    const currentMatch = searchMatches[currentSearchIndex];
+    if (!currentMatch) return;
+
+    // If this is an AI group match, add it to the expanded set
+    if (currentMatch.itemType === 'ai') {
+      const newExpandedAIGroups = new Set(state.searchExpandedAIGroupIds);
+      newExpandedAIGroups.add(currentMatch.itemId);
+      set({ searchExpandedAIGroupIds: newExpandedAIGroups });
+
+      // If there's a subagent ID, also expand that subagent's trace
+      if (currentMatch.subagentId) {
+        const newExpandedSubagents = new Set(state.searchExpandedSubagentIds);
+        newExpandedSubagents.add(currentMatch.subagentId);
+        set({ searchExpandedSubagentIds: newExpandedSubagents });
+      }
     }
   },
 
@@ -862,7 +927,7 @@ export const useStore = create<AppState>((set, get) => ({
     set({ commandPaletteOpen: false });
   },
 
-  navigateToSession: (projectId: string, sessionId: string, fromSearch = false) => {
+  navigateToSession: (projectId: string, sessionId: string, fromSearch = false, searchContext?: SearchNavigationContext) => {
     const state = get();
 
     // If different project, select it first
@@ -870,14 +935,42 @@ export const useStore = create<AppState>((set, get) => ({
       state.selectProject(projectId);
     }
 
-    // Open the session in a new tab
-    state.openTab({
-      type: 'session',
-      label: 'Loading...',
-      projectId,
-      sessionId,
-      fromSearch,
-    });
+    // Check if session tab is already open
+    const existingTab = findTabBySession(state.openTabs, sessionId);
+
+    if (existingTab && searchContext) {
+      // Update existing tab with search context and focus it
+      const updatedTabs = state.openTabs.map((tab) =>
+        tab.id === existingTab.id
+          ? {
+              ...tab,
+              searchContext: {
+                query: searchContext.query,
+                messageTimestamp: searchContext.messageTimestamp,
+                matchedText: searchContext.matchedText,
+              },
+            }
+          : tab
+      );
+      set({
+        openTabs: updatedTabs,
+        activeTabId: existingTab.id,
+      });
+    } else {
+      // Open the session in a new tab
+      state.openTab({
+        type: 'session',
+        label: 'Loading...',
+        projectId,
+        sessionId,
+        fromSearch,
+        searchContext: searchContext ? {
+          query: searchContext.query,
+          messageTimestamp: searchContext.messageTimestamp,
+          matchedText: searchContext.matchedText,
+        } : undefined,
+      });
+    }
 
     // If opened from search, clear sidebar selection to deselect
     if (fromSearch) {

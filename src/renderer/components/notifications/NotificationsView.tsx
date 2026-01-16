@@ -55,10 +55,13 @@ export function NotificationsView() {
     return Array.from(projectMap.entries());
   }, [notifications]);
 
-  // Filter notifications by project
+  // Filter and sort notifications by project (most recent first)
   const filteredNotifications = useMemo(() => {
-    if (filter === 'all') return notifications;
-    return notifications.filter((notif) => notif.projectId === filter);
+    const filtered = filter === 'all'
+      ? notifications
+      : notifications.filter((notif) => notif.projectId === filter);
+    // Sort by timestamp descending (most recent first)
+    return [...filtered].sort((a, b) => b.timestamp - a.timestamp);
   }, [notifications, filter]);
 
   // Estimate item size

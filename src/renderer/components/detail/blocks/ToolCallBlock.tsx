@@ -16,21 +16,37 @@ export const ToolCallBlock: React.FC<ToolCallBlockProps> = ({ step, isExpanded }
   const Icon = STEP_ICONS.tool_call || Wrench;
 
   return (
-    <div className="rounded-lg border bg-amber-900/20 border-amber-800/40 text-amber-300">
+    <div
+      className="rounded-lg"
+      style={{
+        backgroundColor: 'var(--tool-call-bg)',
+        border: '1px solid var(--tool-call-border)',
+        color: 'var(--tool-call-text)',
+      }}
+    >
       <div className="flex items-start gap-2 px-3 py-2">
         <Icon size={16} className="mt-0.5 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="font-medium text-sm">Tool Call</div>
-          <code className="text-xs bg-amber-950/50 px-1.5 py-0.5 rounded mt-1 inline-block">
+          <code
+            className="text-xs px-1.5 py-0.5 rounded mt-1 inline-block"
+            style={{ backgroundColor: 'var(--tool-call-code-bg)' }}
+          >
             {toolName}
           </code>
         </div>
       </div>
 
       {isExpanded && toolInput ? (
-        <div className="px-3 py-2 border-t border-amber-800/30">
-          <div className="text-xs text-amber-200/80 font-medium mb-1">Input:</div>
-          <pre className="text-xs text-amber-100 bg-gray-900/50 p-2 rounded overflow-x-auto max-h-96 overflow-y-auto">
+        <div
+          className="px-3 py-2"
+          style={{ borderTop: '1px solid var(--tool-call-content-border)' }}
+        >
+          <div className="text-xs font-medium mb-1" style={{ opacity: 0.8 }}>Input:</div>
+          <pre
+            className="text-xs p-2 rounded overflow-x-auto max-h-96 overflow-y-auto"
+            style={{ backgroundColor: 'var(--code-bg)' }}
+          >
             {JSON.stringify(toolInput as Record<string, unknown>, null, 2)}
           </pre>
         </div>

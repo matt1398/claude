@@ -23,16 +23,22 @@ export function SystemChatGroup({ systemGroup }: SystemChatGroupProps) {
     <div className="flex justify-start">
       <div className="max-w-[85%] space-y-2">
         {/* Header - system icon */}
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <Terminal className="w-3.5 h-3.5 text-zinc-400" />
-          <span className="font-medium text-zinc-300">System</span>
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+          <Terminal className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
+          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>System</span>
           <span>·</span>
           <span>{format(timestamp, 'h:mm:ss a')}</span>
         </div>
 
-        {/* Content - neutral/gray styling */}
-        <div className="bg-zinc-800/50 rounded-2xl rounded-bl-sm px-4 py-3">
-          <pre className="text-zinc-300 text-sm whitespace-pre-wrap font-mono">
+        {/* Content - theme-aware neutral styling */}
+        <div
+          className="rounded-2xl rounded-bl-sm px-4 py-3"
+          style={{ backgroundColor: 'var(--chat-system-bg)' }}
+        >
+          <pre
+            className="text-sm whitespace-pre-wrap font-mono"
+            style={{ color: 'var(--chat-system-text)' }}
+          >
             {searchQuery ? (
               <SearchHighlight text={cleanOutput} itemId={groupId} />
             ) : (

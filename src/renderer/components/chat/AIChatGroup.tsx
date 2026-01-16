@@ -6,6 +6,7 @@ import { LastOutputDisplay } from './LastOutputDisplay';
 import { DisplayItemList } from './DisplayItemList';
 import { getModelColorClass } from '../../../shared/utils/modelParser';
 import { TokenUsageDisplay } from '../common/TokenUsageDisplay';
+import { useStore } from '../../store';
 
 interface AIChatGroupProps {
   aiGroup: AIGroup;
@@ -50,6 +51,11 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   // Enhance the AI group to get display-ready data
   const enhanced: EnhancedAIGroup = enhanceAIGroup(aiGroup);
 
+  // Check if this group should be expanded for search results
+  const searchExpandedAIGroupIds = useStore((s) => s.searchExpandedAIGroupIds);
+  const searchExpandedSubagentIds = useStore((s) => s.searchExpandedSubagentIds);
+  const shouldExpandForSearch = searchExpandedAIGroupIds.has(aiGroup.id);
+
   // Check if this group contains the highlighted error tool
   const containsHighlightedError = useMemo(() => {
     if (!highlightToolUseId) return false;
@@ -70,8 +76,8 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     return null;
   }, [aiGroup.responses]);
 
-  // Local state for expansion - auto-expand if contains error
-  const [isExpanded, setIsExpanded] = useState(containsHighlightedError);
+  // Local state for expansion - auto-expand if contains error or search result
+  const [isExpanded, setIsExpanded] = useState(containsHighlightedError || shouldExpandForSearch);
 
   // Helper function to find the item ID containing the highlighted tool
   const findHighlightedItemId = (toolUseId: string): string | null => {
@@ -117,6 +123,21 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     }
   }, [highlightToolUseId, containsHighlightedError]);
 
+  // Effect to auto-expand when search navigates to this group
+  useEffect(() => {
+    if (shouldExpandForSearch) {
+      setIsExpanded(true);
+      // If any subagents in this group need their trace expanded for search, expand them
+      for (let i = 0; i < enhanced.displayItems.length; i++) {
+        const item = enhanced.displayItems[i];
+        if (item.type === 'subagent' && searchExpandedSubagentIds.has(item.subagent.id)) {
+          const subagentItemId = `subagent-${item.subagent.id}-${i}`;
+          setExpandedItemIds(prev => new Set([...prev, subagentItemId]));
+        }
+      }
+    }
+  }, [shouldExpandForSearch, searchExpandedSubagentIds, enhanced.displayItems]);
+
   // Determine if there's content to toggle
   const hasToggleContent = enhanced.displayItems.length > 0;
 
@@ -134,15 +155,18 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   };
 
   return (
-    <div className="pl-3 border-l-2 border-zinc-700/60 space-y-3">
+    <div
+      className="pl-3 border-l-2 space-y-3"
+      style={{ borderColor: 'var(--chat-ai-border)' }}
+    >
       {/* Clickable Header */}
       {hasToggleContent && (
         <div
           className="flex items-center gap-2 cursor-pointer group"
           onClick={() => setIsExpanded(!isExpanded)}
         >
-          <Bot className="w-4 h-4 text-zinc-500" />
-          <span className="text-xs font-medium text-zinc-400">Claude</span>
+          <Bot className="w-4 h-4" style={{ color: 'var(--chat-ai-icon)' }} />
+          <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Claude</span>
 
           {/* Main agent model */}
           {enhanced.mainModel && (
@@ -154,8 +178,8 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
           {/* Subagent models if different */}
           {enhanced.subagentModels.length > 0 && (
             <>
-              <span className="text-zinc-600">→</span>
-              <span className="text-xs text-zinc-500">
+              <span style={{ color: 'var(--color-text-muted)' }}>→</span>
+              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                 {enhanced.subagentModels.map((m, i) => (
                   <span key={m.name}>
                     {i > 0 && ', '}
@@ -179,10 +203,11 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
             />
           )}
 
-          <span className="text-xs text-zinc-600">·</span>
-          <span className="text-xs text-zinc-500">{enhanced.itemsSummary}</span>
+          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>·</span>
+          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{enhanced.itemsSummary}</span>
           <ChevronDown
-            className={`w-3.5 h-3.5 text-zinc-500 transition-transform group-hover:text-zinc-400 ${isExpanded ? 'rotate-180' : ''}`}
+            className={`w-3.5 h-3.5 transition-transform group-hover:opacity-80 ${isExpanded ? 'rotate-180' : ''}`}
+            style={{ color: 'var(--color-text-muted)' }}
           />
         </div>
       )}
@@ -196,6 +221,7 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
             expandedItemIds={expandedItemIds}
             aiGroupId={aiGroup.id}
             highlightToolUseId={highlightToolUseId}
+            forceExpandContent={shouldExpandForSearch}
           />
         </div>
       )}

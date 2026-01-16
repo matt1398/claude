@@ -54,36 +54,41 @@ export function AIGroupHeader({ summary, expansionLevel, status, onClick }: AIGr
   // Determine status badge
   const showStatusBadge = status === 'interrupted' || status === 'error';
   const statusBadgeText = status === 'interrupted' ? 'Interrupted' : 'Error';
-  const statusBadgeColor = status === 'error' ? 'bg-red-600' : 'bg-yellow-600';
+  const statusBadgeStyle: React.CSSProperties = status === 'error'
+    ? { backgroundColor: 'var(--badge-error-bg)', color: 'var(--badge-error-text)' }
+    : { backgroundColor: 'var(--badge-warning-bg)', color: 'var(--badge-warning-text)' };
 
   return (
-    <div className="border-b border-claude-dark-border">
+    <div style={{ borderBottom: '1px solid var(--color-border)' }}>
       <button
         onClick={onClick}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-claude-dark-surface/50 transition-colors cursor-pointer text-left"
+        className="w-full flex items-center gap-2 px-3 py-2 transition-colors cursor-pointer text-left hover:opacity-80"
+        style={{ backgroundColor: 'transparent' }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--color-surface-overlay)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         {/* Chevron icon */}
-        <ChevronIcon className="w-4 h-4 text-claude-dark-text-secondary flex-shrink-0" />
+        <ChevronIcon className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }} />
 
         {/* Summary text */}
-        <span className="text-sm text-claude-dark-text-secondary flex-1">
+        <span className="text-sm flex-1" style={{ color: 'var(--color-text-secondary)' }}>
           {summaryText}
         </span>
 
         {/* Status badge */}
         {showStatusBadge && (
-          <span className={`px-2 py-0.5 rounded text-xs text-white ${statusBadgeColor}`}>
+          <span className="px-2 py-0.5 rounded text-xs" style={statusBadgeStyle}>
             {statusBadgeText}
           </span>
         )}
 
         {/* Duration */}
-        <span className="text-sm text-claude-dark-text-secondary">
+        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           {formatDuration(summary.totalDurationMs)}
         </span>
 
         {/* Token count */}
-        <span className="text-sm text-claude-dark-text-secondary">
+        <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           {formatTokens(summary.totalTokens)} tokens
         </span>
       </button>
@@ -91,7 +96,7 @@ export function AIGroupHeader({ summary, expansionLevel, status, onClick }: AIGr
       {/* Thinking preview when collapsed */}
       {expansionLevel === 'collapsed' && summary.thinkingPreview && (
         <div className="px-3 pb-2 pl-9">
-          <p className="text-sm italic text-claude-dark-text-secondary/70 truncate">
+          <p className="text-sm italic truncate" style={{ color: 'var(--color-text-muted)' }}>
             {summary.thinkingPreview}
           </p>
         </div>

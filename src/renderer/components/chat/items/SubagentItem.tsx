@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Bot, ChevronRight, ChevronDown, Code } from 'lucide-react';
 import type { SemanticStep, Process, ContentBlock } from '../../../types/data';
 import type { AIGroupDisplayItem } from '../../../types/groups';
@@ -9,6 +9,7 @@ import { MarkdownViewer } from './MarkdownViewer';
 import { buildDisplayItemsFromMessages, buildSummary, truncateText } from '../../../utils/aiGroupEnhancer';
 import { parseModelString, getModelColorClass } from '../../../../shared/utils/modelParser';
 import { TokenUsageDisplay } from '../../common/TokenUsageDisplay';
+import { useStore } from '../../../store';
 
 interface SubagentItemProps {
   step: SemanticStep;
@@ -52,9 +53,11 @@ interface ExecutionTraceProps {
   aiGroupId: string;
   /** Tool use ID to highlight for error deep linking */
   highlightToolUseId?: string;
+  /** Force expand all nested content (code blocks, diffs) for search results */
+  forceExpandContent?: boolean;
 }
 
-const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highlightToolUseId }) => {
+const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highlightToolUseId, forceExpandContent }) => {
   // Local state for inline item expansion
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
@@ -145,6 +148,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highl
                 onClick={() => handleItemClick(itemId)}
                 isExpanded={isExpanded}
                 isHighlighted={isHighlighted}
+                forceExpandContent={forceExpandContent}
               />
             );
           }
@@ -238,16 +242,27 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
     return null;
   }, [subagent.messages]);
 
+  // Check if this subagent should show trace for search results
+  const searchExpandedSubagentIds = useStore((s) => s.searchExpandedSubagentIds);
+  const shouldExpandForSearch = searchExpandedSubagentIds.has(subagent.id);
+
   // State to control trace visibility (separate from isExpanded which controls header)
-  // Auto-show if this subagent contains the highlighted error
-  const [showTrace, setShowTrace] = useState(containsHighlightedError);
+  // Auto-show if this subagent contains the highlighted error or search result
+  const [showTrace, setShowTrace] = useState(containsHighlightedError || shouldExpandForSearch);
 
   // Effect to auto-show trace when highlightToolUseId changes
-  React.useEffect(() => {
+  useEffect(() => {
     if (containsHighlightedError) {
       setShowTrace(true);
     }
   }, [containsHighlightedError]);
+
+  // Effect to auto-show trace when search navigates to content in this subagent
+  useEffect(() => {
+    if (shouldExpandForSearch) {
+      setShowTrace(true);
+    }
+  }, [shouldExpandForSearch]);
 
   return (
     <div>
@@ -352,7 +367,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
               {/* Execution trace content */}
               {showTrace && (
                 <div className="pl-2 bg-zinc-900/50 border border-zinc-800/40 rounded-lg py-2">
-                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} highlightToolUseId={highlightToolUseId} />
+                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} highlightToolUseId={highlightToolUseId} forceExpandContent={shouldExpandForSearch} />
                 </div>
               )}
             </div>

@@ -44,16 +44,29 @@ export function SearchHighlight({ text, itemId, className = '' }: SearchHighligh
       // Determine if this is the current highlighted result
       const isCurrentResult = isCurrentItem && currentMatch?.matchIndexInItem === matchIndex;
 
-      // Styling classes
-      const baseClass = 'rounded px-0.5';
-      const highlightClass = isCurrentResult
-        ? `${baseClass} bg-yellow-600/70 text-yellow-100 ring-1 ring-yellow-400`
-        : `${baseClass} bg-yellow-900/50 text-yellow-200`;
+      // Use CSS custom properties for theme-aware highlighting
+      const baseStyles: React.CSSProperties = {
+        borderRadius: '0.125rem',
+        padding: '0 0.125rem',
+      };
+
+      const highlightStyles: React.CSSProperties = isCurrentResult
+        ? {
+            ...baseStyles,
+            backgroundColor: 'var(--highlight-bg)',
+            color: 'var(--highlight-text)',
+            boxShadow: '0 0 0 1px var(--highlight-ring)',
+          }
+        : {
+            ...baseStyles,
+            backgroundColor: 'var(--highlight-bg-inactive)',
+            color: 'var(--highlight-text-inactive)',
+          };
 
       parts.push(
         <mark
           key={`${pos}-${matchIndex}`}
-          className={highlightClass}
+          style={highlightStyles}
           data-search-result={isCurrentResult ? 'current' : 'match'}
         >
           {text.slice(pos, pos + searchQuery.length)}
