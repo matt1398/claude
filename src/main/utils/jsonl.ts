@@ -516,7 +516,7 @@ export function calculateMetrics(messages: ParsedMessage[]): SessionMetrics {
 
   return {
     durationMs: maxTime - minTime,
-    totalTokens: inputTokens + outputTokens,
+    totalTokens: inputTokens + cacheCreationTokens + cacheReadTokens + outputTokens,
     inputTokens,
     outputTokens,
     cacheReadTokens,

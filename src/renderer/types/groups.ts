@@ -256,8 +256,10 @@ export interface AIGroup {
   processes: Process[];
   /** Source chunk ID */
   chunkId: string;
-  /** Metrics for this AI response */
+  /** Metrics for this AI response (summed across all messages) */
   metrics: SessionMetrics;
+  /** All response messages (assistant + internal user messages) for accessing raw usage data */
+  responses: ParsedMessage[];
 }
 
 // =============================================================================

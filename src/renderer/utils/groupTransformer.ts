@@ -401,6 +401,7 @@ function createAIGroupFromChunk(chunk: EnhancedAIChunk, index: number): AIGroup 
     processes: chunk.processes,
     chunkId: chunk.id,
     metrics: chunk.metrics,
+    responses: chunk.responses,
   };
 }
 

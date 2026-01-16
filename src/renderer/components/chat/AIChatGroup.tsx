@@ -5,6 +5,7 @@ import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
 import { DisplayItemList } from './DisplayItemList';
 import { getModelColorClass } from '../../../shared/utils/modelParser';
+import { TokenUsageDisplay } from '../common/TokenUsageDisplay';
 
 interface AIChatGroupProps {
   aiGroup: AIGroup;
@@ -54,6 +55,20 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     if (!highlightToolUseId) return false;
     return containsToolUseId(enhanced.displayItems, highlightToolUseId);
   }, [enhanced.displayItems, highlightToolUseId]);
+
+  // Get the LAST assistant message's usage (represents current context window snapshot)
+  // This is the correct metric to display - not the summed values across all messages
+  const lastUsage = useMemo(() => {
+    const responses = aiGroup.responses || [];
+    // Find the last assistant message with usage data
+    for (let i = responses.length - 1; i >= 0; i--) {
+      const msg = responses[i];
+      if (msg.type === 'assistant' && msg.usage) {
+        return msg.usage;
+      }
+    }
+    return null;
+  }, [aiGroup.responses]);
 
   // Local state for expansion - auto-expand if contains error
   const [isExpanded, setIsExpanded] = useState(containsHighlightedError);
@@ -149,6 +164,19 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
                 ))}
               </span>
             </>
+          )}
+
+          {/* Token usage - show last assistant message's usage (context window snapshot) */}
+          {lastUsage && (
+            <TokenUsageDisplay
+              inputTokens={lastUsage.input_tokens}
+              outputTokens={lastUsage.output_tokens}
+              cacheReadTokens={lastUsage.cache_read_input_tokens || 0}
+              cacheCreationTokens={lastUsage.cache_creation_input_tokens || 0}
+              modelName={enhanced.mainModel?.name}
+              modelFamily={enhanced.mainModel?.family}
+              size="sm"
+            />
           )}
 
           <span className="text-xs text-zinc-600">·</span>

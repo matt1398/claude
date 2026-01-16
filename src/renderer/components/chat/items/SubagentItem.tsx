@@ -8,6 +8,7 @@ import { LinkedToolItem } from './LinkedToolItem';
 import { MarkdownViewer } from './MarkdownViewer';
 import { buildDisplayItemsFromMessages, buildSummary, truncateText } from '../../../utils/aiGroupEnhancer';
 import { parseModelString, getModelColorClass } from '../../../../shared/utils/modelParser';
+import { TokenUsageDisplay } from '../../common/TokenUsageDisplay';
 
 interface SubagentItemProps {
   step: SemanticStep;
@@ -41,18 +42,6 @@ function formatDuration(ms: number): string {
   const remainingSeconds = Math.round(seconds % 60);
   return `${minutes}m ${remainingSeconds}s`;
 }
-
-/**
- * Formats token count for display.
- * Examples: "1.2k", "234", "12.5k"
- */
-function formatTokens(tokens: number): string {
-  if (tokens >= 1000) {
-    return `${(tokens / 1000).toFixed(1)}k`;
-  }
-  return tokens.toString();
-}
-
 
 // =============================================================================
 // Execution Trace Component (renders items inside expanded subagent)
@@ -184,7 +173,6 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highl
 export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick, isExpanded, aiGroupId, highlightToolUseId }) => {
   const description = subagent.description || step.content.subagentDescription || 'Subagent';
   const subagentType = subagent.subagentType || 'Task';
-  const totalTokens = subagent.metrics.totalTokens || 0;
 
   // Truncate description for one-liner
   const truncatedDesc = description.length > 50 ? description.slice(0, 50) + '...' : description;
@@ -237,6 +225,19 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
     return parseModelString(assistantMsg.model);
   }, [subagent.messages]);
 
+  // Get the LAST assistant message's usage (represents current context window snapshot)
+  const lastUsage = useMemo(() => {
+    const messages = subagent.messages || [];
+    // Find the last assistant message with usage
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.type === 'assistant' && msg.usage) {
+        return msg.usage;
+      }
+    }
+    return null;
+  }, [subagent.messages]);
+
   // State to control trace visibility (separate from isExpanded which controls header)
   // Auto-show if this subagent contains the highlighted error
   const [showTrace, setShowTrace] = useState(containsHighlightedError);
@@ -265,6 +266,17 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
         <span className="text-zinc-600">→</span>
         <span className="text-zinc-500 truncate flex-1">{truncatedDesc}</span>
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 flex-shrink-0"></span>
+        {lastUsage && (
+          <TokenUsageDisplay
+            inputTokens={lastUsage.input_tokens}
+            outputTokens={lastUsage.output_tokens}
+            cacheReadTokens={lastUsage.cache_read_input_tokens || 0}
+            cacheCreationTokens={lastUsage.cache_creation_input_tokens || 0}
+            modelName={modelInfo?.name}
+            modelFamily={modelInfo?.family}
+            size="sm"
+          />
+        )}
         <span className="text-zinc-600 text-xs flex-shrink-0">{formatDuration(subagent.durationMs)}</span>
         <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
       </div>
@@ -292,10 +304,20 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
                 <span className="text-zinc-500">Duration:</span>{' '}
                 <span className="text-zinc-300">{formatDuration(subagent.durationMs)}</span>
               </div>
-              <div>
-                <span className="text-zinc-500">Tokens:</span>{' '}
-                <span className="text-zinc-300">{formatTokens(totalTokens)}</span>
-              </div>
+              {lastUsage && (
+                <div className="col-span-2">
+                  <span className="text-zinc-500">Tokens:</span>{' '}
+                  <TokenUsageDisplay
+                    inputTokens={lastUsage.input_tokens}
+                    outputTokens={lastUsage.output_tokens}
+                    cacheReadTokens={lastUsage.cache_read_input_tokens || 0}
+                    cacheCreationTokens={lastUsage.cache_creation_input_tokens || 0}
+                    modelName={modelInfo?.name}
+                    modelFamily={modelInfo?.family}
+                    size="md"
+                  />
+                </div>
+              )}
               {modelInfo && (
                 <div>
                   <span className="text-zinc-500">Model:</span>{' '}
