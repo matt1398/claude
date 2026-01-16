@@ -1,8 +1,47 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
 import { SubagentDetailModal } from './SubagentDetailModal';
 import { ErrorHighlight } from './ErrorHighlight';
+import type { EnhancedChunk, Chunk } from '../../types/data';
+
+/**
+ * Find the chunk index that contains or is closest to the given error timestamp.
+ *
+ * Strategy:
+ * 1. Find chunks whose time range contains the error timestamp
+ * 2. If no exact match, find the chunk closest in time (before or after)
+ * 3. Fall back to last chunk if nothing else works
+ */
+function findChunkByTimestamp(chunks: (Chunk | EnhancedChunk)[], errorTimestamp: number): number {
+  if (chunks.length === 0) return -1;
+
+  let bestIndex = chunks.length - 1; // Default to last chunk
+  let bestTimeDiff = Infinity;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const chunkStartMs = chunk.startTime.getTime();
+    const chunkEndMs = chunk.endTime.getTime();
+
+    // Check if error timestamp is within this chunk's time range
+    if (errorTimestamp >= chunkStartMs && errorTimestamp <= chunkEndMs) {
+      return i; // Exact match found
+    }
+
+    // Track closest chunk for fallback
+    const startDiff = Math.abs(errorTimestamp - chunkStartMs);
+    const endDiff = Math.abs(errorTimestamp - chunkEndMs);
+    const minDiff = Math.min(startDiff, endDiff);
+
+    if (minDiff < bestTimeDiff) {
+      bestTimeDiff = minDiff;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex;
+}
 
 export const SessionDetail: React.FC = () => {
   const {
@@ -17,10 +56,11 @@ export const SessionDetail: React.FC = () => {
     clearTabDeepLink
   } = useStore();
 
-  // Get current tab to access scrollToLine and highlightErrorId
+  // Get current tab to access deep link props
   const currentTab = activeTabId ? openTabs.find(t => t.id === activeTabId) : null;
   const scrollToLine = currentTab?.scrollToLine;
   const highlightErrorId = currentTab?.highlightErrorId;
+  const errorTimestamp = currentTab?.errorTimestamp;
 
   // Container ref for scrolling
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,55 +80,67 @@ export const SessionDetail: React.FC = () => {
     }
   }, [activeTabId, clearTabDeepLink]);
 
+  // Calculate target chunk index based on error timestamp or line number
+  const targetChunkIndex = useMemo(() => {
+    if (!sessionDetail || !sessionDetail.chunks.length) return null;
+    if (!scrollToLine && !highlightErrorId && !errorTimestamp) return null;
+
+    // Primary strategy: Use error timestamp for accurate chunk matching
+    if (errorTimestamp && errorTimestamp > 0) {
+      return findChunkByTimestamp(sessionDetail.chunks, errorTimestamp);
+    }
+
+    // Fallback strategy: Use line number heuristic
+    if (scrollToLine && scrollToLine > 0) {
+      // Estimate: each chunk represents roughly 10-50 lines of JSONL
+      // Use a simple heuristic: later lines mean later chunks
+      const estimatedChunkIndex = Math.min(
+        Math.floor(scrollToLine / 30),
+        sessionDetail.chunks.length - 1
+      );
+      return Math.max(0, estimatedChunkIndex);
+    }
+
+    // Last resort: use last chunk (errors typically occur at the end)
+    return sessionDetail.chunks.length - 1;
+  }, [sessionDetail, scrollToLine, highlightErrorId, errorTimestamp]);
+
   // Effect to handle deep linking: scroll to and highlight error location
   useEffect(() => {
-    // Only process if we have deep link info and session data is loaded
+    // Only process if we have a target chunk
+    if (targetChunkIndex === null || targetChunkIndex < 0) return;
     if (!sessionDetail || !sessionDetail.chunks.length) return;
-    if (!scrollToLine && !highlightErrorId) return;
 
     // Create a unique key for this deep link request
-    const deepLinkKey = `${highlightErrorId || ''}-${scrollToLine || ''}`;
+    const deepLinkKey = `${highlightErrorId || ''}-${scrollToLine || ''}-${errorTimestamp || ''}`;
 
     // Skip if we've already processed this deep link
     if (processedDeepLinkRef.current === deepLinkKey) return;
     processedDeepLinkRef.current = deepLinkKey;
 
-    // Find the chunk to scroll to
-    // Strategy: Since JSONL line numbers aren't stored in parsed messages,
-    // we'll try to find chunks by timestamp proximity to the error.
-    // For now, we'll scroll to the last chunk as errors typically occur at the end
-    // of execution. If scrollToLine is provided, we can use chunk index heuristics.
-    let targetChunkIndex = sessionDetail.chunks.length - 1; // Default to last chunk
-
-    // If we have scrollToLine, use it as a hint (approximate to chunk index)
-    // This is a heuristic since we don't have exact line-to-chunk mapping
-    if (scrollToLine && scrollToLine > 0) {
-      // Estimate: each chunk represents roughly 10-50 lines of JSONL
-      // Use a simple heuristic: later lines mean later chunks
-      const estimatedChunkIndex = Math.min(
-        Math.floor(scrollToLine / 30), // Rough estimate
-        sessionDetail.chunks.length - 1
-      );
-      targetChunkIndex = Math.max(0, estimatedChunkIndex);
-    }
-
-    // Set the highlight
+    // Set the highlight (this will trigger forceExpand on the chunk)
     setHighlightedChunkIndex(targetChunkIndex);
 
-    // Scroll to the target chunk after a brief delay to allow render
-    requestAnimationFrame(() => {
+    // Scroll to the target chunk after a delay to allow:
+    // 1. React to re-render with the highlight
+    // 2. ChunkView to expand (if forceExpand is triggered)
+    // Using a longer delay ensures the DOM has updated
+    const scrollTimer = setTimeout(() => {
       const chunkElement = containerRef.current?.querySelector(
         `[data-chunk-index="${targetChunkIndex}"]`
       );
       if (chunkElement) {
         chunkElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    });
-  }, [sessionDetail, scrollToLine, highlightErrorId]);
+    }, 100); // 100ms delay allows for expansion animation to start
+
+    return () => clearTimeout(scrollTimer);
+  }, [sessionDetail, targetChunkIndex, scrollToLine, highlightErrorId, errorTimestamp]);
 
   // Reset processed deep link when session changes
   useEffect(() => {
     processedDeepLinkRef.current = null;
+    setHighlightedChunkIndex(null);
   }, [selectedSessionId]);
 
   // Handler for subagent drill-down
@@ -226,20 +278,24 @@ export const SessionDetail: React.FC = () => {
       </div>
 
       <div className="p-6 space-y-6">
-        {chunks.map((chunk, index) => (
-          <div key={chunk.id} data-chunk-index={index}>
-            <ErrorHighlight
-              isHighlighted={highlightedChunkIndex === index}
-              onHighlightEnd={handleHighlightEnd}
-            >
-              <ChunkView
-                chunk={chunk}
-                index={index}
-                onSubagentClick={handleSubagentClick}
-              />
-            </ErrorHighlight>
-          </div>
-        ))}
+        {chunks.map((chunk, index) => {
+          const isTargetChunk = highlightedChunkIndex === index;
+          return (
+            <div key={chunk.id} data-chunk-index={index}>
+              <ErrorHighlight
+                isHighlighted={isTargetChunk}
+                onHighlightEnd={handleHighlightEnd}
+              >
+                <ChunkView
+                  chunk={chunk}
+                  index={index}
+                  onSubagentClick={handleSubagentClick}
+                  forceExpand={isTargetChunk}
+                />
+              </ErrorHighlight>
+            </div>
+          );
+        })}
       </div>
 
       {/* Subagent Drill-Down Modal */}

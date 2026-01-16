@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Chunk,
   ContentBlock,
@@ -21,9 +21,11 @@ interface ChunkViewProps {
   chunk: ChunkType;
   index: number;
   onSubagentClick?: (subagentId: string, description: string) => void;
+  /** Force the chunk to be expanded (for deep linking) */
+  forceExpand?: boolean;
 }
 
-export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onSubagentClick }) => {
+export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onSubagentClick, forceExpand = false }) => {
   // Type guard to check if chunk is a ConversationGroup
   const isConversationGroup = (c: ChunkType): c is ConversationGroup => {
     return 'type' in c && c.type === 'user-ai-exchange' && 'aiResponses' in c;
@@ -45,12 +47,19 @@ export const ChunkView: React.FC<ChunkViewProps> = ({ chunk, index, onSubagentCl
     return isEnhancedAI(c);
   };
 
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(forceExpand);
   const [showToolResults, setShowToolResults] = useState(false);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugData, setDebugData] = useState<{ data: unknown; title: string } | null>(null);
   const [chartMode, setChartMode] = useState<'timeline' | 'context'>('timeline');
+
+  // Effect to expand chunk when forceExpand changes to true
+  useEffect(() => {
+    if (forceExpand) {
+      setIsExpanded(true);
+    }
+  }, [forceExpand]);
 
   // Group semantic steps into segments for visualization
   const segments = useMemo(() => {

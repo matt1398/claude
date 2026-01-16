@@ -28,6 +28,8 @@ export interface DetectedError {
   message: string;
   /** Line number in JSONL for deep linking */
   lineNumber?: number;
+  /** Tool use ID for precise deep linking to the specific tool item */
+  toolUseId?: string;
   /** Whether the notification has been read */
   isRead: boolean;
   /** When the notification was created */

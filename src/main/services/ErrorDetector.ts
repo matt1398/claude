@@ -45,6 +45,8 @@ export interface DetectedError {
   message: string;
   /** Line number in JSONL for deep linking */
   lineNumber?: number;
+  /** Tool use ID for precise deep linking to the specific tool item */
+  toolUseId?: string;
   /** Additional context about the error */
   context: {
     /** Human-readable project name */
@@ -134,6 +136,7 @@ export class ErrorDetector {
               message: errorMessage,
               timestamp: message.timestamp,
               cwd: message.cwd,
+              toolUseId: toolResult.toolUseId,
             }));
           }
         }
@@ -150,7 +153,8 @@ export class ErrorDetector {
         projectName,
         lineNumber,
         message.timestamp,
-        message.cwd
+        message.cwd,
+        message.sourceToolUseID
       );
       if (resultError) {
         errors.push(resultError);
@@ -195,7 +199,8 @@ export class ErrorDetector {
     projectName: string,
     lineNumber: number,
     timestamp: Date,
-    cwd?: string
+    cwd?: string,
+    sourceToolUseID?: string
   ): DetectedError | null {
     // Only detect errors when isError or is_error is explicitly true
     const hasError = toolUseResult.isError === true || toolUseResult.is_error === true;
@@ -223,6 +228,10 @@ export class ErrorDetector {
       source = toolUseResult.toolName;
     }
 
+    // Get toolUseId from the result or from the message's sourceToolUseID
+    const toolUseId = (typeof toolUseResult.toolUseId === 'string' ? toolUseResult.toolUseId : undefined)
+      || sourceToolUseID;
+
     if (errorMessage) {
       return this.createDetectedError({
         sessionId,
@@ -234,6 +243,7 @@ export class ErrorDetector {
         message: errorMessage,
         timestamp,
         cwd,
+        toolUseId,
       });
     }
 
@@ -273,6 +283,7 @@ export class ErrorDetector {
         message: errorMessage,
         timestamp: message.timestamp,
         cwd: message.cwd,
+        toolUseId: block.tool_use_id,
       });
     }
 
@@ -352,6 +363,7 @@ export class ErrorDetector {
     message: string;
     timestamp: Date;
     cwd?: string;
+    toolUseId?: string;
   }): DetectedError {
     return {
       id: randomUUID(),
@@ -362,6 +374,7 @@ export class ErrorDetector {
       source: params.source,
       message: this.truncateMessage(params.message),
       lineNumber: params.lineNumber,
+      toolUseId: params.toolUseId,
       context: {
         projectName: params.projectName,
         cwd: params.cwd,

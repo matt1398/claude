@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Bot, ChevronDown } from 'lucide-react';
-import type { AIGroup, EnhancedAIGroup } from '../../types/groups';
+import type { AIGroup, EnhancedAIGroup, AIGroupDisplayItem } from '../../types/groups';
 import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
 import { DisplayItemList } from './DisplayItemList';
@@ -8,6 +8,31 @@ import { getModelColorClass } from '../../../shared/utils/modelParser';
 
 interface AIChatGroupProps {
   aiGroup: AIGroup;
+  /** Tool use ID to highlight for error deep linking */
+  highlightToolUseId?: string;
+}
+
+/**
+ * Checks if a tool ID exists within the display items (including nested subagents).
+ */
+function containsToolUseId(items: AIGroupDisplayItem[], toolUseId: string): boolean {
+  for (const item of items) {
+    if (item.type === 'tool' && item.tool.id === toolUseId) {
+      return true;
+    }
+    // Check nested subagent messages for the tool ID
+    if (item.type === 'subagent' && item.subagent.messages) {
+      for (const msg of item.subagent.messages) {
+        if (msg.toolCalls?.some(tc => tc.id === toolUseId)) {
+          return true;
+        }
+        if (msg.toolResults?.some(tr => tr.toolUseId === toolUseId)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 /**
@@ -20,15 +45,62 @@ interface AIChatGroupProps {
  * - DisplayItemList: Shows items when expanded with inline expansion support
  * - Manages local expansion state and inline item expansion
  */
-export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
+export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   // Enhance the AI group to get display-ready data
   const enhanced: EnhancedAIGroup = enhanceAIGroup(aiGroup);
 
-  // Local state for expansion
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Check if this group contains the highlighted error tool
+  const containsHighlightedError = useMemo(() => {
+    if (!highlightToolUseId) return false;
+    return containsToolUseId(enhanced.displayItems, highlightToolUseId);
+  }, [enhanced.displayItems, highlightToolUseId]);
+
+  // Local state for expansion - auto-expand if contains error
+  const [isExpanded, setIsExpanded] = useState(containsHighlightedError);
+
+  // Helper function to find the item ID containing the highlighted tool
+  const findHighlightedItemId = (toolUseId: string): string | null => {
+    for (let i = 0; i < enhanced.displayItems.length; i++) {
+      const item = enhanced.displayItems[i];
+      if (item.type === 'tool' && item.tool.id === toolUseId) {
+        return `tool-${item.tool.id}-${i}`;
+      }
+      // For subagents, expand the subagent item
+      if (item.type === 'subagent' && item.subagent.messages) {
+        for (const msg of item.subagent.messages) {
+          if (msg.toolCalls?.some(tc => tc.id === toolUseId) ||
+              msg.toolResults?.some(tr => tr.toolUseId === toolUseId)) {
+            return `subagent-${item.subagent.id}-${i}`;
+          }
+        }
+      }
+    }
+    return null;
+  };
 
   // Local state for inline item expansion - allows multiple items to be expanded
-  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(new Set());
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => {
+    // Auto-expand the errored item if present
+    if (highlightToolUseId && containsHighlightedError) {
+      const itemId = findHighlightedItemId(highlightToolUseId);
+      if (itemId) {
+        return new Set([itemId]);
+      }
+    }
+    return new Set();
+  });
+
+  // Effect to auto-expand when highlightToolUseId changes
+  useEffect(() => {
+    if (highlightToolUseId && containsHighlightedError) {
+      setIsExpanded(true);
+      // Find and expand the item containing the error
+      const itemId = findHighlightedItemId(highlightToolUseId);
+      if (itemId) {
+        setExpandedItemIds(prev => new Set([...prev, itemId]));
+      }
+    }
+  }, [highlightToolUseId, containsHighlightedError]);
 
   // Determine if there's content to toggle
   const hasToggleContent = enhanced.displayItems.length > 0;
@@ -95,6 +167,7 @@ export function AIChatGroup({ aiGroup }: AIChatGroupProps) {
             onItemClick={handleItemClick}
             expandedItemIds={expandedItemIds}
             aiGroupId={aiGroup.id}
+            highlightToolUseId={highlightToolUseId}
           />
         </div>
       )}

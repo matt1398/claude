@@ -722,12 +722,12 @@ export const useStore = create<AppState>((set, get) => ({
     return isSessionOpenInTabs(state.openTabs, sessionId);
   },
 
-  // Clear deep link props (scrollToLine, highlightErrorId) from a tab after scrolling
+  // Clear deep link props (scrollToLine, highlightErrorId, errorTimestamp, highlightToolUseId) from a tab after scrolling
   clearTabDeepLink: (tabId: string) => {
     const state = get();
     const updatedTabs = state.openTabs.map((tab) =>
       tab.id === tabId
-        ? { ...tab, scrollToLine: undefined, highlightErrorId: undefined }
+        ? { ...tab, scrollToLine: undefined, highlightErrorId: undefined, errorTimestamp: undefined, highlightToolUseId: undefined }
         : tab
     );
     set({ openTabs: updatedTabs });
@@ -970,7 +970,13 @@ export const useStore = create<AppState>((set, get) => ({
       // Update existing tab with scroll/highlight info and focus it
       const updatedTabs = state.openTabs.map((tab) =>
         tab.id === existingTab.id
-          ? { ...tab, scrollToLine: error.lineNumber, highlightErrorId: error.id }
+          ? {
+              ...tab,
+              scrollToLine: error.lineNumber,
+              highlightErrorId: error.id,
+              errorTimestamp: error.timestamp,
+              highlightToolUseId: error.toolUseId,
+            }
           : tab
       );
       set({
@@ -988,6 +994,8 @@ export const useStore = create<AppState>((set, get) => ({
         createdAt: Date.now(),
         scrollToLine: error.lineNumber,
         highlightErrorId: error.id,
+        errorTimestamp: error.timestamp,
+        highlightToolUseId: error.toolUseId,
       };
 
       set({

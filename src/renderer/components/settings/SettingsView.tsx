@@ -246,6 +246,9 @@ export function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Local optimistic state for immediate visual feedback on toggles
+  const [optimisticConfig, setOptimisticConfig] = useState<AppConfig | null>(null);
+
   // Fetch config on mount
   useEffect(() => {
     const loadConfig = async () => {
@@ -254,6 +257,7 @@ export function SettingsView() {
         setError(null);
         const loadedConfig = await window.electronAPI.config.get();
         setConfig(loadedConfig);
+        setOptimisticConfig(loadedConfig);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load settings');
       } finally {
@@ -271,22 +275,38 @@ export function SettingsView() {
     }
   }, [projects.length, fetchProjects]);
 
-  // Update a config section
+  // Update a config section with optimistic update for immediate UI feedback
   const updateConfig = useCallback(async (
     section: keyof AppConfig,
     data: Partial<AppConfig[keyof AppConfig]>
   ) => {
-    if (!config) return;
+    if (!optimisticConfig) return;
+
+    // Optimistic update - immediately reflect the change in UI
+    setOptimisticConfig(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        [section]: {
+          ...prev[section],
+          ...data,
+        },
+      };
+    });
+
     try {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.update(section, data);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
+      // Revert optimistic update on error
+      setOptimisticConfig(config);
       setError(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       setSaving(false);
     }
-  }, [config]);
+  }, [optimisticConfig, config]);
 
   // Handle toggle changes for notifications
   const handleNotificationToggle = useCallback((key: keyof AppConfig['notifications'], value: boolean) => {
@@ -319,6 +339,7 @@ export function SettingsView() {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.snooze(minutes);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to snooze notifications');
     } finally {
@@ -332,6 +353,7 @@ export function SettingsView() {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.clearSnooze();
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear snooze');
     } finally {
@@ -345,6 +367,7 @@ export function SettingsView() {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.addIgnoreRegex(pattern);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add pattern');
     } finally {
@@ -358,6 +381,7 @@ export function SettingsView() {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.removeIgnoreRegex(pattern);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove pattern');
     } finally {
@@ -371,6 +395,7 @@ export function SettingsView() {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.addIgnoreProject(projectId);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add project');
     } finally {
@@ -384,6 +409,7 @@ export function SettingsView() {
       setSaving(true);
       const updatedConfig = await window.electronAPI.config.removeIgnoreProject(projectId);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove project');
     } finally {
@@ -425,6 +451,7 @@ export function SettingsView() {
       await window.electronAPI.config.update('general', defaultConfig.general);
       const updatedConfig = await window.electronAPI.config.update('display', defaultConfig.display);
       setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to reset settings');
     } finally {
@@ -474,6 +501,7 @@ export function SettingsView() {
 
         const updatedConfig = await window.electronAPI.config.get();
         setConfig(updatedConfig);
+        setOptimisticConfig(updatedConfig);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to import config');
       } finally {
@@ -488,16 +516,6 @@ export function SettingsView() {
     const project = projects.find((p) => p.id === projectId);
     return project?.name || projectId;
   }, [projects]);
-
-  // Get available projects for dropdown (not already ignored)
-  const availableProjects = projects.filter(
-    (p) => !config?.notifications?.ignoredProjects?.includes(p.id)
-  );
-
-  // Check if snoozed
-  const isSnoozed = config?.notifications?.snoozedUntil
-    ? config.notifications.snoozedUntil > Date.now()
-    : false;
 
   // Loading state
   if (loading) {
@@ -530,6 +548,42 @@ export function SettingsView() {
 
   if (!config) return null;
 
+  // Use optimistic config for UI display (falls back to config if not set)
+  const displayConfig = optimisticConfig || config;
+
+  // Create safe config with defaults to prevent null reference errors
+  // Uses optimisticConfig for immediate visual feedback on toggle changes
+  const safeConfig = {
+    general: {
+      launchAtLogin: displayConfig?.general?.launchAtLogin ?? false,
+      showDockIcon: displayConfig?.general?.showDockIcon ?? true,
+      theme: displayConfig?.general?.theme ?? 'dark',
+      defaultTab: displayConfig?.general?.defaultTab ?? 'dashboard',
+    },
+    notifications: {
+      enabled: displayConfig?.notifications?.enabled ?? true,
+      soundEnabled: displayConfig?.notifications?.soundEnabled ?? true,
+      ignoredRegex: displayConfig?.notifications?.ignoredRegex ?? [],
+      ignoredProjects: displayConfig?.notifications?.ignoredProjects ?? [],
+      snoozedUntil: displayConfig?.notifications?.snoozedUntil ?? null,
+      snoozeMinutes: displayConfig?.notifications?.snoozeMinutes ?? 30,
+    },
+    display: {
+      showTimestamps: displayConfig?.display?.showTimestamps ?? true,
+      compactMode: displayConfig?.display?.compactMode ?? false,
+      syntaxHighlighting: displayConfig?.display?.syntaxHighlighting ?? true,
+    },
+  };
+
+  // Get available projects for dropdown (not already ignored)
+  const availableProjects = projects.filter(
+    (p) => !safeConfig.notifications.ignoredProjects.includes(p.id)
+  );
+
+  // Check if snoozed
+  const isSnoozed = safeConfig.notifications.snoozedUntil !== null &&
+    safeConfig.notifications.snoozedUntil > Date.now();
+
   return (
     <div className="flex-1 overflow-auto bg-claude-dark-bg">
       <div className="max-w-3xl mx-auto p-8">
@@ -560,7 +614,7 @@ export function SettingsView() {
                     description="Automatically start the app when you log in"
                   >
                     <Toggle
-                      enabled={config.general.launchAtLogin}
+                      enabled={safeConfig.general.launchAtLogin}
                       onChange={(v) => handleGeneralToggle('launchAtLogin', v)}
                       disabled={saving}
                     />
@@ -570,7 +624,7 @@ export function SettingsView() {
                     description="Display the app icon in the dock (macOS)"
                   >
                     <Toggle
-                      enabled={config.general.showDockIcon}
+                      enabled={safeConfig.general.showDockIcon}
                       onChange={(v) => handleGeneralToggle('showDockIcon', v)}
                       disabled={saving}
                     />
@@ -586,7 +640,7 @@ export function SettingsView() {
                     description="Choose your preferred color theme"
                   >
                     <Select
-                      value={config.general.theme}
+                      value={safeConfig.general.theme}
                       options={THEME_OPTIONS}
                       onChange={handleThemeChange}
                       disabled={saving}
@@ -597,7 +651,7 @@ export function SettingsView() {
                     description="The view shown when the app opens"
                   >
                     <Select
-                      value={config.general.defaultTab}
+                      value={safeConfig.general.defaultTab}
                       options={DEFAULT_TAB_OPTIONS}
                       onChange={handleDefaultTabChange}
                       disabled={saving}
@@ -619,7 +673,7 @@ export function SettingsView() {
                     description="Show system notifications for errors and events"
                   >
                     <Toggle
-                      enabled={config.notifications.enabled}
+                      enabled={safeConfig.notifications.enabled}
                       onChange={(v) => handleNotificationToggle('enabled', v)}
                       disabled={saving}
                     />
@@ -629,15 +683,15 @@ export function SettingsView() {
                     description="Play a sound when notifications appear"
                   >
                     <Toggle
-                      enabled={config.notifications.soundEnabled}
+                      enabled={safeConfig.notifications.soundEnabled}
                       onChange={(v) => handleNotificationToggle('soundEnabled', v)}
-                      disabled={saving || !config.notifications.enabled}
+                      disabled={saving || !safeConfig.notifications.enabled}
                     />
                   </SettingRow>
                   <SettingRow
                     label="Snooze notifications"
                     description={isSnoozed
-                      ? `Snoozed until ${new Date(config.notifications.snoozedUntil!).toLocaleTimeString()}`
+                      ? `Snoozed until ${new Date(safeConfig.notifications.snoozedUntil!).toLocaleTimeString()}`
                       : 'Temporarily pause notifications'
                     }
                   >
@@ -659,7 +713,7 @@ export function SettingsView() {
                           value={0}
                           options={[{ value: 0, label: 'Select duration...' }, ...SNOOZE_OPTIONS]}
                           onChange={(v) => v !== 0 && handleSnooze(v)}
-                          disabled={saving || !config.notifications.enabled}
+                          disabled={saving || !safeConfig.notifications.enabled}
                         />
                       )}
                     </div>
@@ -672,9 +726,9 @@ export function SettingsView() {
                 <p className="text-xs text-claude-dark-text-secondary mb-3">
                   Errors matching these regex patterns will be ignored
                 </p>
-                {config.notifications.ignoredRegex.length > 0 ? (
+                {safeConfig.notifications.ignoredRegex.length > 0 ? (
                   <div className="mb-3">
-                    {config.notifications.ignoredRegex.map((pattern) => (
+                    {safeConfig.notifications.ignoredRegex.map((pattern) => (
                       <ListItem
                         key={pattern}
                         value={pattern}
@@ -700,9 +754,9 @@ export function SettingsView() {
                 <p className="text-xs text-claude-dark-text-secondary mb-3">
                   Notifications from these projects will be ignored
                 </p>
-                {config.notifications.ignoredProjects.length > 0 ? (
+                {safeConfig.notifications.ignoredProjects.length > 0 ? (
                   <div className="mb-3">
-                    {config.notifications.ignoredProjects.map((projectId) => (
+                    {safeConfig.notifications.ignoredProjects.map((projectId) => (
                       <ListItem
                         key={projectId}
                         value={getProjectName(projectId)}
@@ -757,7 +811,7 @@ export function SettingsView() {
                     description="Display timestamps in message views"
                   >
                     <Toggle
-                      enabled={config.display.showTimestamps}
+                      enabled={safeConfig.display.showTimestamps}
                       onChange={(v) => handleDisplayToggle('showTimestamps', v)}
                       disabled={saving}
                     />
@@ -767,7 +821,7 @@ export function SettingsView() {
                     description="Use a more compact display for messages"
                   >
                     <Toggle
-                      enabled={config.display.compactMode}
+                      enabled={safeConfig.display.compactMode}
                       onChange={(v) => handleDisplayToggle('compactMode', v)}
                       disabled={saving}
                     />
@@ -777,7 +831,7 @@ export function SettingsView() {
                     description="Enable syntax highlighting in code blocks"
                   >
                     <Toggle
-                      enabled={config.display.syntaxHighlighting}
+                      enabled={safeConfig.display.syntaxHighlighting}
                       onChange={(v) => handleDisplayToggle('syntaxHighlighting', v)}
                       disabled={saving}
                     />

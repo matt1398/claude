@@ -10,6 +10,8 @@ interface DisplayItemListProps {
   onItemClick: (itemId: string) => void;
   expandedItemIds: Set<string>;
   aiGroupId: string;
+  /** Tool use ID to highlight for error deep linking */
+  highlightToolUseId?: string;
 }
 
 /**
@@ -33,7 +35,7 @@ function truncateText(text: string, maxLength: number): string {
  *
  * The list is completely flat with no nested toggles or hierarchies.
  */
-export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds, aiGroupId }) => {
+export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemClick, expandedItemIds, aiGroupId, highlightToolUseId }) => {
   if (!items || items.length === 0) {
     return (
       <div className="px-3 py-2 text-sm text-claude-dark-text-secondary italic">
@@ -113,6 +115,8 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
             const itemId = `tool-${item.tool.id}-${index}`;
             const handleClick = () => onItemClick(itemId);
             const isExpanded = expandedItemIds.has(itemId);
+            // Check if this tool should be highlighted
+            const isHighlighted = highlightToolUseId === item.tool.id;
 
             return (
               <LinkedToolItem
@@ -120,6 +124,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
                 linkedTool={item.tool}
                 onClick={handleClick}
                 isExpanded={isExpanded}
+                isHighlighted={isHighlighted}
               />
             );
           }
@@ -153,6 +158,7 @@ export const DisplayItemList: React.FC<DisplayItemListProps> = ({ items, onItemC
                 onClick={handleClick}
                 isExpanded={isExpanded}
                 aiGroupId={aiGroupId}
+                highlightToolUseId={highlightToolUseId}
               />
             );
           }

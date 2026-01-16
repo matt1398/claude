@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Wrench } from 'lucide-react';
 import type { LinkedToolItem as LinkedToolItemType } from '../../../types/groups';
 import { CodeBlockViewer } from './CodeBlockViewer';
@@ -8,6 +8,8 @@ interface LinkedToolItemProps {
   linkedTool: LinkedToolItemType;
   onClick: () => void;
   isExpanded: boolean;
+  /** Whether this item should be highlighted for error deep linking */
+  isHighlighted?: boolean;
 }
 
 // =============================================================================
@@ -560,18 +562,35 @@ function hasWriteContent(linkedTool: LinkedToolItemType): boolean {
 // Main Component
 // =============================================================================
 
-export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick, isExpanded }) => {
+export const LinkedToolItem: React.FC<LinkedToolItemProps> = ({ linkedTool, onClick, isExpanded, isHighlighted }) => {
   const status = getToolStatus(linkedTool);
   const summary = getToolSummary(linkedTool.name, linkedTool.input);
+  const elementRef = useRef<HTMLDivElement>(null);
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (isHighlighted && elementRef.current) {
+      // Small delay to allow UI to expand first
+      const timer = setTimeout(() => {
+        elementRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isHighlighted]);
+
+  // Highlight animation classes for error deep linking
+  const highlightClasses = isHighlighted
+    ? 'ring-2 ring-red-500 bg-red-500/10 animate-pulse'
+    : '';
 
   return (
-    <div>
+    <div ref={elementRef} className={`rounded transition-all duration-300 ${highlightClasses}`}>
       {/* Collapsed: One-liner view */}
       <div
         onClick={onClick}
         className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800/50 cursor-pointer rounded group"
       >
-        <Wrench className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+        <Wrench className={`w-4 h-4 flex-shrink-0 ${isHighlighted ? 'text-red-400' : 'text-zinc-400'}`} />
         <span className="font-mono text-sm text-zinc-200">
           {linkedTool.name}
         </span>

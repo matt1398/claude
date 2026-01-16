@@ -39,6 +39,12 @@ export interface Tab {
 
   /** Error ID to highlight for error deep linking (type === 'session') */
   highlightErrorId?: string;
+
+  /** Error timestamp for finding the correct chunk to scroll to (type === 'session') */
+  errorTimestamp?: number;
+
+  /** Tool use ID for precise highlighting of the specific errored tool item (type === 'session') */
+  highlightToolUseId?: string;
 }
 
 /**

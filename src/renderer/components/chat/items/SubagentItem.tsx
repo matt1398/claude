@@ -15,6 +15,8 @@ interface SubagentItemProps {
   onClick: () => void;
   isExpanded: boolean;
   aiGroupId: string;
+  /** Tool use ID to highlight for error deep linking */
+  highlightToolUseId?: string;
 }
 
 // =============================================================================
@@ -59,9 +61,11 @@ function formatTokens(tokens: number): string {
 interface ExecutionTraceProps {
   items: AIGroupDisplayItem[];
   aiGroupId: string;
+  /** Tool use ID to highlight for error deep linking */
+  highlightToolUseId?: string;
 }
 
-const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId }) => {
+const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highlightToolUseId }) => {
   // Local state for inline item expansion
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
@@ -142,6 +146,8 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId }) => 
           case 'tool': {
             const itemId = `subagent-tool-${item.tool.id}`;
             const isExpanded = expandedItemId === itemId;
+            // Check if this tool should be highlighted
+            const isHighlighted = highlightToolUseId === item.tool.id;
 
             return (
               <LinkedToolItem
@@ -149,6 +155,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId }) => 
                 linkedTool={item.tool}
                 onClick={() => handleItemClick(itemId)}
                 isExpanded={isExpanded}
+                isHighlighted={isHighlighted}
               />
             );
           }
@@ -174,7 +181,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId }) => 
 // Main Component
 // =============================================================================
 
-export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick, isExpanded, aiGroupId }) => {
+export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onClick, isExpanded, aiGroupId, highlightToolUseId }) => {
   const description = subagent.description || step.content.subagentDescription || 'Subagent';
   const subagentType = subagent.subagentType || 'Task';
   const totalTokens = subagent.metrics.totalTokens || 0;
@@ -182,18 +189,35 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
   // Truncate description for one-liner
   const truncatedDesc = description.length > 50 ? description.slice(0, 50) + '...' : description;
 
+  // Check if this subagent contains the highlighted error tool (independent of isExpanded)
+  // This needs to be computed BEFORE displayItems to allow proper auto-expansion
+  const containsHighlightedError = useMemo(() => {
+    if (!highlightToolUseId || !subagent.messages) return false;
+    // Check messages directly without needing full displayItems
+    for (const msg of subagent.messages) {
+      if (msg.toolCalls?.some(tc => tc.id === highlightToolUseId)) {
+        return true;
+      }
+      if (msg.toolResults?.some(tr => tr.toolUseId === highlightToolUseId)) {
+        return true;
+      }
+    }
+    return false;
+  }, [highlightToolUseId, subagent.messages]);
+
   // Extract display items from subagent messages using the shared function
   // Note: Subagents don't have nested subagents, so we pass an empty array
+  // Build items if expanded OR if we need to show the highlighted error
   const displayItems = useMemo(() => {
-    if (!isExpanded || !subagent.messages || subagent.messages.length === 0) {
+    if ((!isExpanded && !containsHighlightedError) || !subagent.messages || subagent.messages.length === 0) {
       return [];
     }
     return buildDisplayItemsFromMessages(subagent.messages, []);
-  }, [isExpanded, subagent.messages]);
+  }, [isExpanded, containsHighlightedError, subagent.messages]);
 
   // Build summary for header using the shared function
   const itemsSummary = useMemo(() => {
-    if (!isExpanded) {
+    if (!isExpanded && !containsHighlightedError) {
       // Quick summary without full extraction
       const toolCount = subagent.messages?.filter(m =>
         m.type === 'assistant' && Array.isArray(m.content) &&
@@ -202,7 +226,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
       return toolCount > 0 ? `${toolCount} tool calls` : '';
     }
     return buildSummary(displayItems);
-  }, [isExpanded, displayItems, subagent.messages]);
+  }, [isExpanded, containsHighlightedError, displayItems, subagent.messages]);
 
   // Extract model info from first assistant message
   const modelInfo = useMemo(() => {
@@ -214,7 +238,15 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
   }, [subagent.messages]);
 
   // State to control trace visibility (separate from isExpanded which controls header)
-  const [showTrace, setShowTrace] = useState(false);
+  // Auto-show if this subagent contains the highlighted error
+  const [showTrace, setShowTrace] = useState(containsHighlightedError);
+
+  // Effect to auto-show trace when highlightToolUseId changes
+  React.useEffect(() => {
+    if (containsHighlightedError) {
+      setShowTrace(true);
+    }
+  }, [containsHighlightedError]);
 
   return (
     <div>
@@ -298,7 +330,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
               {/* Execution trace content */}
               {showTrace && (
                 <div className="pl-2 bg-zinc-900/50 border border-zinc-800/40 rounded-lg py-2">
-                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} />
+                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} highlightToolUseId={highlightToolUseId} />
                 </div>
               )}
             </div>
