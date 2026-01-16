@@ -4,6 +4,44 @@
  */
 
 // =============================================================================
+// Notification & Error Types
+// =============================================================================
+
+/**
+ * Detected error from session JSONL files.
+ * Used for notification display and deep linking to error locations.
+ */
+export interface DetectedError {
+  /** UUID for unique identification */
+  id: string;
+  /** Unix timestamp when error occurred */
+  timestamp: number;
+  /** Session ID where error occurred */
+  sessionId: string;
+  /** Project ID (encoded project path) */
+  projectId: string;
+  /** Path to the JSONL file */
+  filePath: string;
+  /** Tool name or 'assistant' */
+  source: string;
+  /** Error message text */
+  message: string;
+  /** Line number in JSONL for deep linking */
+  lineNumber?: number;
+  /** Whether the notification has been read */
+  isRead: boolean;
+  /** When the notification was created */
+  createdAt: number;
+  /** Additional context */
+  context: {
+    /** Display name of the project */
+    projectName: string;
+    /** Current working directory when error occurred */
+    cwd?: string;
+  };
+}
+
+// =============================================================================
 // Project & Session Types
 // =============================================================================
 
@@ -526,6 +564,54 @@ export interface ConversationGroup {
 // Electron API (exposed via preload script)
 // =============================================================================
 
+/**
+ * Result of notifications:get with pagination.
+ */
+export interface NotificationsResult {
+  notifications: DetectedError[];
+  total: number;
+  totalCount: number;
+  unreadCount: number;
+  hasMore: boolean;
+}
+
+/**
+ * Notifications API exposed via preload.
+ * Note: Event callbacks use `unknown` types because IPC data cannot be typed at the preload layer.
+ * Consumers should cast to DetectedError or NotificationClickData as appropriate.
+ */
+export interface NotificationsAPI {
+  get: (options?: { limit?: number; offset?: number }) => Promise<NotificationsResult>;
+  markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+  clear: () => Promise<void>;
+  getUnreadCount: () => Promise<number>;
+  onNew: (callback: (event: unknown, error: unknown) => void) => () => void;
+  onUpdated: (callback: (event: unknown) => void) => () => void;
+  onClicked: (callback: (event: unknown, data: unknown) => void) => () => void;
+}
+
+/**
+ * Config API exposed via preload.
+ */
+export interface ConfigAPI {
+  get: () => Promise<AppConfig>;
+  update: (section: string, data: object) => Promise<AppConfig>;
+  addIgnoreRegex: (pattern: string) => Promise<AppConfig>;
+  removeIgnoreRegex: (pattern: string) => Promise<AppConfig>;
+  addIgnoreProject: (projectId: string) => Promise<AppConfig>;
+  removeIgnoreProject: (projectId: string) => Promise<AppConfig>;
+  snooze: (minutes: number) => Promise<AppConfig>;
+  clearSnooze: () => Promise<AppConfig>;
+}
+
+/**
+ * Session navigation API exposed via preload.
+ */
+export interface SessionAPI {
+  scrollToLine: (sessionId: string, lineNumber: number) => Promise<void>;
+}
+
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>;
   getSessions: (projectId: string) => Promise<Session[]>;
@@ -546,6 +632,15 @@ export interface ElectronAPI {
     mentions: { type: 'skill' | 'path'; value: string }[],
     projectPath: string
   ) => Promise<Record<string, boolean>>;
+
+  // Notifications API
+  notifications: NotificationsAPI;
+
+  // Config API
+  config: ConfigAPI;
+
+  // Deep link navigation
+  session: SessionAPI;
 }
 
 // =============================================================================
@@ -866,6 +961,67 @@ export interface FileChangeEvent {
   projectId?: string;
   sessionId?: string;
   isSubagent: boolean;
+}
+
+// =============================================================================
+// Notification & Configuration Types
+// =============================================================================
+
+/**
+ * Application configuration settings.
+ * Persisted to disk and loaded on app startup.
+ */
+export interface AppConfig {
+  /** Notification-related settings */
+  notifications: {
+    /** Whether notifications are enabled globally */
+    enabled: boolean;
+    /** Whether to play sound with notifications */
+    soundEnabled: boolean;
+    /** Regex patterns for errors to ignore */
+    ignoredRegex: string[];
+    /** Project IDs to ignore for notifications */
+    ignoredProjects: string[];
+    /** Unix timestamp until which notifications are snoozed (null if not snoozed) */
+    snoozedUntil: number | null;
+    /** Default snooze duration in minutes */
+    snoozeMinutes: number;
+  };
+  /** General application settings */
+  general: {
+    /** Whether to launch app at system login */
+    launchAtLogin: boolean;
+    /** Whether to show icon in dock (macOS) */
+    showDockIcon: boolean;
+    /** Application theme */
+    theme: 'dark' | 'light' | 'system';
+    /** Default tab to show on app launch */
+    defaultTab: 'dashboard' | 'last-session';
+  };
+  /** Display and UI settings */
+  display: {
+    /** Whether to show timestamps in message views */
+    showTimestamps: boolean;
+    /** Whether to use compact display mode */
+    compactMode: boolean;
+    /** Whether to enable syntax highlighting in code blocks */
+    syntaxHighlighting: boolean;
+  };
+}
+
+/**
+ * Notification click event data for deep linking.
+ * Passed when user clicks on a system notification to navigate to the error.
+ */
+export interface NotificationClickData {
+  /** ID of the error that triggered the notification */
+  errorId: string;
+  /** Session ID to navigate to */
+  sessionId: string;
+  /** Project ID containing the session */
+  projectId: string;
+  /** Line number in JSONL for precise scrolling */
+  lineNumber?: number;
 }
 
 // =============================================================================

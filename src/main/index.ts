@@ -17,6 +17,8 @@ import { SubagentResolver } from './services/SubagentResolver';
 import { ChunkBuilder } from './services/ChunkBuilder';
 import { DataCache } from './services/DataCache';
 import { FileWatcher } from './services/FileWatcher';
+import { configManager } from './services/ConfigManager';
+import { NotificationManager } from './services/NotificationManager';
 import { initializeIpcHandlers, removeIpcHandlers } from './ipc/handlers';
 
 let mainWindow: BrowserWindow | null = null;
@@ -28,6 +30,7 @@ let subagentResolver: SubagentResolver;
 let chunkBuilder: ChunkBuilder;
 let dataCache: DataCache;
 let fileWatcher: FileWatcher;
+let notificationManager: NotificationManager;
 let cleanupInterval: NodeJS.Timeout | null = null;
 
 /**
@@ -55,11 +58,18 @@ function initializeServices(): void {
     dataCache
   );
 
-  // Start file watcher
+  // Initialize notification manager using singleton pattern
+  // This ensures IPC handlers and FileWatcher use the same instance
+  // Note: mainWindow will be set later via setMainWindow() when window is created
+  notificationManager = NotificationManager.getInstance();
+
+  // Start file watcher with notification manager for error detection
   fileWatcher = new FileWatcher(dataCache);
+  fileWatcher.setNotificationManager(notificationManager);
   fileWatcher.start();
 
   // Forward file change events to renderer
+  // Note: Error detection is handled internally by FileWatcher via NotificationManager
   fileWatcher.on('file-change', (event) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('file-change', event);
@@ -128,7 +138,16 @@ function createWindow(): void {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Clear main window reference from notification manager
+    if (notificationManager) {
+      notificationManager.setMainWindow(null);
+    }
   });
+
+  // Set main window reference for notification manager
+  if (notificationManager) {
+    notificationManager.setMainWindow(mainWindow);
+  }
 
   console.log('Main window created');
 }
@@ -142,8 +161,31 @@ app.whenReady().then(() => {
   // Initialize services first
   initializeServices();
 
+  // Apply configuration settings
+  const config = configManager.getConfig();
+
+  // Apply launch at login setting
+  app.setLoginItemSettings({
+    openAtLogin: config.general.launchAtLogin,
+  });
+
+  // Apply dock visibility (macOS)
+  if (process.platform === 'darwin') {
+    if (!config.general.showDockIcon) {
+      app.dock?.hide();
+    }
+  }
+
   // Then create window
   createWindow();
+
+  // Listen for notification click events
+  notificationManager.on('notification-clicked', (error) => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

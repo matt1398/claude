@@ -17,7 +17,7 @@ export interface Tab {
   id: string;
 
   /** Type of content displayed in this tab */
-  type: 'session' | 'dashboard';
+  type: 'session' | 'dashboard' | 'notifications' | 'settings';
 
   /** Session ID (required when type === 'session') */
   sessionId?: string;
@@ -33,6 +33,12 @@ export interface Tab {
 
   /** Whether this tab was opened from CommandPalette search */
   fromSearch?: boolean;
+
+  /** Line number to scroll to for error deep linking (type === 'session') */
+  scrollToLine?: number;
+
+  /** Error ID to highlight for error deep linking (type === 'session') */
+  highlightErrorId?: string;
 }
 
 /**

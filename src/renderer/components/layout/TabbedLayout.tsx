@@ -14,12 +14,13 @@ import { TabBar } from './TabBar';
 import { DashboardView } from '../dashboard/DashboardView';
 import { MiddlePanel } from './MiddlePanel';
 import { CommandPalette } from '../search/CommandPalette';
+import { NotificationsView } from '../notifications/NotificationsView';
+import { SettingsView } from '../settings/SettingsView';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
 
 export function TabbedLayout() {
   const {
-    openTabs,
     activeTabId,
     getActiveTab,
     selectedSessionId,
@@ -61,13 +62,17 @@ export function TabbedLayout() {
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Tab bar - only show if there are tabs */}
-        {openTabs.length > 0 && <TabBar />}
+        {/* Tab bar - always show for access to notifications/settings */}
+        <TabBar />
 
         {/* Content area */}
         <div className="flex-1 flex overflow-hidden">
           {showDashboard ? (
             <DashboardView />
+          ) : activeTab?.type === 'notifications' ? (
+            <NotificationsView />
+          ) : activeTab?.type === 'settings' ? (
+            <SettingsView />
           ) : showSessionContent ? (
             sessionDetailError ? (
               // Error state for session loading failure (e.g., deleted file)

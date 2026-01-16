@@ -30,6 +30,57 @@ const electronAPI: ElectronAPI = {
     mentions: { type: 'skill' | 'path'; value: string }[],
     projectPath: string
   ) => ipcRenderer.invoke('validate-mentions', mentions, projectPath),
+
+  // Notifications API
+  notifications: {
+    get: (options?: { limit?: number; offset?: number }) =>
+      ipcRenderer.invoke('notifications:get', options),
+    markRead: (id: string) =>
+      ipcRenderer.invoke('notifications:markRead', id),
+    markAllRead: () =>
+      ipcRenderer.invoke('notifications:markAllRead'),
+    clear: () =>
+      ipcRenderer.invoke('notifications:clear'),
+    getUnreadCount: () =>
+      ipcRenderer.invoke('notifications:getUnreadCount'),
+    onNew: (callback: (event: unknown, error: unknown) => void) => {
+      ipcRenderer.on('notification:new', callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener('notification:new', callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void);
+    },
+    onUpdated: (callback: (event: unknown) => void) => {
+      ipcRenderer.on('notification:updated', callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener('notification:updated', callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void);
+    },
+    onClicked: (callback: (event: unknown, data: unknown) => void) => {
+      ipcRenderer.on('notification:clicked', callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void);
+      return () => ipcRenderer.removeListener('notification:clicked', callback as (event: Electron.IpcRendererEvent, ...args: unknown[]) => void);
+    },
+  },
+
+  // Config API
+  config: {
+    get: () => ipcRenderer.invoke('config:get'),
+    update: (section: string, data: object) =>
+      ipcRenderer.invoke('config:update', section, data),
+    addIgnoreRegex: (pattern: string) =>
+      ipcRenderer.invoke('config:addIgnoreRegex', pattern),
+    removeIgnoreRegex: (pattern: string) =>
+      ipcRenderer.invoke('config:removeIgnoreRegex', pattern),
+    addIgnoreProject: (projectId: string) =>
+      ipcRenderer.invoke('config:addIgnoreProject', projectId),
+    removeIgnoreProject: (projectId: string) =>
+      ipcRenderer.invoke('config:removeIgnoreProject', projectId),
+    snooze: (minutes: number) =>
+      ipcRenderer.invoke('config:snooze', minutes),
+    clearSnooze: () =>
+      ipcRenderer.invoke('config:clearSnooze'),
+  },
+
+  // Deep link navigation
+  session: {
+    scrollToLine: (sessionId: string, lineNumber: number) =>
+      ipcRenderer.invoke('session:scrollToLine', sessionId, lineNumber),
+  },
 };
 
 // Use contextBridge to securely expose the API to the renderer process

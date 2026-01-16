@@ -7,6 +7,7 @@
  * - Detect new/modified/deleted files
  * - Emit events to notify renderer process
  * - Invalidate cache entries when files change
+ * - Detect errors in changed session files and notify NotificationManager
  */
 
 import * as fs from 'fs';
@@ -15,6 +16,9 @@ import { EventEmitter } from 'events';
 import { FileChangeEvent } from '../types/claude';
 import { DataCache } from './DataCache';
 import { getProjectsBasePath, getTodosBasePath } from '../utils/pathDecoder';
+import { errorDetector } from './ErrorDetector';
+import { NotificationManager } from './NotificationManager';
+import { parseJsonlFile } from '../utils/jsonl';
 
 /** Debounce window for file change events */
 const DEBOUNCE_MS = 100;
@@ -25,14 +29,25 @@ export class FileWatcher extends EventEmitter {
   private projectsPath: string;
   private todosPath: string;
   private dataCache: DataCache;
+  private notificationManager: NotificationManager | null = null;
   private isWatching: boolean = false;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  /** Track last processed line count per file for incremental error detection */
+  private lastProcessedLineCount: Map<string, number> = new Map();
 
   constructor(dataCache: DataCache, projectsPath?: string, todosPath?: string) {
     super();
     this.projectsPath = projectsPath || getProjectsBasePath();
     this.todosPath = todosPath || getTodosBasePath();
     this.dataCache = dataCache;
+  }
+
+  /**
+   * Sets the NotificationManager for error detection integration.
+   * Must be called before start() to enable error notifications.
+   */
+  setNotificationManager(manager: NotificationManager): void {
+    this.notificationManager = manager;
   }
 
   // ===========================================================================
@@ -72,6 +87,9 @@ export class FileWatcher extends EventEmitter {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();
+
+    // Clear error detection tracking
+    this.lastProcessedLineCount.clear();
 
     this.isWatching = false;
     console.log('FileWatcher: Stopped watching');
@@ -197,7 +215,95 @@ export class FileWatcher extends EventEmitter {
       console.log(
         `FileWatcher: ${changeType} ${isSubagent ? 'subagent' : 'session'} - ${filename}`
       );
+
+      // Detect errors in changed session files (not deleted files)
+      // Only detect errors in main session files, not subagent files
+      if (changeType !== 'unlink' && !isSubagent && this.notificationManager) {
+        this.detectErrorsInSessionFile(projectId, sessionId, fullPath).catch((err) => {
+          console.error('FileWatcher: Error detecting errors in session file:', err);
+        });
+      }
     }
+  }
+
+  // ===========================================================================
+  // Error Detection
+  // ===========================================================================
+
+  /**
+   * Detects errors in a session file and sends notifications.
+   * Uses incremental processing to only check new lines since last check.
+   */
+  private async detectErrorsInSessionFile(
+    projectId: string,
+    sessionId: string,
+    filePath: string
+  ): Promise<void> {
+    if (!this.notificationManager) {
+      return;
+    }
+
+    try {
+      // Parse the file to get all messages
+      const messages = await parseJsonlFile(filePath);
+      const currentLineCount = messages.length;
+
+      // Get the last processed line count for this file
+      const lastLineCount = this.lastProcessedLineCount.get(filePath) || 0;
+
+      // If no new lines, skip processing
+      if (currentLineCount <= lastLineCount) {
+        return;
+      }
+
+      // Only process new messages (from lastLineCount onwards)
+      const newMessages = messages.slice(lastLineCount);
+
+      // Detect errors in new messages
+      // Note: We pass the offset-adjusted line numbers to errorDetector
+      const errors = errorDetector.detectErrors(
+        newMessages,
+        sessionId,
+        projectId,
+        filePath
+      );
+
+      // Adjust line numbers to account for the offset
+      for (const error of errors) {
+        if (error.lineNumber !== undefined) {
+          error.lineNumber = error.lineNumber + lastLineCount;
+        }
+      }
+
+      // Notify for each detected error
+      for (const error of errors) {
+        this.notificationManager.addError(error);
+      }
+
+      // Update the last processed line count
+      this.lastProcessedLineCount.set(filePath, currentLineCount);
+
+      if (errors.length > 0) {
+        console.log(`FileWatcher: Detected ${errors.length} errors in ${filePath}`);
+      }
+    } catch (err) {
+      console.error(`FileWatcher: Error processing session file for errors: ${filePath}`, err);
+    }
+  }
+
+  /**
+   * Clears the error detection tracking for a specific file.
+   * Call this when a file is deleted or to force re-processing.
+   */
+  clearErrorTracking(filePath: string): void {
+    this.lastProcessedLineCount.delete(filePath);
+  }
+
+  /**
+   * Clears all error detection tracking.
+   */
+  clearAllErrorTracking(): void {
+    this.lastProcessedLineCount.clear();
   }
 
   /**

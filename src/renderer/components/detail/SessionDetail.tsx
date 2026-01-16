@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../store';
 import { ChunkView } from './ChunkView';
 import { SubagentDetailModal } from './SubagentDetailModal';
+import { ErrorHighlight } from './ErrorHighlight';
 
 export const SessionDetail: React.FC = () => {
   const {
@@ -10,8 +11,85 @@ export const SessionDetail: React.FC = () => {
     selectedProjectId,
     sessionDetailLoading,
     sessionDetailError,
-    drillDownSubagent
+    drillDownSubagent,
+    openTabs,
+    activeTabId,
+    clearTabDeepLink
   } = useStore();
+
+  // Get current tab to access scrollToLine and highlightErrorId
+  const currentTab = activeTabId ? openTabs.find(t => t.id === activeTabId) : null;
+  const scrollToLine = currentTab?.scrollToLine;
+  const highlightErrorId = currentTab?.highlightErrorId;
+
+  // Container ref for scrolling
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // State for highlighted chunk
+  const [highlightedChunkIndex, setHighlightedChunkIndex] = useState<number | null>(null);
+
+  // Track whether we've processed the current deep link to avoid re-scrolling
+  const processedDeepLinkRef = useRef<string | null>(null);
+
+  // Handler to clear highlight after animation completes
+  const handleHighlightEnd = useCallback(() => {
+    setHighlightedChunkIndex(null);
+    // Clear the deep link props from the tab
+    if (activeTabId) {
+      clearTabDeepLink(activeTabId);
+    }
+  }, [activeTabId, clearTabDeepLink]);
+
+  // Effect to handle deep linking: scroll to and highlight error location
+  useEffect(() => {
+    // Only process if we have deep link info and session data is loaded
+    if (!sessionDetail || !sessionDetail.chunks.length) return;
+    if (!scrollToLine && !highlightErrorId) return;
+
+    // Create a unique key for this deep link request
+    const deepLinkKey = `${highlightErrorId || ''}-${scrollToLine || ''}`;
+
+    // Skip if we've already processed this deep link
+    if (processedDeepLinkRef.current === deepLinkKey) return;
+    processedDeepLinkRef.current = deepLinkKey;
+
+    // Find the chunk to scroll to
+    // Strategy: Since JSONL line numbers aren't stored in parsed messages,
+    // we'll try to find chunks by timestamp proximity to the error.
+    // For now, we'll scroll to the last chunk as errors typically occur at the end
+    // of execution. If scrollToLine is provided, we can use chunk index heuristics.
+    let targetChunkIndex = sessionDetail.chunks.length - 1; // Default to last chunk
+
+    // If we have scrollToLine, use it as a hint (approximate to chunk index)
+    // This is a heuristic since we don't have exact line-to-chunk mapping
+    if (scrollToLine && scrollToLine > 0) {
+      // Estimate: each chunk represents roughly 10-50 lines of JSONL
+      // Use a simple heuristic: later lines mean later chunks
+      const estimatedChunkIndex = Math.min(
+        Math.floor(scrollToLine / 30), // Rough estimate
+        sessionDetail.chunks.length - 1
+      );
+      targetChunkIndex = Math.max(0, estimatedChunkIndex);
+    }
+
+    // Set the highlight
+    setHighlightedChunkIndex(targetChunkIndex);
+
+    // Scroll to the target chunk after a brief delay to allow render
+    requestAnimationFrame(() => {
+      const chunkElement = containerRef.current?.querySelector(
+        `[data-chunk-index="${targetChunkIndex}"]`
+      );
+      if (chunkElement) {
+        chunkElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, [sessionDetail, scrollToLine, highlightErrorId]);
+
+  // Reset processed deep link when session changes
+  useEffect(() => {
+    processedDeepLinkRef.current = null;
+  }, [selectedSessionId]);
 
   // Handler for subagent drill-down
   const handleSubagentClick = (subagentId: string, description: string) => {
@@ -107,7 +185,7 @@ export const SessionDetail: React.FC = () => {
   };
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div ref={containerRef} className="h-full overflow-y-auto">
       <div className="p-6 border-b border-gray-800 bg-gray-900/50">
         <div className="flex items-start justify-between mb-4">
           <div>
@@ -149,12 +227,18 @@ export const SessionDetail: React.FC = () => {
 
       <div className="p-6 space-y-6">
         {chunks.map((chunk, index) => (
-          <ChunkView
-            key={chunk.id}
-            chunk={chunk}
-            index={index}
-            onSubagentClick={handleSubagentClick}
-          />
+          <div key={chunk.id} data-chunk-index={index}>
+            <ErrorHighlight
+              isHighlighted={highlightedChunkIndex === index}
+              onHighlightEnd={handleHighlightEnd}
+            >
+              <ChunkView
+                chunk={chunk}
+                index={index}
+                onSubagentClick={handleSubagentClick}
+              />
+            </ErrorHighlight>
+          </div>
         ))}
       </div>
 

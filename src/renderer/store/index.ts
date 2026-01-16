@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Project, Session, SessionDetail, SubagentDetail } from '../types/data';
+import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConfig } from '../types/data';
 import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
 import { transformChunksToConversation } from '../utils/groupTransformer';
 import type { Tab, TabInput } from '../types/tabs';
@@ -92,6 +92,17 @@ interface AppState {
   // Command palette state
   commandPaletteOpen: boolean;
 
+  // Notifications state
+  notifications: DetectedError[];
+  unreadCount: number;
+  notificationsLoading: boolean;
+  notificationsError: string | null;
+
+  // App config state
+  appConfig: AppConfig | null;
+  configLoading: boolean;
+  configError: string | null;
+
   // Actions
   fetchProjects: () => Promise<void>;
   selectProject: (id: string) => void;
@@ -125,6 +136,7 @@ interface AppState {
   openDashboard: () => void;
   getActiveTab: () => Tab | null;
   isSessionOpen: (sessionId: string) => boolean;
+  clearTabDeepLink: (tabId: string) => void;
 
   // Project context actions (new)
   setActiveProject: (projectId: string) => void;
@@ -140,6 +152,19 @@ interface AppState {
   openCommandPalette: () => void;
   closeCommandPalette: () => void;
   navigateToSession: (projectId: string, sessionId: string, fromSearch?: boolean) => void;
+
+  // Notification actions
+  fetchNotifications: () => Promise<void>;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  clearNotifications: () => Promise<void>;
+  navigateToError: (error: DetectedError) => void;
+  openNotificationsTab: () => void;
+
+  // Config actions
+  fetchConfig: () => Promise<void>;
+  updateConfig: (section: string, data: Record<string, unknown>) => Promise<void>;
+  openSettingsTab: () => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -197,6 +222,17 @@ export const useStore = create<AppState>((set, get) => ({
 
   // Command palette state
   commandPaletteOpen: false,
+
+  // Notifications state (initial values)
+  notifications: [],
+  unreadCount: 0,
+  notificationsLoading: false,
+  notificationsError: null,
+
+  // App config state (initial values)
+  appConfig: null,
+  configLoading: false,
+  configError: null,
 
   // Fetch all projects from main process
   fetchProjects: async () => {
@@ -686,6 +722,17 @@ export const useStore = create<AppState>((set, get) => ({
     return isSessionOpenInTabs(state.openTabs, sessionId);
   },
 
+  // Clear deep link props (scrollToLine, highlightErrorId) from a tab after scrolling
+  clearTabDeepLink: (tabId: string) => {
+    const state = get();
+    const updatedTabs = state.openTabs.map((tab) =>
+      tab.id === tabId
+        ? { ...tab, scrollToLine: undefined, highlightErrorId: undefined }
+        : tab
+    );
+    set({ openTabs: updatedTabs });
+  },
+
   // Project context actions (new)
 
   // Set active project and fetch its sessions
@@ -840,4 +887,265 @@ export const useStore = create<AppState>((set, get) => ({
     // Fetch session detail
     state.fetchSessionDetail(projectId, sessionId);
   },
+
+  // ==========================================================================
+  // Notification Actions
+  // ==========================================================================
+
+  // Fetch all notifications from main process
+  fetchNotifications: async () => {
+    set({ notificationsLoading: true, notificationsError: null });
+    try {
+      const result = await window.electronAPI.notifications.get();
+      // API returns 'notifications' array and 'unreadCount'
+      const notifications = result.notifications || [];
+      set({
+        notifications,
+        unreadCount: result.unreadCount || 0,
+        notificationsLoading: false,
+      });
+    } catch (error) {
+      set({
+        notificationsError: error instanceof Error ? error.message : 'Failed to fetch notifications',
+        notificationsLoading: false,
+      });
+    }
+  },
+
+  // Mark a single notification as read
+  markNotificationRead: async (id: string) => {
+    try {
+      await window.electronAPI.notifications.markRead(id);
+      // Optimistically update local state
+      set((state) => {
+        const notifications = state.notifications.map((n) =>
+          n.id === id ? { ...n, isRead: true } : n
+        );
+        const unreadCount = notifications.filter((n) => !n.isRead).length;
+        return { notifications, unreadCount };
+      });
+    } catch (error) {
+      console.error('[Store] Failed to mark notification as read:', error);
+    }
+  },
+
+  // Mark all notifications as read
+  markAllNotificationsRead: async () => {
+    try {
+      await window.electronAPI.notifications.markAllRead();
+      // Optimistically update local state
+      set((state) => ({
+        notifications: state.notifications.map((n) => ({ ...n, isRead: true })),
+        unreadCount: 0,
+      }));
+    } catch (error) {
+      console.error('[Store] Failed to mark all notifications as read:', error);
+    }
+  },
+
+  // Clear all notifications
+  clearNotifications: async () => {
+    try {
+      await window.electronAPI.notifications.clear();
+      set({
+        notifications: [],
+        unreadCount: 0,
+      });
+    } catch (error) {
+      console.error('[Store] Failed to clear notifications:', error);
+    }
+  },
+
+  // Navigate to error location in session (deep linking)
+  navigateToError: (error: DetectedError) => {
+    const state = get();
+
+    // Mark the notification as read
+    state.markNotificationRead(error.id);
+
+    // Check if session tab is already open
+    const existingTab = findTabBySession(state.openTabs, error.sessionId);
+
+    if (existingTab) {
+      // Update existing tab with scroll/highlight info and focus it
+      const updatedTabs = state.openTabs.map((tab) =>
+        tab.id === existingTab.id
+          ? { ...tab, scrollToLine: error.lineNumber, highlightErrorId: error.id }
+          : tab
+      );
+      set({
+        openTabs: updatedTabs,
+        activeTabId: existingTab.id,
+      });
+    } else {
+      // Open new session tab with deep link props
+      const newTab: Tab = {
+        id: crypto.randomUUID(),
+        type: 'session',
+        label: 'Loading...',
+        projectId: error.projectId,
+        sessionId: error.sessionId,
+        createdAt: Date.now(),
+        scrollToLine: error.lineNumber,
+        highlightErrorId: error.id,
+      };
+
+      set({
+        openTabs: [...state.openTabs, newTab],
+        activeTabId: newTab.id,
+      });
+
+      // If different project, select it first
+      if (state.selectedProjectId !== error.projectId) {
+        state.selectProject(error.projectId);
+      }
+
+      // Fetch session detail
+      state.fetchSessionDetail(error.projectId, error.sessionId);
+    }
+  },
+
+  // Open or focus the notifications tab
+  openNotificationsTab: () => {
+    const state = get();
+
+    // Check if notifications tab already exists
+    const notificationsTab = state.openTabs.find((t) => t.type === 'notifications');
+    if (notificationsTab) {
+      set({ activeTabId: notificationsTab.id });
+      return;
+    }
+
+    // Create new notifications tab
+    const newTab: Tab = {
+      id: crypto.randomUUID(),
+      type: 'notifications',
+      label: 'Notifications',
+      createdAt: Date.now(),
+    };
+
+    set({
+      openTabs: [...state.openTabs, newTab],
+      activeTabId: newTab.id,
+    });
+  },
+
+  // ==========================================================================
+  // Config Actions
+  // ==========================================================================
+
+  // Fetch app configuration from main process
+  fetchConfig: async () => {
+    set({ configLoading: true, configError: null });
+    try {
+      const config = await window.electronAPI.config.get();
+      set({
+        appConfig: config,
+        configLoading: false,
+      });
+    } catch (error) {
+      set({
+        configError: error instanceof Error ? error.message : 'Failed to fetch config',
+        configLoading: false,
+      });
+    }
+  },
+
+  // Update a section of the app configuration
+  updateConfig: async (section: string, data: Record<string, unknown>) => {
+    try {
+      await window.electronAPI.config.update(section, data);
+      // Refresh config after update
+      const config = await window.electronAPI.config.get();
+      set({ appConfig: config });
+    } catch (error) {
+      console.error('[Store] Failed to update config:', error);
+      set({
+        configError: error instanceof Error ? error.message : 'Failed to update config',
+      });
+    }
+  },
+
+  // Open or focus the settings tab
+  openSettingsTab: () => {
+    const state = get();
+
+    // Check if settings tab already exists
+    const settingsTab = state.openTabs.find((t) => t.type === 'settings');
+    if (settingsTab) {
+      set({ activeTabId: settingsTab.id });
+      return;
+    }
+
+    // Create new settings tab
+    const newTab: Tab = {
+      id: crypto.randomUUID(),
+      type: 'settings',
+      label: 'Settings',
+      createdAt: Date.now(),
+    };
+
+    set({
+      openTabs: [...state.openTabs, newTab],
+      activeTabId: newTab.id,
+    });
+  },
 }));
+
+// ==========================================================================
+// Store Initialization - Subscribe to IPC Events
+// ==========================================================================
+
+/**
+ * Initialize notification event listeners.
+ * Call this once when the app starts (e.g., in App.tsx useEffect).
+ */
+export function initializeNotificationListeners(): () => void {
+  const cleanupFns: Array<() => void> = [];
+
+  // Listen for new notifications from main process
+  if (window.electronAPI.notifications?.onNew) {
+    const cleanup = window.electronAPI.notifications.onNew(
+      (_event: unknown, error: unknown) => {
+        // Cast the error to DetectedError type
+        const notification = error as DetectedError;
+        if (notification && notification.id) {
+          useStore.setState((state) => ({
+            notifications: [notification, ...state.notifications],
+            unreadCount: state.unreadCount + 1,
+          }));
+        }
+      }
+    );
+    if (typeof cleanup === 'function') {
+      cleanupFns.push(cleanup);
+    }
+  }
+
+  // Listen for notification updates from main process
+  if (window.electronAPI.notifications?.onUpdated) {
+    const cleanup = window.electronAPI.notifications.onUpdated(
+      (event: unknown) => {
+        // The event data contains the updated notification
+        const updatedNotification = event as DetectedError;
+        if (updatedNotification && updatedNotification.id) {
+          useStore.setState((state) => {
+            const notifications = state.notifications.map((n) =>
+              n.id === updatedNotification.id ? updatedNotification : n
+            );
+            const unreadCount = notifications.filter((n) => !n.isRead).length;
+            return { notifications, unreadCount };
+          });
+        }
+      }
+    );
+    if (typeof cleanup === 'function') {
+      cleanupFns.push(cleanup);
+    }
+  }
+
+  // Return cleanup function
+  return () => {
+    cleanupFns.forEach((fn) => fn());
+  };
+}

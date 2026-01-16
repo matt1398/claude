@@ -4,13 +4,20 @@
  * Handlers:
  * - get-projects: List all projects
  * - get-sessions: List sessions for a project
+ * - get-sessions-paginated: List sessions with cursor-based pagination
  * - get-session-detail: Get full session detail with subagents
  * - get-session-groups: Get conversation groups for a session (alternative to chunks)
  * - get-session-metrics: Get metrics for a session
- * - get-waterfall-data: Get waterfall chart data for a session
+ * - search-sessions: Search sessions in a project
+ * - get-subagent-detail: Get detailed information for a specific subagent
  * - validate-skill: Validate if a skill exists (global or project-specific)
  * - validate-path: Validate if a file/directory path exists relative to project
  * - validate-mentions: Batch validate multiple items (more efficient)
+ * - session:scrollToLine: Deep link handler for scrolling to a specific line in a session
+ *
+ * Additional handlers registered via separate modules:
+ * - notifications:* - See ./notifications.ts
+ * - config:* - See ./config.ts
  */
 
 import * as fs from 'fs';
@@ -33,6 +40,8 @@ import { SessionParser } from '../services/SessionParser';
 import { SubagentResolver } from '../services/SubagentResolver';
 import { ChunkBuilder } from '../services/ChunkBuilder';
 import { DataCache } from '../services/DataCache';
+import { registerNotificationHandlers, removeNotificationHandlers } from './notifications';
+import { registerConfigHandlers, removeConfigHandlers } from './config';
 
 // Service instances
 let projectScanner: ProjectScanner;
@@ -84,6 +93,13 @@ function registerHandlers(): void {
   ipcMain.handle('validate-skill', handleValidateSkill);
   ipcMain.handle('validate-path', handleValidatePath);
   ipcMain.handle('validate-mentions', handleValidateMentions);
+
+  // Deep link handler for session scrolling (from notifications)
+  ipcMain.handle('session:scrollToLine', handleScrollToLine);
+
+  // Register notification and config handlers
+  registerNotificationHandlers(ipcMain);
+  registerConfigHandlers(ipcMain);
 
   console.log('IPC: Handlers registered');
 }
@@ -475,6 +491,40 @@ async function handleValidateMentions(
 }
 
 // =============================================================================
+// Navigation Handlers
+// =============================================================================
+
+/**
+ * Handler for 'session:scrollToLine' IPC call.
+ * Used for deep linking from notifications to specific lines in a session.
+ * The actual scrolling happens in the renderer; this handler validates and returns the data.
+ */
+async function handleScrollToLine(
+  _event: IpcMainInvokeEvent,
+  sessionId: string,
+  lineNumber: number
+): Promise<{ success: boolean; sessionId: string; lineNumber: number }> {
+  try {
+    console.log(`IPC: session:scrollToLine sessionId=${sessionId}, lineNumber=${lineNumber}`);
+
+    if (!sessionId) {
+      console.error('IPC: session:scrollToLine called with empty sessionId');
+      return { success: false, sessionId: '', lineNumber: 0 };
+    }
+
+    if (typeof lineNumber !== 'number' || lineNumber < 0) {
+      console.error('IPC: session:scrollToLine called with invalid lineNumber');
+      return { success: false, sessionId, lineNumber: 0 };
+    }
+
+    return { success: true, sessionId, lineNumber };
+  } catch (error) {
+    console.error(`IPC: Error in session:scrollToLine:`, error);
+    return { success: false, sessionId: '', lineNumber: 0 };
+  }
+}
+
+// =============================================================================
 // Cleanup
 // =============================================================================
 
@@ -495,5 +545,11 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('validate-skill');
   ipcMain.removeHandler('validate-path');
   ipcMain.removeHandler('validate-mentions');
+  ipcMain.removeHandler('session:scrollToLine');
+
+  // Remove notification and config handlers
+  removeNotificationHandlers(ipcMain);
+  removeConfigHandlers(ipcMain);
+
   console.log('IPC: Handlers removed');
 }

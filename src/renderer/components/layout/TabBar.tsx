@@ -3,7 +3,7 @@
  * Supports tab switching, closing, and horizontal scrolling on overflow.
  */
 
-import { X, Plus, LayoutDashboard, FileText, RefreshCw, Search } from 'lucide-react';
+import { X, Plus, LayoutDashboard, FileText, RefreshCw, Search, Bell, Settings } from 'lucide-react';
 import { useStore } from '../../store';
 
 export function TabBar() {
@@ -15,6 +15,9 @@ export function TabBar() {
     openDashboard,
     fetchSessionDetail,
     openCommandPalette,
+    unreadCount,
+    openNotificationsTab,
+    openSettingsTab,
   } = useStore();
 
   // Get the active tab
@@ -33,7 +36,11 @@ export function TabBar() {
       <div className="flex items-center gap-1 overflow-x-auto scrollbar-none flex-1 min-w-0">
         {openTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
-          const Icon = tab.type === 'dashboard' ? LayoutDashboard : FileText;
+          // Select icon based on tab type
+          const Icon = tab.type === 'dashboard' ? LayoutDashboard
+            : tab.type === 'notifications' ? Bell
+            : tab.type === 'settings' ? Settings
+            : FileText;
 
           return (
             <div
@@ -90,16 +97,42 @@ export function TabBar() {
         </button>
       </div>
 
-      {/* Search button - right side (Notion style) */}
-      <button
-        onClick={openCommandPalette}
-        className="flex items-center gap-2 px-3 py-1.5 ml-2 rounded-md text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface transition-colors flex-shrink-0"
-        title="Search (⌘K)"
-      >
-        <Search className="w-4 h-4" />
-        <span className="text-xs hidden sm:inline">Search</span>
-        <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-claude-dark-surface border border-claude-dark-border rounded">⌘K</kbd>
-      </button>
+      {/* Right side actions */}
+      <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+        {/* Search button (Notion style) */}
+        <button
+          onClick={openCommandPalette}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface transition-colors"
+          title="Search (Cmd+K)"
+        >
+          <Search className="w-4 h-4" />
+          <span className="text-xs hidden sm:inline">Search</span>
+          <kbd className="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-claude-dark-surface border border-claude-dark-border rounded">Cmd+K</kbd>
+        </button>
+
+        {/* Notifications bell icon */}
+        <button
+          onClick={openNotificationsTab}
+          className="relative p-2 rounded-md text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface transition-colors"
+          title="Notifications"
+        >
+          <Bell className="w-4 h-4" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 font-medium">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+
+        {/* Settings gear icon */}
+        <button
+          onClick={openSettingsTab}
+          className="p-2 rounded-md text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface transition-colors"
+          title="Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
