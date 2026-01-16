@@ -71,6 +71,27 @@
   --inline-code-bg: #27272a;
   --inline-code-text: #fbbf24;
 
+  /* Diff viewer */
+  --diff-added-bg: rgba(34, 197, 94, 0.15);
+  --diff-added-text: #4ade80;
+  --diff-added-border: #22c55e;
+  --diff-removed-bg: rgba(239, 68, 68, 0.15);
+  --diff-removed-text: #f87171;
+  --diff-removed-border: #ef4444;
+
+  /* Markdown prose */
+  --prose-heading: #fafafa;
+  --prose-body: #d4d4d8;
+  --prose-muted: #a1a1aa;
+  --prose-link: #60a5fa;
+  --prose-code-bg: #27272a;
+  --prose-code-text: #fbbf24;
+  --prose-pre-bg: #27272a;
+  --prose-pre-border: #3f3f46;
+  --prose-blockquote-border: #52525b;
+  --prose-table-border: #3f3f46;
+  --prose-table-header-bg: #27272a;
+
   /* Thinking blocks */
   --thinking-bg: rgba(88, 28, 135, 0.2);
   --thinking-border: rgba(107, 33, 168, 0.4);
@@ -205,6 +226,27 @@
   /* Inline code */
   --inline-code-bg: #f1f5f9;
   --inline-code-text: #c2410c;
+
+  /* Diff viewer - Light mode */
+  --diff-added-bg: rgba(34, 197, 94, 0.1);
+  --diff-added-text: #166534;
+  --diff-added-border: #22c55e;
+  --diff-removed-bg: rgba(239, 68, 68, 0.1);
+  --diff-removed-text: #991b1b;
+  --diff-removed-border: #ef4444;
+
+  /* Markdown prose - Light mode */
+  --prose-heading: #0f172a;
+  --prose-body: #334155;
+  --prose-muted: #64748b;
+  --prose-link: #2563eb;
+  --prose-code-bg: #f1f5f9;
+  --prose-code-text: #c2410c;
+  --prose-pre-bg: #f8fafc;
+  --prose-pre-border: #e2e8f0;
+  --prose-blockquote-border: #cbd5e1;
+  --prose-table-border: #e2e8f0;
+  --prose-table-header-bg: #f1f5f9;
 
   /* Thinking blocks - Visible purple */
   --thinking-bg: #faf5ff;

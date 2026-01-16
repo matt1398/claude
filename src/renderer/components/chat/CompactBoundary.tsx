@@ -47,12 +47,16 @@ export function CompactBoundary({ compactGroup }: CompactBoundaryProps) {
       {/* Collapsible Header - Amber/orange accent for distinction */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="group w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border border-amber-900/40 bg-amber-950/20 hover:bg-amber-950/30 hover:border-amber-800/60 transition-all duration-200 cursor-pointer"
+        className="group w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 cursor-pointer"
+        style={{
+          backgroundColor: 'var(--tool-call-bg)',
+          border: '1px solid var(--tool-call-border)',
+        }}
         aria-expanded={isExpanded}
         aria-label="Toggle compacted content"
       >
         {/* Icon Stack */}
-        <div className="flex items-center gap-2 text-amber-600/70 group-hover:text-amber-500 transition-colors">
+        <div className="flex items-center gap-2 transition-colors" style={{ color: 'var(--tool-call-text)' }}>
           <ChevronRight
             size={16}
             className={`transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`}
@@ -61,47 +65,76 @@ export function CompactBoundary({ compactGroup }: CompactBoundaryProps) {
         </div>
 
         {/* Label */}
-        <span className="text-sm font-medium text-amber-400/90 group-hover:text-amber-300 transition-colors">
+        <span className="text-sm font-medium transition-colors" style={{ color: 'var(--tool-call-text)' }}>
           Compacted
         </span>
 
         {/* Timestamp */}
-        <span className="text-xs text-amber-600/60 group-hover:text-amber-500/80 transition-colors ml-auto">
+        <span className="text-xs transition-colors ml-auto" style={{ color: 'var(--color-text-muted)' }}>
           {format(timestamp, 'h:mm:ss a')}
         </span>
       </button>
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="mt-2 border border-zinc-800/50 rounded-lg bg-zinc-950/30 overflow-hidden">
+        <div
+          className="mt-2 rounded-lg overflow-hidden"
+          style={{
+            backgroundColor: 'var(--code-bg)',
+            border: '1px solid var(--code-border)',
+          }}
+        >
           {/* Content Container with Max Height & Scroll */}
-          <div className="max-h-64 overflow-y-auto custom-scrollbar">
+          <div className="max-h-64 overflow-y-auto">
             <div className="p-4 space-y-3">
               {/* Content Header */}
-              <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2">
-                <span className="text-xs font-medium text-zinc-500 uppercase tracking-wide">
+              <div
+                className="flex items-center justify-between pb-2"
+                style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
+              >
+                <span
+                  className="text-xs font-medium uppercase tracking-wide"
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
                   Compacted Content
                 </span>
-                <span className="text-xs text-zinc-600">
+                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   {format(timestamp, 'MMM d, yyyy · h:mm:ss a')}
                 </span>
               </div>
 
               {/* Compacted Data Display */}
-              <div className="text-sm text-zinc-400 space-y-3">
+              <div className="space-y-3">
                 {/* Compact Summary Content */}
                 {compactContent ? (
-                  <div className="bg-zinc-900/50 rounded px-4 py-3 border border-amber-900/20">
-                    <div className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap font-sans">
+                  <div
+                    className="rounded px-4 py-3"
+                    style={{
+                      backgroundColor: 'var(--color-surface-raised)',
+                      border: '1px solid var(--tool-call-border)',
+                    }}
+                  >
+                    <div
+                      className="text-xs leading-relaxed whitespace-pre-wrap font-sans"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
                       {compactContent}
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-zinc-900/50 rounded px-3 py-2 border border-zinc-800/30">
+                  <div
+                    className="rounded px-3 py-2"
+                    style={{
+                      backgroundColor: 'var(--color-surface-raised)',
+                      border: '1px solid var(--color-border-subtle)',
+                    }}
+                  >
                     <div className="flex items-start gap-2">
-                      <Layers size={14} className="text-zinc-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-xs text-zinc-500 leading-relaxed">
-                        <p className="font-medium text-zinc-400 mb-1">Conversation Compacted</p>
+                      <Layers size={14} className="mt-0.5 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+                      <div className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                        <p className="font-medium mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+                          Conversation Compacted
+                        </p>
                         <p>
                           Previous messages were summarized to save context. The full conversation
                           history is preserved in the session file.
@@ -113,13 +146,21 @@ export function CompactBoundary({ compactGroup }: CompactBoundaryProps) {
 
                 {/* Metadata */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-zinc-900/30 rounded px-3 py-2">
-                    <span className="text-zinc-600">Compact ID</span>
-                    <p className="text-zinc-400 font-mono mt-1 truncate">{compactGroup.id}</p>
+                  <div
+                    className="rounded px-3 py-2"
+                    style={{ backgroundColor: 'var(--color-surface-raised)' }}
+                  >
+                    <span style={{ color: 'var(--color-text-muted)' }}>Compact ID</span>
+                    <p className="font-mono mt-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                      {compactGroup.id}
+                    </p>
                   </div>
-                  <div className="bg-zinc-900/30 rounded px-3 py-2">
-                    <span className="text-zinc-600">Timestamp</span>
-                    <p className="text-zinc-400 font-mono mt-1">
+                  <div
+                    className="rounded px-3 py-2"
+                    style={{ backgroundColor: 'var(--color-surface-raised)' }}
+                  >
+                    <span style={{ color: 'var(--color-text-muted)' }}>Timestamp</span>
+                    <p className="font-mono mt-1" style={{ color: 'var(--color-text-secondary)' }}>
                       {format(compactGroup.timestamp, 'HH:mm:ss')}
                     </p>
                   </div>
@@ -129,23 +170,6 @@ export function CompactBoundary({ compactGroup }: CompactBoundaryProps) {
           </div>
         </div>
       )}
-
-      {/* Custom Scrollbar Styles - Inline for simplicity */}
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #404040;
-          border-radius: 3px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #525252;
-        }
-      `}</style>
     </div>
   );
 }

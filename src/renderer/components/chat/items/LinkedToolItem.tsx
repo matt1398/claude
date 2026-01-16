@@ -291,7 +291,7 @@ function formatDuration(ms: number | undefined): string {
 // =============================================================================
 
 /**
- * Renders the input section based on tool type.
+ * Renders the input section based on tool type with theme-aware styling.
  */
 function renderInput(toolName: string, input: Record<string, unknown>): React.ReactNode {
   // Special rendering for Edit tool - show diff-like format
@@ -304,20 +304,20 @@ function renderInput(toolName: string, input: Record<string, unknown>): React.Re
     return (
       <div className="space-y-2">
         {filePath && (
-          <div className="text-zinc-400 text-xs mb-2">
+          <div className="text-xs mb-2" style={{ color: 'var(--color-text-muted)' }}>
             {filePath}
-            {replaceAll && <span className="ml-2 text-zinc-500">(replace all)</span>}
+            {replaceAll && <span className="ml-2" style={{ color: 'var(--color-text-muted)' }}>(replace all)</span>}
           </div>
         )}
         {oldString && (
-          <div className="text-red-400/80 whitespace-pre-wrap break-all">
+          <div className="whitespace-pre-wrap break-all" style={{ color: 'var(--diff-removed-text)' }}>
             {oldString.split('\n').map((line, i) => (
               <div key={i}>- {line}</div>
             ))}
           </div>
         )}
         {newString && (
-          <div className="text-green-400/80 whitespace-pre-wrap break-all">
+          <div className="whitespace-pre-wrap break-all" style={{ color: 'var(--diff-added-text)' }}>
             {newString.split('\n').map((line, i) => (
               <div key={i}>+ {line}</div>
             ))}
@@ -335,10 +335,10 @@ function renderInput(toolName: string, input: Record<string, unknown>): React.Re
     return (
       <div className="space-y-2">
         {description && (
-          <div className="text-zinc-400 text-xs mb-1">{description}</div>
+          <div className="text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>{description}</div>
         )}
         {command && (
-          <code className="text-zinc-300 whitespace-pre-wrap break-all">{command}</code>
+          <code className="whitespace-pre-wrap break-all" style={{ color: 'var(--color-text)' }}>{command}</code>
         )}
       </div>
     );
@@ -351,10 +351,10 @@ function renderInput(toolName: string, input: Record<string, unknown>): React.Re
     const limit = input.limit as number | undefined;
 
     return (
-      <div className="text-zinc-300">
+      <div style={{ color: 'var(--color-text)' }}>
         <div>{filePath}</div>
         {(offset !== undefined || limit !== undefined) && (
-          <div className="text-zinc-500 text-xs mt-1">
+          <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
             {offset !== undefined && `offset: ${offset}`}
             {offset !== undefined && limit !== undefined && ', '}
             {limit !== undefined && `limit: ${limit}`}
@@ -366,21 +366,29 @@ function renderInput(toolName: string, input: Record<string, unknown>): React.Re
 
   // Default: JSON format
   return (
-    <pre className="whitespace-pre-wrap break-all">
+    <pre className="whitespace-pre-wrap break-all" style={{ color: 'var(--color-text)' }}>
       {JSON.stringify(input, null, 2)}
     </pre>
   );
 }
 
 /**
- * Renders the output section.
+ * Renders the output section with theme-aware styling.
  */
 function renderOutput(content: string | unknown[]): React.ReactNode {
   if (typeof content === 'string') {
-    return <pre className="whitespace-pre-wrap break-all">{content}</pre>;
+    return (
+      <pre className="whitespace-pre-wrap break-all" style={{ color: 'var(--color-text)' }}>
+        {content}
+      </pre>
+    );
   }
 
-  return <pre className="whitespace-pre-wrap break-all">{JSON.stringify(content, null, 2)}</pre>;
+  return (
+    <pre className="whitespace-pre-wrap break-all" style={{ color: 'var(--color-text)' }}>
+      {JSON.stringify(content, null, 2)}
+    </pre>
+  );
 }
 
 // =============================================================================
@@ -493,13 +501,18 @@ const EditToolViewer: React.FC<{ linkedTool: LinkedToolItemType; status: ToolSta
       {/* Show result status if available */}
       {!linkedTool.isOrphaned && linkedTool.result != null && (
         <div>
-          <div className="text-xs text-zinc-500 mb-1 flex items-center gap-2">
+          <div className="text-xs mb-1 flex items-center gap-2" style={{ color: 'var(--tool-item-muted)' }}>
             Result
             <StatusDot status={status} />
           </div>
-          <div className={`bg-zinc-900 rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto ${
-            status === 'error' ? 'text-red-400' : 'text-zinc-300'
-          }`}>
+          <div
+            className="rounded p-3 font-mono text-xs overflow-x-auto max-h-96 overflow-y-auto"
+            style={{
+              backgroundColor: 'var(--code-bg)',
+              border: '1px solid var(--code-border)',
+              color: status === 'error' ? 'var(--tool-result-error-text)' : 'var(--color-text-secondary)',
+            }}
+          >
             {renderOutput(linkedTool.result.content)}
           </div>
         </div>

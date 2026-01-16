@@ -54,6 +54,7 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   // Check if this group should be expanded for search results
   const searchExpandedAIGroupIds = useStore((s) => s.searchExpandedAIGroupIds);
   const searchExpandedSubagentIds = useStore((s) => s.searchExpandedSubagentIds);
+  const searchCurrentDisplayItemId = useStore((s) => s.searchCurrentDisplayItemId);
   const shouldExpandForSearch = searchExpandedAIGroupIds.has(aiGroup.id);
 
   // Check if this group contains the highlighted error tool
@@ -127,6 +128,12 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   useEffect(() => {
     if (shouldExpandForSearch) {
       setIsExpanded(true);
+
+      // Expand the specific display item containing the search result
+      if (searchCurrentDisplayItemId) {
+        setExpandedItemIds(prev => new Set([...prev, searchCurrentDisplayItemId]));
+      }
+
       // If any subagents in this group need their trace expanded for search, expand them
       for (let i = 0; i < enhanced.displayItems.length; i++) {
         const item = enhanced.displayItems[i];
@@ -136,7 +143,7 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
         }
       }
     }
-  }, [shouldExpandForSearch, searchExpandedSubagentIds, enhanced.displayItems]);
+  }, [shouldExpandForSearch, searchCurrentDisplayItemId, searchExpandedSubagentIds, enhanced.displayItems]);
 
   // Determine if there's content to toggle
   const hasToggleContent = enhanced.displayItems.length > 0;

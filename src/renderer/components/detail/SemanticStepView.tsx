@@ -10,6 +10,54 @@ interface SemanticStepViewProps {
   onSubagentClick?: (subagentId: string, description: string) => void; // For drill-down
 }
 
+// Theme-aware step colors using CSS variables
+const getStepStyles = (type: SemanticStep['type']) => {
+  switch (type) {
+    case 'thinking':
+      return {
+        bg: 'var(--thinking-bg)',
+        text: 'var(--thinking-text)',
+        border: 'var(--thinking-border)',
+      };
+    case 'tool_call':
+      return {
+        bg: 'var(--tool-call-bg)',
+        text: 'var(--tool-call-text)',
+        border: 'var(--tool-call-border)',
+      };
+    case 'tool_result':
+      return {
+        bg: 'var(--tool-result-success-bg)',
+        text: 'var(--tool-result-success-text)',
+        border: 'var(--tool-result-success-border)',
+      };
+    case 'subagent':
+      return {
+        bg: 'var(--tool-result-success-bg)',
+        text: 'var(--tool-result-success-text)',
+        border: 'var(--tool-result-success-border)',
+      };
+    case 'output':
+      return {
+        bg: 'var(--output-bg)',
+        text: 'var(--output-text)',
+        border: 'var(--output-border)',
+      };
+    case 'interruption':
+      return {
+        bg: 'var(--interruption-bg)',
+        text: 'var(--interruption-text)',
+        border: 'var(--interruption-border)',
+      };
+    default:
+      return {
+        bg: 'var(--color-surface-raised)',
+        text: 'var(--color-text)',
+        border: 'var(--color-border)',
+      };
+  }
+};
+
 export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
   step,
   isExpanded,
@@ -20,21 +68,20 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
   // Get the icon component and color for this step type
   const Icon = STEP_ICONS[step.type];
   const iconColor = STEP_COLORS[step.type];
-
-  const colors: Record<SemanticStep['type'], string> = {
-    thinking: 'bg-purple-900/40 text-purple-300',
-    tool_call: 'bg-amber-900/40 text-amber-300',
-    tool_result: 'bg-amber-900/30 text-amber-200',
-    subagent: 'bg-green-900/40 text-green-300',
-    output: 'bg-blue-900/40 text-blue-300',
-    interruption: 'bg-red-900/40 text-red-300',
-  };
+  const stepStyles = getStepStyles(step.type);
 
   // Determine if this is a clickable subagent step
   const isClickableSubagent = step.type === 'subagent' && onSubagentClick && step.content.subagentId;
 
   return (
-    <div className={`rounded-lg border border-gray-700 ${colors[step.type]} ${isClickableSubagent ? 'cursor-pointer' : ''}`}>
+    <div
+      className={`rounded-lg ${isClickableSubagent ? 'cursor-pointer' : ''}`}
+      style={{
+        backgroundColor: stepStyles.bg,
+        color: stepStyles.text,
+        border: `1px solid ${stepStyles.border}`,
+      }}
+    >
       <button
         onClick={() => {
           if (isClickableSubagent) {
@@ -49,24 +96,31 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
           }
         }}
         className={`w-full flex items-center justify-between px-3 py-2 transition-opacity ${
-          isClickableSubagent ? 'hover:bg-green-900/20' : 'hover:opacity-80'
+          isClickableSubagent ? 'hover:opacity-80' : 'hover:opacity-80'
         }`}
       >
         <div className="flex items-center gap-2">
           <Icon size={16} color={iconColor} className="mt-0.5 flex-shrink-0" />
           <span className="font-medium capitalize">{step.type.replace('_', ' ')}</span>
           {step.content.toolName && (
-            <code className="text-xs bg-gray-800 px-1 rounded">
+            <code
+              className="text-xs px-1 rounded"
+              style={{
+                backgroundColor: 'var(--tag-bg)',
+                color: 'var(--tag-text)',
+                border: '1px solid var(--tag-border)',
+              }}
+            >
               {step.content.toolName}
             </code>
           )}
           {isClickableSubagent && (
-            <span className="text-xs text-green-400" title="Click to drill down">
-              🔍 Click to view
+            <span className="text-xs" style={{ color: 'var(--tool-result-success-text)' }} title="Click to drill down">
+              Click to view
             </span>
           )}
         </div>
-        <div className="flex items-center gap-3 text-xs text-gray-400">
+        <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>
           {step.tokens && (
             <span>{step.tokens.output.toLocaleString()} tokens</span>
           )}
@@ -76,7 +130,7 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
               e.stopPropagation();
               onSelect();
             }}
-            className="hover:text-gray-200 transition-colors cursor-pointer"
+            className="hover:opacity-70 transition-colors cursor-pointer"
             title="Show debug info"
             role="button"
             tabIndex={0}
@@ -94,16 +148,22 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
       </button>
 
       {isExpanded && (
-        <div className="px-3 py-2 border-t border-gray-700/50 text-sm">
+        <div
+          className="px-3 py-2 text-sm"
+          style={{ borderTop: '1px solid var(--color-border-subtle)' }}
+        >
           {step.type === 'thinking' && step.content.thinkingText && (
-            <pre className="whitespace-pre-wrap text-gray-300 font-mono text-xs">
+            <pre
+              className="whitespace-pre-wrap font-mono text-xs"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
               {step.content.thinkingText}
             </pre>
           )}
 
           {step.type === 'output' && step.content.outputText && (
-            <div className="prose prose-invert prose-sm max-w-none">
-              <div className="text-gray-300 whitespace-pre-wrap">
+            <div className="prose prose-sm max-w-none">
+              <div className="whitespace-pre-wrap" style={{ color: 'var(--prose-body)' }}>
                 {step.content.outputText}
               </div>
             </div>
@@ -113,14 +173,21 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
             <div className="space-y-2">
               {step.content.toolName && (
                 <div>
-                  <span className="text-gray-400 text-xs font-medium">Tool:</span>{' '}
-                  <code className="text-amber-300 text-xs">{step.content.toolName}</code>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Tool:</span>{' '}
+                  <code className="text-xs" style={{ color: 'var(--tool-call-text)' }}>{step.content.toolName}</code>
                 </div>
               )}
               {step.content.toolInput ? (
                 <div>
-                  <div className="text-gray-400 text-xs font-medium mb-1">Input:</div>
-                  <pre className="text-xs text-gray-300 bg-gray-800/50 p-2 rounded overflow-x-auto">
+                  <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Input:</div>
+                  <pre
+                    className="text-xs p-2 rounded overflow-x-auto"
+                    style={{
+                      color: 'var(--color-text-secondary)',
+                      backgroundColor: 'var(--code-bg)',
+                      border: '1px solid var(--code-border)',
+                    }}
+                  >
                     {JSON.stringify(step.content.toolInput as Record<string, unknown>, null, 2)}
                   </pre>
                 </div>
@@ -131,12 +198,19 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
           {step.type === 'tool_result' && (
             <div className="space-y-2">
               {step.content.isError && (
-                <div className="text-red-400 text-xs font-medium">Error</div>
+                <div className="text-xs font-medium" style={{ color: 'var(--tool-result-error-text)' }}>Error</div>
               )}
               {step.content.toolResultContent && (
                 <div>
-                  <div className="text-gray-400 text-xs font-medium mb-1">Result:</div>
-                  <pre className="text-xs text-gray-300 bg-gray-800/50 p-2 rounded overflow-x-auto max-h-64 overflow-y-auto">
+                  <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Result:</div>
+                  <pre
+                    className="text-xs p-2 rounded overflow-x-auto max-h-64 overflow-y-auto"
+                    style={{
+                      color: 'var(--color-text-secondary)',
+                      backgroundColor: 'var(--code-bg)',
+                      border: '1px solid var(--code-border)',
+                    }}
+                  >
                     {step.content.toolResultContent}
                   </pre>
                 </div>
@@ -148,18 +222,18 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
             <div className="space-y-2">
               {step.content.subagentId && (
                 <div>
-                  <span className="text-gray-400 text-xs font-medium">Agent ID:</span>{' '}
-                  <code className="text-green-300 text-xs">{step.content.subagentId}</code>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Agent ID:</span>{' '}
+                  <code className="text-xs" style={{ color: 'var(--tool-result-success-text)' }}>{step.content.subagentId}</code>
                 </div>
               )}
               {step.content.subagentDescription && (
                 <div>
-                  <div className="text-gray-400 text-xs font-medium mb-1">Description:</div>
-                  <p className="text-gray-300 text-xs">{step.content.subagentDescription}</p>
+                  <div className="text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Description:</div>
+                  <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>{step.content.subagentDescription}</p>
                 </div>
               )}
               {step.tokens && (
-                <div className="text-gray-400 text-xs">
+                <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                   <span className="font-medium">Tokens:</span>{' '}
                   {step.tokens.input.toLocaleString()} in / {step.tokens.output.toLocaleString()} out
                   {step.tokens.cached && step.tokens.cached > 0 && (
@@ -168,15 +242,15 @@ export const SemanticStepView: React.FC<SemanticStepViewProps> = ({
                 </div>
               )}
               {step.isParallel && (
-                <div className="text-green-400 text-xs font-medium">
-                  ⚡ Executed in parallel
+                <div className="text-xs font-medium" style={{ color: 'var(--tool-result-success-text)' }}>
+                  Executed in parallel
                 </div>
               )}
             </div>
           )}
 
           {step.type === 'interruption' && (
-            <div className="text-red-300 text-xs">
+            <div className="text-xs" style={{ color: 'var(--interruption-text)' }}>
               User interrupted the execution
             </div>
           )}

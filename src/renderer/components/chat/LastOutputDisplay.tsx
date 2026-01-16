@@ -33,11 +33,17 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
   // Render text output
   if (type === 'text' && lastOutput.text) {
     return (
-      <div className="bg-claude-dark-surface border border-claude-dark-border rounded-lg px-4 py-3">
-        <div className="text-xs text-claude-dark-text-secondary mb-2">
+      <div
+        className="rounded-lg px-4 py-3"
+        style={{
+          backgroundColor: 'var(--color-surface-raised)',
+          border: '1px solid var(--color-border)',
+        }}
+      >
+        <div className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>
           {format(timestamp, 'h:mm:ss a')}
         </div>
-        <div className="prose prose-invert prose-sm max-w-none">
+        <div className="prose prose-sm max-w-none" style={{ color: 'var(--prose-body)' }}>
           {searchQuery ? (
             <SearchHighlight text={lastOutput.text} itemId={aiGroupId} />
           ) : (
@@ -54,27 +60,43 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
   if (type === 'tool_result' && lastOutput.toolResult) {
     const isError = lastOutput.isError || false;
     const Icon = isError ? XCircle : CheckCircle;
-    const iconColor = isError ? 'text-red-400' : 'text-green-400';
-    const bgColor = isError ? 'bg-red-900/20' : 'bg-green-900/20';
-    const borderColor = isError ? 'border-red-800/40' : 'border-green-800/40';
 
     return (
-      <div className={`${bgColor} border ${borderColor} rounded-lg px-4 py-3`}>
+      <div
+        className="rounded-lg px-4 py-3"
+        style={{
+          backgroundColor: isError ? 'var(--tool-result-error-bg)' : 'var(--tool-result-success-bg)',
+          border: `1px solid ${isError ? 'var(--tool-result-error-border)' : 'var(--tool-result-success-border)'}`,
+        }}
+      >
         <div className="flex items-center gap-2 mb-2">
-          <Icon className={`w-4 h-4 ${iconColor}`} />
-          <span className="text-xs text-claude-dark-text-secondary">
+          <Icon
+            className="w-4 h-4"
+            style={{ color: isError ? 'var(--tool-result-error-text)' : 'var(--tool-result-success-text)' }}
+          />
+          <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
             {format(timestamp, 'h:mm:ss a')}
           </span>
           {lastOutput.toolName && (
-            <code className="text-xs bg-gray-900/50 px-1.5 py-0.5 rounded text-claude-dark-text">
+            <code
+              className="text-xs px-1.5 py-0.5 rounded"
+              style={{
+                backgroundColor: 'var(--tag-bg)',
+                color: 'var(--tag-text)',
+                border: '1px solid var(--tag-border)',
+              }}
+            >
               {lastOutput.toolName}
             </code>
           )}
           {isError && (
-            <span className="text-xs text-red-400">(Error)</span>
+            <span className="text-xs" style={{ color: 'var(--tool-result-error-text)' }}>(Error)</span>
           )}
         </div>
-        <pre className="text-sm text-claude-dark-text whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto">
+        <pre
+          className="text-sm whitespace-pre-wrap break-words font-mono max-h-96 overflow-y-auto"
+          style={{ color: 'var(--color-text)' }}
+        >
           {searchQuery ? (
             <SearchHighlight text={lastOutput.toolResult} itemId={aiGroupId} />
           ) : (

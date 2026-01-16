@@ -213,41 +213,62 @@ interface DiffLineRowProps {
 }
 
 const DiffLineRow: React.FC<DiffLineRowProps> = ({ line }) => {
-  const styles: Record<DiffLine['type'], { bg: string; text: string; border: string; prefix: string }> = {
-    removed: {
-      bg: 'bg-red-900/20',
-      text: 'text-red-400',
-      border: 'border-l-red-500',
-      prefix: '-'
-    },
-    added: {
-      bg: 'bg-green-900/20',
-      text: 'text-green-400',
-      border: 'border-l-green-500',
-      prefix: '+'
-    },
-    context: {
-      bg: '',
-      text: 'text-zinc-400',
-      border: 'border-l-transparent',
-      prefix: ' '
+  // Theme-aware styles using CSS variables
+  const getStyles = (type: DiffLine['type']) => {
+    switch (type) {
+      case 'removed':
+        return {
+          bg: 'var(--diff-removed-bg)',
+          text: 'var(--diff-removed-text)',
+          border: 'var(--diff-removed-border)',
+          prefix: '-'
+        };
+      case 'added':
+        return {
+          bg: 'var(--diff-added-bg)',
+          text: 'var(--diff-added-text)',
+          border: 'var(--diff-added-border)',
+          prefix: '+'
+        };
+      default:
+        return {
+          bg: 'transparent',
+          text: 'var(--color-text-secondary)',
+          border: 'transparent',
+          prefix: ' '
+        };
     }
   };
 
-  const style = styles[line.type];
+  const style = getStyles(line.type);
 
   return (
-    <div className={`flex min-w-full ${style.bg} border-l-[3px] ${style.border}`}>
+    <div
+      className="flex min-w-full"
+      style={{
+        backgroundColor: style.bg,
+        borderLeft: `3px solid ${style.border}`,
+      }}
+    >
       {/* Line number */}
-      <span className="w-10 flex-shrink-0 px-2 text-right text-zinc-600 select-none bg-inherit">
+      <span
+        className="w-10 flex-shrink-0 px-2 text-right select-none"
+        style={{ color: 'var(--code-line-number)' }}
+      >
         {line.lineNumber}
       </span>
       {/* Prefix */}
-      <span className={`w-6 flex-shrink-0 ${style.text} select-none bg-inherit`}>
+      <span
+        className="w-6 flex-shrink-0 select-none"
+        style={{ color: style.text }}
+      >
         {style.prefix}
       </span>
       {/* Content */}
-      <span className={`flex-1 ${style.text} whitespace-pre bg-inherit`}>
+      <span
+        className="flex-1 whitespace-pre"
+        style={{ color: style.text }}
+      >
         {line.content || ' '}
       </span>
     </div>
@@ -312,38 +333,60 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const displayName = getFileName(fileName);
 
   return (
-    <div className="border border-zinc-700/30 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50">
-        <Pencil className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-        <span className="text-sm text-zinc-200 font-mono truncate">
+    <div
+      className="rounded-lg shadow-sm overflow-hidden"
+      style={{
+        backgroundColor: 'var(--code-bg)',
+        border: '1px solid var(--code-border)',
+      }}
+    >
+      {/* Header - matches CodeBlockViewer style */}
+      <div
+        className="flex items-center gap-2 px-3 py-2"
+        style={{
+          backgroundColor: 'var(--code-header-bg)',
+          borderBottom: '1px solid var(--code-border)',
+        }}
+      >
+        <Pencil className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }} />
+        <span
+          className="text-sm font-mono truncate"
+          style={{ color: 'var(--code-filename)' }}
+        >
           {displayName}
         </span>
-        <span className="text-xs text-zinc-600 px-1.5 py-0.5 bg-zinc-800 rounded flex-shrink-0">
+        <span
+          className="text-xs px-1.5 py-0.5 rounded flex-shrink-0"
+          style={{
+            backgroundColor: 'var(--tag-bg)',
+            color: 'var(--tag-text)',
+            border: '1px solid var(--tag-border)',
+          }}
+        >
           {detectedLanguage}
         </span>
-        <span className="text-zinc-500 text-sm">-</span>
+        <span style={{ color: 'var(--color-text-muted)' }}>-</span>
         <span className="text-sm flex-shrink-0">
           {stats.added > 0 && (
-            <span className="text-green-400 mr-1">+{stats.added}</span>
+            <span className="mr-1" style={{ color: 'var(--diff-added-text)' }}>+{stats.added}</span>
           )}
           {stats.removed > 0 && (
-            <span className="text-red-400">-{stats.removed}</span>
+            <span style={{ color: 'var(--diff-removed-text)' }}>-{stats.removed}</span>
           )}
           {stats.added === 0 && stats.removed === 0 && (
-            <span className="text-zinc-500">Changed</span>
+            <span style={{ color: 'var(--color-text-muted)' }}>Changed</span>
           )}
         </span>
       </div>
 
       {/* Diff content */}
-      <div className={`bg-zinc-900 font-mono text-xs overflow-x-auto ${isExpanded ? 'max-h-96 overflow-y-auto' : ''}`}>
+      <div className={`font-mono text-xs overflow-x-auto ${isExpanded ? 'max-h-96 overflow-y-auto' : ''}`}>
         <div className="inline-block min-w-full">
           {displayLines.map((line, index) => (
             <DiffLineRow key={index} line={line} />
           ))}
           {diffLines.length === 0 && (
-            <div className="px-3 py-2 text-zinc-500 italic">
+            <div className="px-3 py-2 italic" style={{ color: 'var(--color-text-muted)' }}>
               No changes detected
             </div>
           )}
@@ -354,9 +397,12 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       {needsCollapse && (
         <button
           onClick={handleToggle}
-          className="w-full flex items-center justify-center gap-1.5 py-2 px-3
-                     bg-zinc-800/30 hover:bg-zinc-800/50 border-t border-zinc-700/30
-                     text-sm text-zinc-400 hover:text-zinc-300 transition-colors"
+          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-sm transition-colors hover:opacity-80"
+          style={{
+            backgroundColor: 'var(--code-header-bg)',
+            borderTop: '1px solid var(--code-border)',
+            color: 'var(--color-text-muted)',
+          }}
         >
           {isExpanded ? (
             <>

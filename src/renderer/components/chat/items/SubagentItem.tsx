@@ -55,11 +55,20 @@ interface ExecutionTraceProps {
   highlightToolUseId?: string;
   /** Force expand all nested content (code blocks, diffs) for search results */
   forceExpandContent?: boolean;
+  /** Item ID to expand for search results (e.g., "subagent-thinking-0") */
+  searchExpandedItemId?: string | null;
 }
 
-const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highlightToolUseId, forceExpandContent }) => {
+const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highlightToolUseId, forceExpandContent, searchExpandedItemId }) => {
   // Local state for inline item expansion
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+  // Effect to auto-expand when search navigates to an item in this trace
+  useEffect(() => {
+    if (searchExpandedItemId) {
+      setExpandedItemId(searchExpandedItemId);
+    }
+  }, [searchExpandedItemId]);
 
   const handleItemClick = (itemId: string) => {
     setExpandedItemId(prev => prev === itemId ? null : itemId);
@@ -67,7 +76,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highl
 
   if (!items || items.length === 0) {
     return (
-      <div className="px-3 py-2 text-sm text-zinc-500 italic">
+      <div className="px-3 py-2 text-sm italic" style={{ color: 'var(--color-text-muted)' }}>
         No execution items to display
       </div>
     );
@@ -156,7 +165,7 @@ const ExecutionTrace: React.FC<ExecutionTraceProps> = ({ items, aiGroupId, highl
           case 'subagent': {
             // Nested subagents - shouldn't happen typically but handle gracefully
             return (
-              <div key={`nested-subagent-${index}`} className="px-2 py-1 text-xs text-zinc-500 italic">
+              <div key={`nested-subagent-${index}`} className="px-2 py-1 text-xs italic" style={{ color: 'var(--color-text-muted)' }}>
                 Nested subagent: {item.subagent.description || item.subagent.id}
               </div>
             );
@@ -244,6 +253,7 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
 
   // Check if this subagent should show trace for search results
   const searchExpandedSubagentIds = useStore((s) => s.searchExpandedSubagentIds);
+  const searchCurrentSubagentItemId = useStore((s) => s.searchCurrentSubagentItemId);
   const shouldExpandForSearch = searchExpandedSubagentIds.has(subagent.id);
 
   // State to control trace visibility (separate from isExpanded which controls header)
@@ -269,18 +279,34 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
       {/* Clickable Header */}
       <div
         onClick={onClick}
-        className="flex items-center gap-2 py-1.5 px-2 hover:bg-zinc-800/50 rounded cursor-pointer border-l-4 border-blue-500/60 bg-zinc-900/30"
+        className="flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer border-l-4"
+        style={{
+          backgroundColor: 'var(--tool-result-success-bg)',
+          borderLeftColor: 'var(--badge-info-bg)',
+        }}
       >
-        <Bot className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-        <span className="inline-block px-2 py-0.5 rounded-full bg-zinc-800 text-xs font-medium text-cyan-300">{subagentType}</span>
+        <Bot className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--badge-info-bg)' }} />
+        <span
+          className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+          style={{
+            backgroundColor: 'var(--tag-bg)',
+            color: 'var(--badge-info-bg)',
+            border: '1px solid var(--tag-border)',
+          }}
+        >
+          {subagentType}
+        </span>
         {modelInfo && (
           <span className={`text-xs ${getModelColorClass(modelInfo.family)}`}>
             {modelInfo.name}
           </span>
         )}
-        <span className="text-zinc-600">→</span>
-        <span className="text-zinc-500 truncate flex-1">{truncatedDesc}</span>
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 flex-shrink-0"></span>
+        <span style={{ color: 'var(--color-text-muted)' }}>→</span>
+        <span className="truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>{truncatedDesc}</span>
+        <span
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: 'var(--tool-result-success-text)' }}
+        ></span>
         {lastUsage && (
           <TokenUsageDisplay
             inputTokens={lastUsage.input_tokens}
@@ -292,13 +318,19 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
             size="sm"
           />
         )}
-        <span className="text-zinc-600 text-xs flex-shrink-0">{formatDuration(subagent.durationMs)}</span>
-        <ChevronRight className={`w-3 h-3 text-zinc-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+        <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{formatDuration(subagent.durationMs)}</span>
+        <ChevronRight
+          className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+          style={{ color: 'var(--color-text-muted)' }}
+        />
       </div>
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="border-l-2 border-zinc-600 pl-4 ml-2 mt-1 mb-2">
+        <div
+          className="border-l-2 pl-4 ml-2 mt-1 mb-2"
+          style={{ borderLeftColor: 'var(--color-border)' }}
+        >
           {/* Full description with markdown support */}
           <div className="mb-3">
             <MarkdownViewer
@@ -308,20 +340,26 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
           </div>
 
           {/* Metrics card */}
-          <div className="bg-zinc-900/50 rounded-lg p-3 border border-zinc-800/50 mb-3">
-            <div className="text-xs text-zinc-500 mb-2 font-medium">Metrics</div>
+          <div
+            className="rounded-lg p-3 mb-3"
+            style={{
+              backgroundColor: 'var(--code-bg)',
+              border: '1px solid var(--code-border)',
+            }}
+          >
+            <div className="text-xs mb-2 font-medium" style={{ color: 'var(--color-text-muted)' }}>Metrics</div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-zinc-500">Type:</span>{' '}
-                <span className="text-zinc-300">{subagentType}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>Type:</span>{' '}
+                <span style={{ color: 'var(--color-text-secondary)' }}>{subagentType}</span>
               </div>
               <div>
-                <span className="text-zinc-500">Duration:</span>{' '}
-                <span className="text-zinc-300">{formatDuration(subagent.durationMs)}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>Duration:</span>{' '}
+                <span style={{ color: 'var(--color-text-secondary)' }}>{formatDuration(subagent.durationMs)}</span>
               </div>
               {lastUsage && (
                 <div className="col-span-2">
-                  <span className="text-zinc-500">Tokens:</span>{' '}
+                  <span style={{ color: 'var(--color-text-muted)' }}>Tokens:</span>{' '}
                   <TokenUsageDisplay
                     inputTokens={lastUsage.input_tokens}
                     outputTokens={lastUsage.output_tokens}
@@ -335,13 +373,13 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
               )}
               {modelInfo && (
                 <div>
-                  <span className="text-zinc-500">Model:</span>{' '}
+                  <span style={{ color: 'var(--color-text-muted)' }}>Model:</span>{' '}
                   <span className={getModelColorClass(modelInfo.family)}>{modelInfo.name}</span>
                 </div>
               )}
               <div>
-                <span className="text-zinc-500">ID:</span>{' '}
-                <span className="text-zinc-300 font-mono">{subagent.id || 'N/A'}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>ID:</span>{' '}
+                <span className="font-mono" style={{ color: 'var(--color-text-secondary)' }}>{subagent.id || 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -351,23 +389,30 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
             <div className="mt-3">
               <div
                 onClick={() => setShowTrace(!showTrace)}
-                className="flex items-center gap-2 cursor-pointer text-xs text-zinc-400 hover:text-zinc-300 mb-2"
+                className="flex items-center gap-2 cursor-pointer text-xs mb-2 hover:opacity-80"
+                style={{ color: 'var(--color-text-secondary)' }}
               >
                 {showTrace ? (
                   <ChevronDown className="w-3 h-3" />
                 ) : (
                   <ChevronRight className="w-3 h-3" />
                 )}
-                <Code className="w-3.5 h-3.5 text-zinc-500" />
+                <Code className="w-3.5 h-3.5" style={{ color: 'var(--color-text-muted)' }} />
                 <span>Execution trace</span>
-                <span className="text-zinc-600">·</span>
-                <span className="text-zinc-500">{itemsSummary}</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>·</span>
+                <span style={{ color: 'var(--color-text-muted)' }}>{itemsSummary}</span>
               </div>
 
               {/* Execution trace content */}
               {showTrace && (
-                <div className="pl-2 bg-zinc-900/50 border border-zinc-800/40 rounded-lg py-2">
-                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} highlightToolUseId={highlightToolUseId} forceExpandContent={shouldExpandForSearch} />
+                <div
+                  className="pl-2 rounded-lg py-2"
+                  style={{
+                    backgroundColor: 'var(--code-bg)',
+                    border: '1px solid var(--code-border)',
+                  }}
+                >
+                  <ExecutionTrace items={displayItems} aiGroupId={aiGroupId} highlightToolUseId={highlightToolUseId} forceExpandContent={shouldExpandForSearch} searchExpandedItemId={shouldExpandForSearch ? searchCurrentSubagentItemId : null} />
                 </div>
               )}
             </div>

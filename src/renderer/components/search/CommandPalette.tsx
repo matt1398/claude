@@ -129,7 +129,15 @@ export function CommandPalette() {
     return (
       <>
         <span>{before}</span>
-        <mark className="bg-yellow-500/30 text-yellow-200 rounded px-0.5">{match}</mark>
+        <mark
+          className="rounded px-0.5"
+          style={{
+            backgroundColor: 'var(--highlight-bg)',
+            color: 'var(--highlight-text)',
+          }}
+        >
+          {match}
+        </mark>
         <span>{after}</span>
       </>
     );
