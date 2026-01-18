@@ -334,6 +334,28 @@ export function ChatHistory(): JSX.Element {
     return () => clearTimeout(timeoutId);
   }, [currentSearchIndex]);
 
+  // Register ref for user/system chat items (must be before early returns)
+  const registerChatItemRef = useCallback((groupId: string) => {
+    return (el: HTMLElement | null) => {
+      if (el) {
+        chatItemRefs.current.set(groupId, el);
+      } else {
+        chatItemRefs.current.delete(groupId);
+      }
+    };
+  }, []);
+
+  // Determine highlight style based on source (search vs error vs navigation)
+  const isSearchHighlight = searchHighlightQuery !== null;
+
+  // Get highlight class based on type: search (yellow), navigation (blue), error (red)
+  const getHighlightClass = useCallback((isHighlighted: boolean): string => {
+    if (!isHighlighted) return 'ring-0 bg-transparent';
+    if (isSearchHighlight) return 'ring-2 ring-yellow-500/30 bg-yellow-500/5';
+    if (isNavigationHighlight) return 'ring-2 ring-blue-500/30 bg-blue-500/5';
+    return 'ring-2 ring-red-500/30 bg-red-500/5'; // error highlight
+  }, [isSearchHighlight, isNavigationHighlight]);
+
   // Loading state
   if (conversationLoading) {
     return (
@@ -371,28 +393,6 @@ export function ChatHistory(): JSX.Element {
       </div>
     );
   }
-
-  // Register ref for user/system chat items
-  const registerChatItemRef = useCallback((groupId: string) => {
-    return (el: HTMLElement | null) => {
-      if (el) {
-        chatItemRefs.current.set(groupId, el);
-      } else {
-        chatItemRefs.current.delete(groupId);
-      }
-    };
-  }, []);
-
-  // Determine highlight style based on source (search vs error vs navigation)
-  const isSearchHighlight = searchHighlightQuery !== null;
-
-  // Get highlight class based on type: search (yellow), navigation (blue), error (red)
-  const getHighlightClass = (isHighlighted: boolean): string => {
-    if (!isHighlighted) return 'ring-0 bg-transparent';
-    if (isSearchHighlight) return 'ring-2 ring-yellow-500/30 bg-yellow-500/5';
-    if (isNavigationHighlight) return 'ring-2 ring-blue-500/30 bg-blue-500/5';
-    return 'ring-2 ring-red-500/30 bg-red-500/5'; // error highlight
-  };
 
   // Render conversation as flat list of items
   const renderItem = (item: ChatItem): JSX.Element | null => {

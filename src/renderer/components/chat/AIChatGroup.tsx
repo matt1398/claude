@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Bot, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import type { AIGroup, EnhancedAIGroup, AIGroupDisplayItem } from '../../types/groups';
@@ -87,8 +87,11 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     return null;
   }, [aiGroup.responses]);
 
-  // Local state for expansion - auto-expand if contains error or search result
-  const [isExpanded, setIsExpanded] = useState(containsHighlightedError || shouldExpandForSearch);
+  // Get expansion state from store (persists across refreshes)
+  const expandedAIGroupIds = useStore((s) => s.expandedAIGroupIds);
+  const toggleAIGroupExpansion = useStore((s) => s.toggleAIGroupExpansion);
+  // Auto-expand if contains error or search result, or if manually expanded
+  const isExpanded = expandedAIGroupIds.has(aiGroup.id) || containsHighlightedError || shouldExpandForSearch;
 
   // Helper function to find the item ID containing the highlighted tool
   const findHighlightedItemId = (toolUseId: string): string | null => {
@@ -118,10 +121,10 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     [expandedDisplayItemIds, aiGroup.id]
   );
 
-  // Effect to auto-expand when highlightToolUseId changes
+  // Effect to auto-expand display item when highlightToolUseId changes
+  // Note: AI group expansion is handled by derived isExpanded (containsHighlightedError)
   useEffect(() => {
     if (highlightToolUseId && containsHighlightedError) {
-      setIsExpanded(true);
       // Find and expand the item containing the error
       const itemId = findHighlightedItemId(highlightToolUseId);
       if (itemId && !expandedItemIds.has(itemId)) {
@@ -130,11 +133,10 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     }
   }, [highlightToolUseId, containsHighlightedError, aiGroup.id, expandedItemIds, toggleDisplayItemExpansion]);
 
-  // Effect to auto-expand when search navigates to this group
+  // Effect to auto-expand display items when search navigates to this group
+  // Note: AI group expansion is handled by derived isExpanded (shouldExpandForSearch)
   useEffect(() => {
     if (shouldExpandForSearch) {
-      setIsExpanded(true);
-
       // Expand the specific display item containing the search result
       if (searchCurrentDisplayItemId && !expandedItemIds.has(searchCurrentDisplayItemId)) {
         toggleDisplayItemExpansion(aiGroup.id, searchCurrentDisplayItemId);
@@ -172,7 +174,7 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
           {/* Clickable toggle area */}
           <div
             className="flex items-center gap-2 cursor-pointer group flex-1"
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => toggleAIGroupExpansion(aiGroup.id)}
           >
             <Bot className="w-4 h-4" style={{ color: 'var(--chat-ai-icon)' }} />
             <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Claude</span>

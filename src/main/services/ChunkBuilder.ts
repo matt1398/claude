@@ -44,13 +44,12 @@ import { calculateMetrics } from '../utils/jsonl';
 import { fillTimelineGaps } from '../utils/timelineGapFilling';
 import { calculateStepContext } from '../utils/contextAccumulator';
 
-let chunkIdCounter = 0;
-
 /**
- * Generate a unique chunk ID.
+ * Generate a stable chunk ID based on message UUID.
+ * Using the message UUID ensures IDs are consistent across re-parses.
  */
-function generateChunkId(): string {
-  return `chunk-${++chunkIdCounter}`;
+function generateStableChunkId(prefix: string, message: ParsedMessage): string {
+  return `${prefix}-${message.uuid}`;
 }
 
 export class ChunkBuilder {
@@ -194,7 +193,7 @@ export class ChunkBuilder {
    * Build a UserChunk from a user message.
    */
   private buildUserChunk(message: ParsedMessage): EnhancedUserChunk {
-    const id = generateChunkId();
+    const id = generateStableChunkId('user', message);
     const metrics = calculateMetrics([message]);
 
     return {
@@ -213,7 +212,7 @@ export class ChunkBuilder {
    * Build a SystemChunk from a command output message.
    */
   private buildSystemChunk(message: ParsedMessage): EnhancedSystemChunk {
-    const id = generateChunkId();
+    const id = generateStableChunkId('system', message);
     const commandOutput = this.extractCommandOutput(message);
     const metrics = calculateMetrics([message]);
 
@@ -234,7 +233,7 @@ export class ChunkBuilder {
    * Build a CompactChunk from a compact summary message.
    */
   private buildCompactChunk(message: ParsedMessage): EnhancedCompactChunk {
-    const id = generateChunkId();
+    const id = generateStableChunkId('compact', message);
     const metrics = calculateMetrics([message]);
 
     return {
@@ -273,7 +272,10 @@ export class ChunkBuilder {
     subagents: Process[],
     allMessages: ParsedMessage[]
   ): EnhancedAIChunk {
-    const id = generateChunkId();
+    // Use first response message's UUID for stable ID
+    const id = responses.length > 0
+      ? generateStableChunkId('ai', responses[0])
+      : `ai-empty-${Date.now()}`; // Fallback for edge case
     const { startTime, endTime, durationMs } = this.calculateAIChunkTiming(responses);
     const metrics = calculateMetrics(responses);
     const toolExecutions = this.buildToolExecutions(responses);

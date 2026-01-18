@@ -87,6 +87,8 @@ interface AppState {
   expandedStepIds: Set<string>;
   /** Display item expansion state per AI group - persists across refreshes */
   expandedDisplayItemIds: Map<string, Set<string>>;
+  /** AI group expanded/collapsed state - persists across refreshes */
+  expandedAIGroupIds: Set<string>;
 
   // Chart mode
   ganttChartMode: 'timeline' | 'context';
@@ -147,6 +149,8 @@ interface AppState {
   fetchSessionDetail: (projectId: string, sessionId: string) => Promise<void>;
   /** Refresh session without loading states or UI resets - for real-time updates */
   refreshSessionInPlace: (projectId: string, sessionId: string) => Promise<void>;
+  /** Refresh sessions list without loading states - for real-time updates */
+  refreshSessionsInPlace: (projectId: string) => Promise<void>;
   clearSelection: () => void;
 
   // Drill-down actions
@@ -162,6 +166,8 @@ interface AppState {
   toggleDisplayItemExpansion: (aiGroupId: string, itemId: string) => void;
   /** Get expanded display item IDs for an AI group */
   getExpandedDisplayItemIds: (aiGroupId: string) => Set<string>;
+  /** Toggle AI group expanded/collapsed state */
+  toggleAIGroupExpansion: (aiGroupId: string) => void;
   setGanttChartMode: (mode: 'timeline' | 'context') => void;
 
   // Detail popover actions
@@ -246,6 +252,7 @@ export const useStore = create<AppState>((set, get) => ({
   aiGroupExpansionLevels: new Map(),
   expandedStepIds: new Set(),
   expandedDisplayItemIds: new Map(),
+  expandedAIGroupIds: new Set(),
 
   ganttChartMode: 'timeline',
 
@@ -674,6 +681,36 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Refresh sessions list in place without loading states
+  // Used for real-time updates when new sessions are added
+  refreshSessionsInPlace: async (projectId: string) => {
+    const currentState = get();
+
+    // Only refresh if viewing this project
+    if (currentState.selectedProjectId !== projectId) {
+      return;
+    }
+
+    try {
+      console.log('[Store] refreshSessionsInPlace: Fetching updated sessions for', projectId);
+      const result = await window.electronAPI.getSessionsPaginated(projectId, null, 20);
+
+      // Update sessions without loading state
+      set({
+        sessions: result.sessions,
+        sessionsCursor: result.nextCursor,
+        sessionsHasMore: result.hasMore,
+        sessionsTotalCount: result.totalCount,
+        // Don't touch sessionsLoading - keep it as-is
+      });
+
+      console.log('[Store] refreshSessionsInPlace: Updated with', result.sessions.length, 'sessions');
+    } catch (error) {
+      console.error('[Store] refreshSessionsInPlace error:', error);
+      // Don't set error state - this is a background refresh
+    }
+  },
+
   // Clear all selections
   clearSelection: () => {
     set({
@@ -844,6 +881,18 @@ export const useStore = create<AppState>((set, get) => ({
   getExpandedDisplayItemIds: (aiGroupId: string) => {
     const state = get();
     return state.expandedDisplayItemIds.get(aiGroupId) || new Set<string>();
+  },
+
+  // Toggle AI group expanded/collapsed state
+  toggleAIGroupExpansion: (aiGroupId: string) => {
+    const state = get();
+    const newSet = new Set(state.expandedAIGroupIds);
+    if (newSet.has(aiGroupId)) {
+      newSet.delete(aiGroupId);
+    } else {
+      newSet.add(aiGroupId);
+    }
+    set({ expandedAIGroupIds: newSet });
   },
 
   // Set Gantt chart display mode
@@ -1456,31 +1505,40 @@ export function initializeNotificationListeners(): () => void {
     }
   }
 
-  // Listen for file changes to auto-refresh current session
+  // Listen for file changes to auto-refresh current session and detect new sessions
   if (window.electronAPI.onFileChange) {
     const cleanup = window.electronAPI.onFileChange((event) => {
-      // Only handle session file changes (not subagent files, not deletions)
-      if (
-        event.type !== 'change' ||
-        event.isSubagent ||
-        !event.projectId ||
-        !event.sessionId
-      ) {
+      // Skip unlink events
+      if (event.type === 'unlink') {
         return;
       }
 
       const state = useStore.getState();
 
-      // Check if the changed session is currently being viewed
-      const activeTab = state.getActiveTab();
-      const isViewingSession =
-        (state.selectedSessionId === event.sessionId) ||
-        (activeTab?.type === 'session' && activeTab.sessionId === event.sessionId);
+      // Handle new session added to a project (main session files only)
+      if (event.type === 'add' && !event.isSubagent && event.projectId) {
+        // Refresh sessions list if viewing this project (without loading state)
+        if (state.selectedProjectId === event.projectId) {
+          console.log('[Store] New session added, refreshing sessions list:', event.sessionId);
+          state.refreshSessionsInPlace(event.projectId);
+        }
+        return;
+      }
 
-      if (isViewingSession) {
-        console.log('[Store] File changed, refreshing session in place:', event.sessionId);
-        // Use refreshSessionInPlace to avoid flickering and preserve UI state
-        state.refreshSessionInPlace(event.projectId, event.sessionId);
+      // Handle session or subagent content change
+      if (event.type === 'change' && event.projectId && event.sessionId) {
+        // Check if the changed session is currently being viewed
+        const activeTab = state.getActiveTab();
+        const isViewingSession =
+          (state.selectedSessionId === event.sessionId) ||
+          (activeTab?.type === 'session' && activeTab.sessionId === event.sessionId);
+
+        if (isViewingSession) {
+          const changeType = event.isSubagent ? 'Subagent file' : 'Session file';
+          console.log(`[Store] ${changeType} changed, refreshing session in place:`, event.sessionId);
+          // Use refreshSessionInPlace to avoid flickering and preserve UI state
+          state.refreshSessionInPlace(event.projectId, event.sessionId);
+        }
       }
     });
     if (typeof cleanup === 'function') {
