@@ -479,6 +479,7 @@ export function ChatHistory(): JSX.Element {
             <SessionClaudeMdPanel
               injections={allInjections}
               onClose={() => setShowClaudeMdPanel(false)}
+              projectRoot={sessionDetail?.session?.projectPath}
             />
           </div>
         )}

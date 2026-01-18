@@ -477,6 +477,69 @@ export const useStore = create<AppState>((set, get) => ({
 
         claudeMdStats = processSessionClaudeMd(conversation.items, projectRoot, claudeMdTokenData);
         console.log('[Store] Computed CLAUDE.md stats for', claudeMdStats.size, 'AI groups');
+
+        // Fetch real tokens for directory CLAUDE.md files
+        // Directory injections are detected dynamically from Read tool paths and aren't in pre-fetched tokenData
+        if (claudeMdStats && claudeMdStats.size > 0) {
+          // Collect all unique directory injection paths
+          const directoryPaths = new Set<string>();
+          for (const stats of claudeMdStats.values()) {
+            for (const injection of stats.accumulatedInjections) {
+              if (injection.source === 'directory') {
+                directoryPaths.add(injection.path);
+              }
+            }
+          }
+
+          // Fetch real tokens for each directory path
+          if (directoryPaths.size > 0) {
+            console.log('[Store] Fetching real tokens for', directoryPaths.size, 'directory CLAUDE.md files');
+            const directoryTokens = new Map<string, number>();
+
+            for (const fullPath of directoryPaths) {
+              try {
+                // readDirectoryClaudeMd expects a directory path, not the full CLAUDE.md path
+                // Strip the /CLAUDE.md suffix to get the directory
+                const dirPath = fullPath.replace(/\/CLAUDE\.md$/, '');
+                const fileInfo = await window.electronAPI.readDirectoryClaudeMd(dirPath);
+                if (fileInfo.exists && fileInfo.estimatedTokens > 0) {
+                  directoryTokens.set(fullPath, fileInfo.estimatedTokens);
+                }
+              } catch (err) {
+                console.error('[Store] Failed to read directory CLAUDE.md:', fullPath, err);
+              }
+            }
+
+            // Update stats with real tokens
+            if (directoryTokens.size > 0) {
+              console.log('[Store] Updating', directoryTokens.size, 'directory injections with real token counts');
+              for (const [, stats] of claudeMdStats.entries()) {
+                let updated = false;
+
+                // Update injections with real tokens
+                for (const injection of stats.accumulatedInjections) {
+                  if (injection.source === 'directory' && directoryTokens.has(injection.path)) {
+                    injection.estimatedTokens = directoryTokens.get(injection.path)!;
+                    updated = true;
+                  }
+                }
+                for (const injection of stats.newInjections) {
+                  if (injection.source === 'directory' && directoryTokens.has(injection.path)) {
+                    injection.estimatedTokens = directoryTokens.get(injection.path)!;
+                    updated = true;
+                  }
+                }
+
+                // Recalculate totals if any were updated
+                if (updated) {
+                  stats.totalEstimatedTokens = stats.accumulatedInjections.reduce(
+                    (sum, inj) => sum + inj.estimatedTokens, 0
+                  );
+                }
+              }
+            }
+          }
+        }
       }
 
       // Update tab label if this session is open in a tab

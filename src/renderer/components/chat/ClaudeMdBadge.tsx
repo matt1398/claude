@@ -152,10 +152,10 @@ function DirectoryTreeNode({ node, depth = 0 }: { node: TreeNode; depth?: number
   const [expanded, setExpanded] = useState(true);
   const indent = depth * 12; // pixels per level
 
-  // Sort children: directories first, then files
+  // Sort children: files first (like tree command), then directories
   const sortedChildren = Array.from(node.children.values()).sort((a, b) => {
-    if (a.isFile && !b.isFile) return 1;
-    if (!a.isFile && b.isFile) return -1;
+    if (a.isFile && !b.isFile) return -1;  // files BEFORE directories
+    if (!a.isFile && b.isFile) return 1;
     return a.name.localeCompare(b.name);
   });
 

@@ -10,6 +10,7 @@ import type { ClaudeMdInjection, ClaudeMdSource } from '../../types/claudeMd';
 interface SessionClaudeMdPanelProps {
   injections: ClaudeMdInjection[];
   onClose?: () => void;
+  projectRoot?: string;
 }
 
 // Group category definitions
@@ -52,6 +53,116 @@ function formatTokens(tokens: number): string {
     return `${(tokens / 1000).toFixed(1)}k`;
   }
   return tokens.toString();
+}
+
+/**
+ * Tree node structure for directory hierarchy display.
+ */
+interface TreeNode {
+  name: string;
+  path: string;
+  isFile: boolean; // true if this is CLAUDE.md
+  tokens?: number;
+  children: Map<string, TreeNode>;
+}
+
+/**
+ * Build a tree structure from a list of directory CLAUDE.md injections.
+ */
+function buildDirectoryTree(injections: ClaudeMdInjection[], projectRoot: string): TreeNode {
+  const root: TreeNode = { name: '', path: '', isFile: false, children: new Map() };
+
+  for (const injection of injections) {
+    // Get relative path
+    let relativePath = injection.path;
+    if (projectRoot && relativePath.startsWith(projectRoot)) {
+      relativePath = relativePath.slice(projectRoot.length);
+      if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+    }
+
+    // Split into parts and build tree
+    const parts = relativePath.split('/');
+    let current = root;
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+
+      if (!current.children.has(part)) {
+        current.children.set(part, {
+          name: part,
+          path: isLast ? injection.path : '',
+          isFile: isLast && part === 'CLAUDE.md',
+          tokens: isLast ? injection.estimatedTokens : undefined,
+          children: new Map(),
+        });
+      }
+      current = current.children.get(part)!;
+    }
+  }
+
+  return root;
+}
+
+/**
+ * Recursive component to render a tree node.
+ */
+function DirectoryTreeNode({ node, depth = 0 }: { node: TreeNode; depth?: number }): React.ReactElement | null {
+  const [expanded, setExpanded] = useState(true);
+  const indent = depth * 12; // pixels per level
+
+  // Sort children: files first (like tree command), then directories
+  const sortedChildren = Array.from(node.children.values()).sort((a, b) => {
+    if (a.isFile && !b.isFile) return -1;  // files BEFORE directories
+    if (!a.isFile && b.isFile) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  if (node.isFile) {
+    // Render CLAUDE.md file
+    return (
+      <div
+        style={{ paddingLeft: `${indent}px` }}
+        className="flex items-center gap-1 text-xs py-0.5"
+        title={node.path}
+      >
+        <span style={{ color: 'var(--color-text-secondary)' }}>{node.name}</span>
+        <span style={{ color: 'var(--color-text-muted)' }}>
+          (~{formatTokens(node.tokens || 0)})
+        </span>
+      </div>
+    );
+  }
+
+  // Render directory
+  return (
+    <div>
+      {node.name && (
+        <div
+          style={{ paddingLeft: `${indent}px` }}
+          className="flex items-center gap-1 text-xs py-0.5 cursor-pointer hover:opacity-80"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
+        >
+          <ChevronRight
+            className={`w-3 h-3 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`}
+            style={{ color: 'var(--color-text-muted)' }}
+          />
+          <span style={{ color: 'var(--color-text-muted)' }}>{node.name}/</span>
+        </div>
+      )}
+      {expanded &&
+        sortedChildren.map((child) => (
+          <DirectoryTreeNode
+            key={child.name}
+            node={child}
+            depth={node.name ? depth + 1 : depth}
+          />
+        ))}
+    </div>
+  );
 }
 
 /**
@@ -207,6 +318,7 @@ function InjectionItem({ injection }: InjectionItemProps): React.ReactElement {
 export function SessionClaudeMdPanel({
   injections,
   onClose,
+  projectRoot,
 }: SessionClaudeMdPanelProps): React.ReactElement {
   // Track which sections are expanded (all expanded by default)
   const [expandedSections, setExpandedSections] = useState<Set<GroupCategory>>(
@@ -326,9 +438,13 @@ export function SessionClaudeMdPanel({
                 isExpanded={expandedSections.has(category)}
                 onToggle={() => toggleSection(category)}
               >
-                {group.map((injection) => (
-                  <InjectionItem key={injection.id} injection={injection} />
-                ))}
+                {category === 'directory' ? (
+                  <DirectoryTreeNode node={buildDirectoryTree(group, projectRoot || '')} />
+                ) : (
+                  group.map((injection) => (
+                    <InjectionItem key={injection.id} injection={injection} />
+                  ))
+                )}
               </CollapsibleSection>
             );
           })
