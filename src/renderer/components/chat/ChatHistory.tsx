@@ -8,6 +8,7 @@ import { CompactBoundary } from './CompactBoundary';
 import { SessionClaudeMdPanel } from './SessionClaudeMdPanel';
 import { useStore } from '../../store';
 import { useVisibleAIGroup } from '../../hooks/useVisibleAIGroup';
+import { useAutoScrollBottom } from '../../hooks/useAutoScrollBottom';
 
 /**
  * Find the AI group that contains or is closest to the given error timestamp.
@@ -141,6 +142,12 @@ export function ChatHistory(): JSX.Element {
     onVisibleChange: (aiGroupId) => setVisibleAIGroup(aiGroupId),
     threshold: 0.5,
   });
+
+  // Auto-scroll to bottom when new content is added (if user was at bottom)
+  const { scrollContainerRef } = useAutoScrollBottom(
+    [conversation?.items.length], // Trigger when items count changes
+    { threshold: 150, smoothDuration: 300 }
+  );
 
   // Callback to register AI group refs (combines with visibility hook)
   const registerAIGroupRefCombined = useCallback((groupId: string) => {
@@ -481,8 +488,8 @@ export function ChatHistory(): JSX.Element {
 
       {/* Main content area with optional sidebar */}
       <div className="flex-1 overflow-hidden flex">
-        {/* Chat content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* Chat content - with auto-scroll to bottom support */}
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
           <div className="max-w-5xl mx-auto px-6 py-8">
             <div className="space-y-6">
               {conversation.items.map(renderItem)}
