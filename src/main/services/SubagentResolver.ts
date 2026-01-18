@@ -78,6 +78,12 @@ export class SubagentResolver {
         return null;
       }
 
+      // Filter out warmup subagents - these are pre-warming agents spawned by Claude Code
+      // that have "Warmup" as the first user message and should not be displayed
+      if (this.isWarmupSubagent(messages)) {
+        return null;
+      }
+
       // Extract agent ID from filename (agent-{id}.jsonl)
       const filename = path.basename(filePath);
       const agentId = filename.replace(/^agent-/, '').replace(/\.jsonl$/, '');
@@ -102,6 +108,23 @@ export class SubagentResolver {
       console.error(`Error parsing subagent file ${filePath}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Check if this is a warmup subagent that should be filtered out.
+   * Warmup subagents are pre-warming agents spawned by Claude Code that have:
+   * - First user message with content exactly "Warmup"
+   * - isSidechain: true (all subagents have this)
+   */
+  private isWarmupSubagent(messages: ParsedMessage[]): boolean {
+    // Find the first user message
+    const firstUserMessage = messages.find(m => m.type === 'user');
+    if (!firstUserMessage) {
+      return false;
+    }
+
+    // Check if content is exactly "Warmup" (string, not array)
+    return firstUserMessage.content === 'Warmup';
   }
 
   /**

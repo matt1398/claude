@@ -582,7 +582,8 @@ export class ProjectScanner {
 
     try {
       // Scan OLD structure: {projectId}/agent-*.jsonl
-      const oldFiles = await this.getProjectRootSubagentFiles(projectId);
+      // Must filter by sessionId since all sessions share the same project root
+      const oldFiles = await this.getProjectRootSubagentFiles(projectId, sessionId);
       allFiles.push(...oldFiles);
     } catch (error) {
       console.error(
@@ -596,9 +597,12 @@ export class ProjectScanner {
 
   /**
    * Gets subagent files from project root (OLD structure).
-   * Scans {projectId}/agent-*.jsonl files.
+   * Scans {projectId}/agent-*.jsonl files and filters by sessionId.
+   *
+   * In the OLD structure, all subagent files are in the project root,
+   * so we must read each file's first line to check if it belongs to the session.
    */
-  private async getProjectRootSubagentFiles(projectId: string): Promise<string[]> {
+  private async getProjectRootSubagentFiles(projectId: string, sessionId: string): Promise<string[]> {
     try {
       const projectPath = path.join(this.projectsDir, projectId);
 
@@ -607,12 +611,45 @@ export class ProjectScanner {
       }
 
       const files = fs.readdirSync(projectPath);
-      return files
+      const agentFiles = files
         .filter((f) => f.startsWith('agent-') && f.endsWith('.jsonl'))
         .map((f) => path.join(projectPath, f));
+
+      // Filter files by checking if their sessionId matches
+      const matchingFiles: string[] = [];
+      for (const filePath of agentFiles) {
+        if (await this.subagentBelongsToSession(filePath, sessionId)) {
+          matchingFiles.push(filePath);
+        }
+      }
+
+      return matchingFiles;
     } catch (error) {
       console.error(`Error reading project root for subagent files:`, error);
       return [];
+    }
+  }
+
+  /**
+   * Checks if a subagent file belongs to a specific session by reading its first line.
+   * Subagent files have a sessionId field that points to the parent session.
+   */
+  private async subagentBelongsToSession(filePath: string, sessionId: string): Promise<boolean> {
+    try {
+      // Read just the first line to check sessionId
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const firstNewline = content.indexOf('\n');
+      const firstLine = firstNewline > 0 ? content.slice(0, firstNewline) : content;
+
+      if (!firstLine.trim()) {
+        return false;
+      }
+
+      const entry = JSON.parse(firstLine);
+      return entry.sessionId === sessionId;
+    } catch (error) {
+      // If we can't read or parse the file, don't include it
+      return false;
     }
   }
 
