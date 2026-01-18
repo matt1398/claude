@@ -31,6 +31,12 @@ const electronAPI: ElectronAPI = {
     projectPath: string
   ) => ipcRenderer.invoke('validate-mentions', mentions, projectPath),
 
+  // CLAUDE.md reading methods
+  readClaudeMdFiles: (projectRoot: string) =>
+    ipcRenderer.invoke('read-claude-md-files', projectRoot),
+  readDirectoryClaudeMd: (dirPath: string) =>
+    ipcRenderer.invoke('read-directory-claude-md', dirPath),
+
   // Notifications API
   notifications: {
     get: (options?: { limit?: number; offset?: number }) =>

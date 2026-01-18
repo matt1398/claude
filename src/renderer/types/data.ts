@@ -618,6 +618,16 @@ export interface SessionAPI {
   scrollToLine: (sessionId: string, lineNumber: number) => Promise<void>;
 }
 
+/**
+ * CLAUDE.md file information returned from reading operations.
+ */
+export interface ClaudeMdFileInfo {
+  path: string;
+  exists: boolean;
+  charCount: number;
+  estimatedTokens: number;
+}
+
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>;
   getSessions: (projectId: string) => Promise<Session[]>;
@@ -638,6 +648,10 @@ export interface ElectronAPI {
     mentions: { type: 'skill' | 'path'; value: string }[],
     projectPath: string
   ) => Promise<Record<string, boolean>>;
+
+  // CLAUDE.md reading methods
+  readClaudeMdFiles: (projectRoot: string) => Promise<Record<string, ClaudeMdFileInfo>>;
+  readDirectoryClaudeMd: (dirPath: string) => Promise<ClaudeMdFileInfo>;
 
   // Notifications API
   notifications: NotificationsAPI;

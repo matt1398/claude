@@ -9,7 +9,7 @@
 
 import type { ClaudeMdSource, ClaudeMdInjection, ClaudeMdStats } from '../types/claudeMd';
 import type { ChatItem, AIGroup, UserGroup } from '../types/groups';
-import type { SemanticStep } from '../types/data';
+import type { SemanticStep, ClaudeMdFileInfo } from '../types/data';
 
 // =============================================================================
 // Constants
@@ -43,33 +43,11 @@ export function generateInjectionId(path: string): string {
 }
 
 /**
- * Create a human-readable display name for a CLAUDE.md injection.
+ * Create a display name for a CLAUDE.md injection.
+ * Returns the raw path for transparency.
  */
-export function getDisplayName(path: string, source: ClaudeMdSource): string {
-  switch (source) {
-    case 'enterprise':
-      return 'Enterprise Config';
-    case 'user-memory':
-      return 'User Memory (~/.claude)';
-    case 'project-memory':
-      return 'Project Memory';
-    case 'project-rules':
-      return 'Project Rules';
-    case 'project-local':
-      return 'Project Local';
-    case 'directory': {
-      // Extract the directory name for directory-specific CLAUDE.md
-      const parts = path.split('/');
-      const mdIndex = parts.findIndex(p => p === CLAUDE_MD_FILENAME);
-      if (mdIndex > 0) {
-        const dirName = parts[mdIndex - 1];
-        return `Directory: ${dirName}`;
-      }
-      return `Directory: ${path}`;
-    }
-    default:
-      return path;
-  }
+export function getDisplayName(path: string, _source: ClaudeMdSource): string {
+  return path;
 }
 
 /**
@@ -211,85 +189,110 @@ export function detectClaudeMdFromFilePath(
 /**
  * Create injection entries for global CLAUDE.md sources.
  * These are injected at the start of every session.
+ * Only includes files that actually exist (tokens > 0).
  */
 export function createGlobalInjections(
   projectRoot: string,
-  aiGroupId: string
+  aiGroupId: string,
+  tokenData?: Record<string, ClaudeMdFileInfo>
 ): ClaudeMdInjection[] {
   const injections: ClaudeMdInjection[] = [];
 
+  // Helper to get token count from tokenData or fallback to default
+  const getTokens = (key: string): number => {
+    return tokenData?.[key]?.estimatedTokens ?? DEFAULT_ESTIMATED_TOKENS;
+  };
+
   // 1. Enterprise config
   const enterprisePath = '/Library/Application Support/ClaudeCode/CLAUDE.md';
-  injections.push({
-    id: generateInjectionId(enterprisePath),
-    path: enterprisePath,
-    source: 'enterprise',
-    displayName: getDisplayName(enterprisePath, 'enterprise'),
-    isGlobal: true,
-    estimatedTokens: DEFAULT_ESTIMATED_TOKENS,
-    firstSeenInGroup: aiGroupId,
-  });
+  const enterpriseTokens = getTokens('enterprise');
+  if (enterpriseTokens > 0) {
+    injections.push({
+      id: generateInjectionId(enterprisePath),
+      path: enterprisePath,
+      source: 'enterprise',
+      displayName: getDisplayName(enterprisePath, 'enterprise'),
+      isGlobal: true,
+      estimatedTokens: enterpriseTokens,
+      firstSeenInGroup: aiGroupId,
+    });
+  }
 
   // 2. User memory (~/.claude/CLAUDE.md)
   // Use ~ for display purposes (renderer cannot access Node.js process.env)
   const userMemoryPath = '~/.claude/CLAUDE.md';
-  injections.push({
-    id: generateInjectionId(userMemoryPath),
-    path: userMemoryPath,
-    source: 'user-memory',
-    displayName: getDisplayName(userMemoryPath, 'user-memory'),
-    isGlobal: true,
-    estimatedTokens: DEFAULT_ESTIMATED_TOKENS,
-    firstSeenInGroup: aiGroupId,
-  });
+  const userTokens = getTokens('user');
+  if (userTokens > 0) {
+    injections.push({
+      id: generateInjectionId(userMemoryPath),
+      path: userMemoryPath,
+      source: 'user-memory',
+      displayName: getDisplayName(userMemoryPath, 'user-memory'),
+      isGlobal: true,
+      estimatedTokens: userTokens,
+      firstSeenInGroup: aiGroupId,
+    });
+  }
 
   // 3. Project memory - could be at root or in .claude folder
   const projectMemoryPath = `${projectRoot}/CLAUDE.md`;
   const projectMemoryAltPath = `${projectRoot}/.claude/CLAUDE.md`;
   // Add the main project CLAUDE.md
-  injections.push({
-    id: generateInjectionId(projectMemoryPath),
-    path: projectMemoryPath,
-    source: 'project-memory',
-    displayName: getDisplayName(projectMemoryPath, 'project-memory'),
-    isGlobal: true,
-    estimatedTokens: DEFAULT_ESTIMATED_TOKENS,
-    firstSeenInGroup: aiGroupId,
-  });
+  const projectTokens = getTokens('project');
+  if (projectTokens > 0) {
+    injections.push({
+      id: generateInjectionId(projectMemoryPath),
+      path: projectMemoryPath,
+      source: 'project-memory',
+      displayName: getDisplayName(projectMemoryPath, 'project-memory'),
+      isGlobal: true,
+      estimatedTokens: projectTokens,
+      firstSeenInGroup: aiGroupId,
+    });
+  }
   // Also add the .claude folder variant
-  injections.push({
-    id: generateInjectionId(projectMemoryAltPath),
-    path: projectMemoryAltPath,
-    source: 'project-memory',
-    displayName: `${getDisplayName(projectMemoryAltPath, 'project-memory')} (.claude)`,
-    isGlobal: true,
-    estimatedTokens: DEFAULT_ESTIMATED_TOKENS,
-    firstSeenInGroup: aiGroupId,
-  });
+  const projectAltTokens = getTokens('project-alt');
+  if (projectAltTokens > 0) {
+    injections.push({
+      id: generateInjectionId(projectMemoryAltPath),
+      path: projectMemoryAltPath,
+      source: 'project-memory',
+      displayName: getDisplayName(projectMemoryAltPath, 'project-memory'),
+      isGlobal: true,
+      estimatedTokens: projectAltTokens,
+      firstSeenInGroup: aiGroupId,
+    });
+  }
 
   // 4. Project rules (*.md files in .claude/rules/)
   const projectRulesPath = `${projectRoot}/.claude/rules/*.md`;
-  injections.push({
-    id: generateInjectionId(projectRulesPath),
-    path: projectRulesPath,
-    source: 'project-rules',
-    displayName: getDisplayName(projectRulesPath, 'project-rules'),
-    isGlobal: true,
-    estimatedTokens: DEFAULT_ESTIMATED_TOKENS,
-    firstSeenInGroup: aiGroupId,
-  });
+  const projectRulesTokens = getTokens('project-rules');
+  if (projectRulesTokens > 0) {
+    injections.push({
+      id: generateInjectionId(projectRulesPath),
+      path: projectRulesPath,
+      source: 'project-rules',
+      displayName: getDisplayName(projectRulesPath, 'project-rules'),
+      isGlobal: true,
+      estimatedTokens: projectRulesTokens,
+      firstSeenInGroup: aiGroupId,
+    });
+  }
 
   // 5. Project local
   const projectLocalPath = `${projectRoot}/CLAUDE.local.md`;
-  injections.push({
-    id: generateInjectionId(projectLocalPath),
-    path: projectLocalPath,
-    source: 'project-local',
-    displayName: getDisplayName(projectLocalPath, 'project-local'),
-    isGlobal: true,
-    estimatedTokens: DEFAULT_ESTIMATED_TOKENS,
-    firstSeenInGroup: aiGroupId,
-  });
+  const projectLocalTokens = getTokens('project-local');
+  if (projectLocalTokens > 0) {
+    injections.push({
+      id: generateInjectionId(projectLocalPath),
+      path: projectLocalPath,
+      source: 'project-local',
+      displayName: getDisplayName(projectLocalPath, 'project-local'),
+      isGlobal: true,
+      estimatedTokens: projectLocalTokens,
+      firstSeenInGroup: aiGroupId,
+    });
+  }
 
   return injections;
 }
@@ -326,6 +329,7 @@ export interface ComputeClaudeMdStatsParams {
   previousInjections: ClaudeMdInjection[];
   projectRoot: string;
   contextTokens: number;
+  tokenData?: Record<string, ClaudeMdFileInfo>;
 }
 
 /**
@@ -339,6 +343,7 @@ export function computeClaudeMdStats(params: ComputeClaudeMdStatsParams): Claude
     previousInjections,
     projectRoot,
     contextTokens,
+    tokenData,
   } = params;
 
   const newInjections: ClaudeMdInjection[] = [];
@@ -346,7 +351,7 @@ export function computeClaudeMdStats(params: ComputeClaudeMdStatsParams): Claude
 
   // For the first group, add global injections
   if (isFirstGroup) {
-    const globalInjections = createGlobalInjections(projectRoot, aiGroup.id);
+    const globalInjections = createGlobalInjections(projectRoot, aiGroup.id, tokenData);
     for (const injection of globalInjections) {
       if (!previousPaths.has(injection.path)) {
         newInjections.push(injection);
@@ -427,7 +432,8 @@ export function computeClaudeMdStats(params: ComputeClaudeMdStatsParams): Claude
  */
 export function processSessionClaudeMd(
   items: ChatItem[],
-  projectRoot: string
+  projectRoot: string,
+  tokenData?: Record<string, ClaudeMdFileInfo>
 ): Map<string, ClaudeMdStats> {
   const statsMap = new Map<string, ClaudeMdStats>();
   let accumulatedInjections: ClaudeMdInjection[] = [];
@@ -457,6 +463,7 @@ export function processSessionClaudeMd(
         previousInjections: accumulatedInjections,
         projectRoot,
         contextTokens,
+        tokenData,
       });
 
       // Store stats

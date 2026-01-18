@@ -40,6 +40,7 @@ import { SessionParser } from '../services/SessionParser';
 import { SubagentResolver } from '../services/SubagentResolver';
 import { ChunkBuilder } from '../services/ChunkBuilder';
 import { DataCache } from '../services/DataCache';
+import { readAllClaudeMdFiles, readDirectoryClaudeMd, ClaudeMdFileInfo } from '../services/ClaudeMdReader';
 import { registerNotificationHandlers, removeNotificationHandlers } from './notifications';
 import { registerConfigHandlers, removeConfigHandlers } from './config';
 
@@ -96,6 +97,10 @@ function registerHandlers(): void {
 
   // Deep link handler for session scrolling (from notifications)
   ipcMain.handle('session:scrollToLine', handleScrollToLine);
+
+  // CLAUDE.md handlers
+  ipcMain.handle('read-claude-md-files', handleReadClaudeMdFiles);
+  ipcMain.handle('read-directory-claude-md', handleReadDirectoryClaudeMd);
 
   // Register notification and config handlers
   registerNotificationHandlers(ipcMain);
@@ -525,6 +530,60 @@ async function handleScrollToLine(
 }
 
 // =============================================================================
+// CLAUDE.md Handlers
+// =============================================================================
+
+/**
+ * Handler for 'read-claude-md-files' IPC call.
+ * Reads all global CLAUDE.md files for a project.
+ */
+async function handleReadClaudeMdFiles(
+  _event: IpcMainInvokeEvent,
+  projectRoot: string
+): Promise<Record<string, ClaudeMdFileInfo>> {
+  try {
+    console.log(`IPC: read-claude-md-files for project ${projectRoot}`);
+
+    const result = readAllClaudeMdFiles(projectRoot);
+    // Convert Map to object for IPC serialization
+    const files: Record<string, ClaudeMdFileInfo> = {};
+    result.files.forEach((info, key) => {
+      files[key] = info;
+    });
+
+    console.log(`IPC: Found ${Object.keys(files).length} CLAUDE.md locations`);
+    return files;
+  } catch (error) {
+    console.error(`IPC: Error in read-claude-md-files:`, error);
+    return {};
+  }
+}
+
+/**
+ * Handler for 'read-directory-claude-md' IPC call.
+ * Reads a specific directory's CLAUDE.md file.
+ */
+async function handleReadDirectoryClaudeMd(
+  _event: IpcMainInvokeEvent,
+  dirPath: string
+): Promise<ClaudeMdFileInfo> {
+  try {
+    console.log(`IPC: read-directory-claude-md for ${dirPath}`);
+
+    const info = readDirectoryClaudeMd(dirPath);
+    return info;
+  } catch (error) {
+    console.error(`IPC: Error in read-directory-claude-md:`, error);
+    return {
+      path: dirPath,
+      exists: false,
+      charCount: 0,
+      estimatedTokens: 0,
+    };
+  }
+}
+
+// =============================================================================
 // Cleanup
 // =============================================================================
 
@@ -546,6 +605,8 @@ export function removeIpcHandlers(): void {
   ipcMain.removeHandler('validate-path');
   ipcMain.removeHandler('validate-mentions');
   ipcMain.removeHandler('session:scrollToLine');
+  ipcMain.removeHandler('read-claude-md-files');
+  ipcMain.removeHandler('read-directory-claude-md');
 
   // Remove notification and config handlers
   removeNotificationHandlers(ipcMain);

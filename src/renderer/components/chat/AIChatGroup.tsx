@@ -53,6 +53,10 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   const sessionClaudeMdStats = useStore((s) => s.sessionClaudeMdStats);
   const claudeMdStats = sessionClaudeMdStats?.get(aiGroup.id);
 
+  // Get projectPath from sessionDetail for relative path display in ClaudeMdBadge
+  const sessionDetail = useStore((s) => s.sessionDetail);
+  const projectRoot = sessionDetail?.session?.projectPath;
+
   // Enhance the AI group to get display-ready data
   const enhanced: EnhancedAIGroup = enhanceAIGroup(aiGroup, claudeMdStats);
 
@@ -204,7 +208,7 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
 
           {/* CLAUDE.md injection badge */}
           {enhanced.claudeMdStats && enhanced.claudeMdStats.newCount > 0 && (
-            <ClaudeMdBadge stats={enhanced.claudeMdStats} />
+            <ClaudeMdBadge stats={enhanced.claudeMdStats} projectRoot={projectRoot} />
           )}
 
           {/* Token usage - show last assistant message's usage (context window snapshot) */}

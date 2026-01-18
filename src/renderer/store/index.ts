@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConfig } from '../types/data';
+import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConfig, ClaudeMdFileInfo } from '../types/data';
 import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
 import { transformChunksToConversation } from '../utils/groupTransformer';
 import { findLastOutput } from '../utils/aiGroupEnhancer';
@@ -467,7 +467,15 @@ export const useStore = create<AppState>((set, get) => ({
       const projectRoot = detail?.session?.projectPath || '';
       let claudeMdStats: Map<string, ClaudeMdStats> | null = null;
       if (conversation?.items) {
-        claudeMdStats = processSessionClaudeMd(conversation.items, projectRoot);
+        // Fetch real CLAUDE.md token data
+        let claudeMdTokenData: Record<string, ClaudeMdFileInfo> = {};
+        try {
+          claudeMdTokenData = await window.electronAPI.readClaudeMdFiles(projectRoot);
+        } catch (err) {
+          console.error('[Store] Failed to read CLAUDE.md files:', err);
+        }
+
+        claudeMdStats = processSessionClaudeMd(conversation.items, projectRoot, claudeMdTokenData);
         console.log('[Store] Computed CLAUDE.md stats for', claudeMdStats.size, 'AI groups');
       }
 

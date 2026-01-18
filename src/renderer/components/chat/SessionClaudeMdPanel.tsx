@@ -38,46 +38,8 @@ const GROUP_CONFIG: Record<GroupCategory, GroupConfig> = {
 // Order of groups for display
 const GROUP_ORDER: GroupCategory[] = ['global', 'project', 'directory'];
 
-/**
- * Get the icon/prefix indicator for a source type.
- */
-function getSourceIndicator(source: ClaudeMdSource): string {
-  switch (source) {
-    case 'enterprise':
-      return '[E]';
-    case 'user-memory':
-      return '[U]';
-    case 'project-memory':
-      return '[P]';
-    case 'project-rules':
-      return '[R]';
-    case 'project-local':
-      return '[L]';
-    case 'directory':
-      return '[D]';
-    default:
-      return '[?]';
-  }
-}
-
-/**
- * Get color style for source indicator based on source type.
- */
-function getSourceColor(source: ClaudeMdSource): string {
-  switch (source) {
-    case 'enterprise':
-    case 'user-memory':
-      return 'rgba(96, 165, 250, 0.9)'; // Blue for global
-    case 'project-memory':
-    case 'project-rules':
-    case 'project-local':
-      return 'rgba(251, 191, 36, 0.9)'; // Amber for project
-    case 'directory':
-      return 'rgba(74, 222, 128, 0.9)'; // Green for directory
-    default:
-      return 'var(--color-text-muted)';
-  }
-}
+// NOTE: Source indicators ([E], [U], etc.) removed - paths shown without prefixes
+// Grouping by category (Global, Project, Directory) is preserved via GROUP_CONFIG
 
 /**
  * Format token count for display.
@@ -209,22 +171,13 @@ interface InjectionItemProps {
 function InjectionItem({ injection }: InjectionItemProps): React.ReactElement {
   return (
     <div
-      className="flex items-start gap-2 py-1.5 px-2 rounded transition-colors"
+      className="py-1.5 px-2 rounded transition-colors"
       style={{
         backgroundColor: 'transparent',
       }}
     >
-      {/* Source indicator */}
-      <span
-        className="text-xs font-mono flex-shrink-0 mt-0.5"
-        style={{ color: getSourceColor(injection.source) }}
-        title={injection.source}
-      >
-        {getSourceIndicator(injection.source)}
-      </span>
-
       {/* Display name and details */}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0">
         <div
           className="text-xs truncate"
           style={{ color: 'var(--color-text-secondary)' }}

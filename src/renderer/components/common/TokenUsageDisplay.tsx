@@ -197,7 +197,7 @@ export function TokenUsageDisplay({
                   <span className="font-medium tabular-nums italic" style={{ color: 'var(--color-text-secondary)' }}>
                     ~{formatTokens(claudeMdStats.totalEstimatedTokens)}
                     <span className="text-xs ml-1 opacity-60">
-                      ({claudeMdStats.percentageOfContext.toFixed(1)}%)
+                      ({totalTokens > 0 ? ((claudeMdStats.totalEstimatedTokens / totalTokens) * 100).toFixed(1) : '0.0'}%)
                     </span>
                   </span>
                 </div>
