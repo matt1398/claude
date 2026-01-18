@@ -162,9 +162,6 @@ export function TokenUsageDisplay({
               </span>
             </div>
 
-            {/* Divider */}
-            <div className="my-1" style={{ borderTop: '1px solid var(--color-border-subtle)' }} />
-
             {/* Output Tokens */}
             <div className="flex justify-between items-center">
               <span style={{ color: 'var(--color-text-muted)' }}>Output Tokens</span>
@@ -172,6 +169,29 @@ export function TokenUsageDisplay({
                 {formatTokensDetailed(outputTokens)}
               </span>
             </div>
+
+            {/* Divider before Total */}
+            <div className="my-1" style={{ borderTop: '1px solid var(--color-border-subtle)' }} />
+
+            {/* Total */}
+            <div className="flex justify-between items-center">
+              <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>Total</span>
+              <span className="font-medium tabular-nums" style={{ color: 'var(--color-text-primary, var(--color-text))' }}>
+                {formatTokensDetailed(totalTokens)}
+              </span>
+            </div>
+
+            {/* CLAUDE.md Breakdown - shown as part of total, not additional */}
+            {claudeMdStats && (
+              <div className="flex justify-between items-center text-[10px] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                <span className="italic whitespace-nowrap">
+                  incl. CLAUDE.md ×{claudeMdStats.accumulatedCount}
+                </span>
+                <span className="tabular-nums">
+                  {totalTokens > 0 ? ((claudeMdStats.totalEstimatedTokens / totalTokens) * 100).toFixed(1) : '0.0'}%
+                </span>
+              </div>
+            )}
 
             {/* Model Info (optional) */}
             {modelName && (
@@ -181,24 +201,6 @@ export function TokenUsageDisplay({
                   <span style={{ color: 'var(--color-text-muted)' }}>Model</span>
                   <span className={`font-medium ${modelColorClass}`} style={!modelColorClass ? { color: 'var(--color-text-secondary)' } : {}}>
                     {modelName}
-                  </span>
-                </div>
-              </>
-            )}
-
-            {/* CLAUDE.md Stats (optional) */}
-            {claudeMdStats && (
-              <>
-                <div className="my-1" style={{ borderTop: '1px dashed var(--color-border-subtle, var(--color-border))' }} />
-                <div className="flex justify-between items-center opacity-75">
-                  <span style={{ color: 'var(--color-text-muted)' }}>
-                    CLAUDE.md ({claudeMdStats.accumulatedCount})
-                  </span>
-                  <span className="font-medium tabular-nums italic" style={{ color: 'var(--color-text-secondary)' }}>
-                    ~{formatTokens(claudeMdStats.totalEstimatedTokens)}
-                    <span className="text-xs ml-1 opacity-60">
-                      ({totalTokens > 0 ? ((claudeMdStats.totalEstimatedTokens / totalTokens) * 100).toFixed(1) : '0.0'}%)
-                    </span>
                   </span>
                 </div>
               </>

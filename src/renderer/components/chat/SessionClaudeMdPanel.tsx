@@ -11,6 +11,7 @@ interface SessionClaudeMdPanelProps {
   injections: ClaudeMdInjection[];
   onClose?: () => void;
   projectRoot?: string;
+  onNavigateToTurn?: (turnIndex: number) => void;
 }
 
 // Group category definitions
@@ -43,6 +44,26 @@ const GROUP_ORDER: GroupCategory[] = ['global', 'project', 'directory'];
 // Grouping by category (Global, Project, Directory) is preserved via GROUP_CONFIG
 
 /**
+ * Extract turn index from groupId. Returns -1 if invalid.
+ * "ai-0" → 0, "ai-1" → 1, etc.
+ */
+function parseTurnIndex(groupId: string): number {
+  const match = groupId.match(/^ai-(\d+)$/);
+  if (!match) return -1;
+  return parseInt(match[1], 10);
+}
+
+/**
+ * Format the firstSeenInGroup value into a human-readable string.
+ * Converts "ai-0" → "Turn 1", "ai-1" → "Turn 2", etc.
+ */
+function formatFirstSeen(groupId: string): string {
+  const turnIndex = parseTurnIndex(groupId);
+  if (turnIndex < 0) return groupId;
+  return `Turn ${turnIndex + 1}`;
+}
+
+/**
  * Format token count for display.
  */
 function formatTokens(tokens: number): string {
@@ -63,6 +84,7 @@ interface TreeNode {
   path: string;
   isFile: boolean; // true if this is CLAUDE.md
   tokens?: number;
+  firstSeenInGroup?: string;
   children: Map<string, TreeNode>;
 }
 
@@ -94,6 +116,7 @@ function buildDirectoryTree(injections: ClaudeMdInjection[], projectRoot: string
           path: isLast ? injection.path : '',
           isFile: isLast && part === 'CLAUDE.md',
           tokens: isLast ? injection.estimatedTokens : undefined,
+          firstSeenInGroup: isLast ? injection.firstSeenInGroup : undefined,
           children: new Map(),
         });
       }
@@ -107,7 +130,15 @@ function buildDirectoryTree(injections: ClaudeMdInjection[], projectRoot: string
 /**
  * Recursive component to render a tree node.
  */
-function DirectoryTreeNode({ node, depth = 0 }: { node: TreeNode; depth?: number }): React.ReactElement | null {
+function DirectoryTreeNode({
+  node,
+  depth = 0,
+  onNavigateToTurn,
+}: {
+  node: TreeNode;
+  depth?: number;
+  onNavigateToTurn?: (turnIndex: number) => void;
+}): React.ReactElement | null {
   const [expanded, setExpanded] = useState(true);
   const indent = depth * 12; // pixels per level
 
@@ -119,6 +150,9 @@ function DirectoryTreeNode({ node, depth = 0 }: { node: TreeNode; depth?: number
   });
 
   if (node.isFile) {
+    const turnIndex = node.firstSeenInGroup ? parseTurnIndex(node.firstSeenInGroup) : -1;
+    const isClickable = onNavigateToTurn && turnIndex >= 0;
+
     // Render CLAUDE.md file
     return (
       <div
@@ -130,6 +164,15 @@ function DirectoryTreeNode({ node, depth = 0 }: { node: TreeNode; depth?: number
         <span style={{ color: 'var(--color-text-muted)' }}>
           (~{formatTokens(node.tokens || 0)})
         </span>
+        {node.firstSeenInGroup && (
+          <span
+            className={isClickable ? 'cursor-pointer hover:underline' : ''}
+            style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
+            onClick={isClickable ? () => onNavigateToTurn(turnIndex) : undefined}
+          >
+            @{formatFirstSeen(node.firstSeenInGroup)}
+          </span>
+        )}
       </div>
     );
   }
@@ -159,6 +202,7 @@ function DirectoryTreeNode({ node, depth = 0 }: { node: TreeNode; depth?: number
             key={child.name}
             node={child}
             depth={node.name ? depth + 1 : depth}
+            onNavigateToTurn={onNavigateToTurn}
           />
         ))}
     </div>
@@ -277,9 +321,13 @@ function CollapsibleSection({
  */
 interface InjectionItemProps {
   injection: ClaudeMdInjection;
+  onNavigateToTurn?: (turnIndex: number) => void;
 }
 
-function InjectionItem({ injection }: InjectionItemProps): React.ReactElement {
+function InjectionItem({ injection, onNavigateToTurn }: InjectionItemProps): React.ReactElement {
+  const turnIndex = parseTurnIndex(injection.firstSeenInGroup);
+  const isClickable = onNavigateToTurn && turnIndex >= 0;
+
   return (
     <div
       className="py-1.5 px-2 rounded transition-colors"
@@ -304,10 +352,11 @@ function InjectionItem({ injection }: InjectionItemProps): React.ReactElement {
             ~{formatTokens(injection.estimatedTokens)} tokens
           </span>
           <span
-            className="text-xs"
+            className={`text-xs ${isClickable ? 'cursor-pointer hover:underline' : ''}`}
             style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
+            onClick={isClickable ? () => onNavigateToTurn(turnIndex) : undefined}
           >
-            First: {injection.firstSeenInGroup}
+            @{formatFirstSeen(injection.firstSeenInGroup)}
           </span>
         </div>
       </div>
@@ -319,6 +368,7 @@ export function SessionClaudeMdPanel({
   injections,
   onClose,
   projectRoot,
+  onNavigateToTurn,
 }: SessionClaudeMdPanelProps): React.ReactElement {
   // Track which sections are expanded (all expanded by default)
   const [expandedSections, setExpandedSections] = useState<Set<GroupCategory>>(
@@ -439,10 +489,17 @@ export function SessionClaudeMdPanel({
                 onToggle={() => toggleSection(category)}
               >
                 {category === 'directory' ? (
-                  <DirectoryTreeNode node={buildDirectoryTree(group, projectRoot || '')} />
+                  <DirectoryTreeNode
+                    node={buildDirectoryTree(group, projectRoot || '')}
+                    onNavigateToTurn={onNavigateToTurn}
+                  />
                 ) : (
                   group.map((injection) => (
-                    <InjectionItem key={injection.id} injection={injection} />
+                    <InjectionItem
+                      key={injection.id}
+                      injection={injection}
+                      onNavigateToTurn={onNavigateToTurn}
+                    />
                   ))
                 )}
               </CollapsibleSection>

@@ -122,6 +122,9 @@ export function ChatHistory(): JSX.Element {
   // State for search highlight (temporarily activates search highlighting)
   const [searchHighlightQuery, setSearchHighlightQuery] = useState<string | null>(null);
 
+  // State for navigation highlight (blue, used for Turn navigation from CLAUDE.md panel)
+  const [isNavigationHighlight, setIsNavigationHighlight] = useState(false);
+
   // Track whether we've processed the current deep link
   const processedDeepLinkRef = useRef<string | null>(null);
 
@@ -164,6 +167,22 @@ export function ChatHistory(): JSX.Element {
       clearTabDeepLink(activeTabId);
     }
   }, [activeTabId, clearTabDeepLink]);
+
+  // Handler to navigate to a specific turn (AI group) from CLAUDE.md panel
+  const handleNavigateToTurn = useCallback((turnIndex: number) => {
+    const groupId = `ai-${turnIndex}`;
+    const element = aiGroupRefs.current.get(groupId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedGroupId(groupId);
+      setIsNavigationHighlight(true);
+      // Clear highlight after 2 seconds
+      setTimeout(() => {
+        setHighlightedGroupId(null);
+        setIsNavigationHighlight(false);
+      }, 2000);
+    }
+  }, []);
 
   // Calculate target AI group ID based on error timestamp
   const targetGroupId = useMemo(() => {
@@ -356,8 +375,16 @@ export function ChatHistory(): JSX.Element {
     };
   }, []);
 
-  // Determine highlight style based on source (search vs error)
+  // Determine highlight style based on source (search vs error vs navigation)
   const isSearchHighlight = searchHighlightQuery !== null;
+
+  // Get highlight class based on type: search (yellow), navigation (blue), error (red)
+  const getHighlightClass = (isHighlighted: boolean): string => {
+    if (!isHighlighted) return 'ring-0 bg-transparent';
+    if (isSearchHighlight) return 'ring-2 ring-yellow-500/30 bg-yellow-500/5';
+    if (isNavigationHighlight) return 'ring-2 ring-blue-500/30 bg-blue-500/5';
+    return 'ring-2 ring-red-500/30 bg-red-500/5'; // error highlight
+  };
 
   // Render conversation as flat list of items
   const renderItem = (item: ChatItem): JSX.Element | null => {
@@ -368,13 +395,7 @@ export function ChatHistory(): JSX.Element {
           <div
             ref={registerChatItemRef(item.group.id)}
             key={item.group.id}
-            className={`rounded-lg transition-all duration-[3000ms] ease-out ${
-              isHighlighted
-                ? isSearchHighlight
-                  ? 'ring-2 ring-yellow-500/30 bg-yellow-500/5'
-                  : 'ring-2 ring-red-500/30 bg-red-500/5'
-                : 'ring-0 bg-transparent'
-            }`}
+            className={`rounded-lg transition-all duration-[3000ms] ease-out ${getHighlightClass(isHighlighted)}`}
           >
             <UserChatGroup userGroup={item.group} />
           </div>
@@ -386,13 +407,7 @@ export function ChatHistory(): JSX.Element {
           <div
             ref={registerChatItemRef(item.group.id)}
             key={item.group.id}
-            className={`rounded-lg transition-all duration-[3000ms] ease-out ${
-              isHighlighted
-                ? isSearchHighlight
-                  ? 'ring-2 ring-yellow-500/30 bg-yellow-500/5'
-                  : 'ring-2 ring-red-500/30 bg-red-500/5'
-                : 'ring-0 bg-transparent'
-            }`}
+            className={`rounded-lg transition-all duration-[3000ms] ease-out ${getHighlightClass(isHighlighted)}`}
           >
             <SystemChatGroup systemGroup={item.group} />
           </div>
@@ -401,18 +416,12 @@ export function ChatHistory(): JSX.Element {
       case 'ai': {
         const isHighlighted = highlightedGroupId === item.group.id;
         // Only pass highlightToolUseId if this is the highlighted group (for errors)
-        const toolUseIdForGroup = isHighlighted && !isSearchHighlight ? highlightToolUseId : undefined;
+        const toolUseIdForGroup = isHighlighted && !isSearchHighlight && !isNavigationHighlight ? highlightToolUseId : undefined;
         return (
           <div
             ref={registerAIGroupRefCombined(item.group.id)}
             key={item.group.id}
-            className={`rounded-lg transition-all duration-[3000ms] ease-out ${
-              isHighlighted
-                ? isSearchHighlight
-                  ? 'ring-2 ring-yellow-500/30 bg-yellow-500/5'
-                  : 'ring-2 ring-red-500/30 bg-red-500/5'
-                : 'ring-0 bg-transparent'
-            }`}
+            className={`rounded-lg transition-all duration-[3000ms] ease-out ${getHighlightClass(isHighlighted)}`}
           >
             <AIChatGroup aiGroup={item.group as AIGroup} highlightToolUseId={toolUseIdForGroup} />
           </div>
@@ -480,6 +489,7 @@ export function ChatHistory(): JSX.Element {
               injections={allInjections}
               onClose={() => setShowClaudeMdPanel(false)}
               projectRoot={sessionDetail?.session?.projectPath}
+              onNavigateToTurn={handleNavigateToTurn}
             />
           </div>
         )}
