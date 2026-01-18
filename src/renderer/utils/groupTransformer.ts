@@ -70,11 +70,13 @@ const THINKING_PREVIEW_LENGTH = 100;
  *
  * @param chunks - Array of enhanced chunks with semantic steps
  * @param _subagents - Array of all subagents in the session (unused, processes come from chunks)
+ * @param isOngoing - Whether the session is still in progress (marks last AI group)
  * @returns SessionConversation structure for chat-style rendering
  */
 export function transformChunksToConversation(
   chunks: EnhancedChunk[],
-  _subagents: Process[]
+  _subagents: Process[],
+  isOngoing: boolean = false
 ): SessionConversation {
   if (!chunks || chunks.length === 0) {
     return {
@@ -133,7 +135,19 @@ export function transformChunksToConversation(
     }
   }
 
-  console.log('[groupTransformer] Final counts:', { userCount, systemCount, aiCount, compactCount });
+  // If session is ongoing, mark the last AI group
+  if (isOngoing && aiCount > 0) {
+    // Find the last AI item and mark it as ongoing
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (items[i].type === 'ai') {
+        (items[i].group as any).isOngoing = true;
+        (items[i].group as any).status = 'in_progress';
+        break;
+      }
+    }
+  }
+
+  console.log('[groupTransformer] Final counts:', { userCount, systemCount, aiCount, compactCount, isOngoing });
 
   return {
     sessionId: chunks[0]?.id || 'unknown',

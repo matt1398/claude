@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Bot, ChevronRight, ChevronDown, Code } from 'lucide-react';
+import { Bot, ChevronRight, ChevronDown, Code, Loader2, CheckCircle2 } from 'lucide-react';
 import type { SemanticStep, Process, ContentBlock } from '../../../types/data';
 import type { AIGroupDisplayItem } from '../../../types/groups';
 import { ThinkingItem } from './ThinkingItem';
@@ -276,21 +276,28 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
 
   return (
     <div>
-      {/* Clickable Header */}
+      {/* Clickable Header - different styles for ongoing vs completed */}
       <div
         onClick={onClick}
         className="flex items-center gap-2 py-1.5 px-2 rounded cursor-pointer border-l-4"
         style={{
-          backgroundColor: 'var(--tool-result-success-bg)',
-          borderLeftColor: 'var(--badge-info-bg)',
+          backgroundColor: subagent.isOngoing
+            ? 'var(--info-bg, rgba(59, 130, 246, 0.1))'
+            : 'var(--tool-result-success-bg)',
+          borderLeftColor: subagent.isOngoing
+            ? 'var(--info-text, #3b82f6)'
+            : 'var(--badge-info-bg)',
         }}
       >
-        <Bot className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--badge-info-bg)' }} />
+        <Bot
+          className="w-4 h-4 flex-shrink-0"
+          style={{ color: subagent.isOngoing ? 'var(--info-text, #3b82f6)' : 'var(--badge-info-bg)' }}
+        />
         <span
           className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
           style={{
             backgroundColor: 'var(--tag-bg)',
-            color: 'var(--badge-info-bg)',
+            color: subagent.isOngoing ? 'var(--info-text, #3b82f6)' : 'var(--badge-info-bg)',
             border: '1px solid var(--tag-border)',
           }}
         >
@@ -303,10 +310,18 @@ export const SubagentItem: React.FC<SubagentItemProps> = ({ step, subagent, onCl
         )}
         <span style={{ color: 'var(--color-text-muted)' }}>→</span>
         <span className="truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>{truncatedDesc}</span>
-        <span
-          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: 'var(--tool-result-success-text)' }}
-        ></span>
+        {/* Status indicator: spinning for ongoing, checkmark for completed */}
+        {subagent.isOngoing ? (
+          <Loader2
+            className="w-3.5 h-3.5 flex-shrink-0 animate-spin"
+            style={{ color: 'var(--info-text, #3b82f6)' }}
+          />
+        ) : (
+          <CheckCircle2
+            className="w-3.5 h-3.5 flex-shrink-0"
+            style={{ color: 'var(--tool-result-success-text)' }}
+          />
+        )}
         {lastUsage && (
           <TokenUsageDisplay
             inputTokens={lastUsage.input_tokens}

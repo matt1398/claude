@@ -182,11 +182,11 @@ export type AIGroupDisplayItem =
 
 /**
  * The last output in an AI Group - what user sees as "the answer".
- * Either text output, the last tool result, or an interruption.
+ * Either text output, the last tool result, an interruption, or ongoing (still in progress).
  */
 export interface AIGroupLastOutput {
   /** Output type */
-  type: 'text' | 'tool_result' | 'interruption';
+  type: 'text' | 'tool_result' | 'interruption' | 'ongoing';
   /** Text content if type === 'text' */
   text?: string;
   /** Tool name if type === 'tool_result' */
@@ -266,6 +266,8 @@ export interface AIGroup {
   metrics: SessionMetrics;
   /** All response messages (assistant + internal user messages) for accessing raw usage data */
   responses: ParsedMessage[];
+  /** Whether this is the last AI group in an ongoing session */
+  isOngoing?: boolean;
 }
 
 // =============================================================================

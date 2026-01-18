@@ -447,8 +447,10 @@ export const useStore = create<AppState>((set, get) => ({
 
       // Transform chunks to conversation
       // Note: detail.chunks are actually EnhancedChunk[] at runtime despite type definition
+      // Pass isOngoing to mark the last AI group when session is still in progress
+      const isOngoing = detail?.session?.isOngoing ?? false;
       const conversation: SessionConversation | null = detail
-        ? transformChunksToConversation(detail.chunks as any, detail.processes)
+        ? transformChunksToConversation(detail.chunks as any, detail.processes, isOngoing)
         : null;
 
       if (conversation) {

@@ -11,7 +11,7 @@
 
 import * as path from 'path';
 import { Process, ParsedMessage, ToolCall, SessionMetrics } from '../types/claude';
-import { parseJsonlFile, calculateMetrics } from '../utils/jsonl';
+import { parseJsonlFile, calculateMetrics, checkMessagesOngoing } from '../utils/jsonl';
 import { ProjectScanner } from './ProjectScanner';
 
 /** Parallel detection window in milliseconds */
@@ -94,6 +94,9 @@ export class SubagentResolver {
       // Calculate metrics
       const metrics = calculateMetrics(messages);
 
+      // Check if subagent is still in progress
+      const isOngoing = checkMessagesOngoing(messages);
+
       return {
         id: agentId,
         filePath,
@@ -103,6 +106,7 @@ export class SubagentResolver {
         durationMs,
         metrics,
         isParallel: false, // Will be set by detectParallelExecution
+        isOngoing,
       };
     } catch (error) {
       console.error(`Error parsing subagent file ${filePath}:`, error);

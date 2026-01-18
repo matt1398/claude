@@ -24,6 +24,82 @@ export interface NotificationConfig {
   ignoredProjects: string[]; // Encoded project paths
   snoozedUntil: number | null; // Unix timestamp (ms) when snooze ends
   snoozeMinutes: number; // Default snooze duration
+  /** Notification triggers - define when to generate notifications */
+  triggers: NotificationTrigger[];
+}
+
+/**
+ * Content types that can trigger notifications.
+ */
+export type TriggerContentType = 'tool_result' | 'tool_use' | 'thinking' | 'text';
+
+/**
+ * Tool names that can be filtered for tool_use triggers.
+ */
+export type TriggerToolName = 'Bash' | 'Task' | 'TodoWrite' | 'Read' | 'Write' | 'Edit' | 'Grep' | 'Glob' | 'WebFetch' | 'WebSearch' | 'LSP' | 'Skill' | 'NotebookEdit' | 'AskUserQuestion' | 'KillShell' | 'TaskOutput' | string;
+
+/**
+ * Match fields available for different content types and tools.
+ */
+export type MatchFieldForToolResult = 'content';
+export type MatchFieldForBash = 'command' | 'description';
+export type MatchFieldForTask = 'description' | 'prompt' | 'subagent_type';
+export type MatchFieldForRead = 'file_path';
+export type MatchFieldForWrite = 'file_path' | 'content';
+export type MatchFieldForEdit = 'file_path' | 'old_string' | 'new_string';
+export type MatchFieldForGlob = 'pattern' | 'path';
+export type MatchFieldForGrep = 'pattern' | 'path' | 'glob';
+export type MatchFieldForWebFetch = 'url' | 'prompt';
+export type MatchFieldForWebSearch = 'query';
+export type MatchFieldForTodoWrite = 'content';
+export type MatchFieldForSkill = 'skill' | 'args';
+export type MatchFieldForThinking = 'thinking';
+export type MatchFieldForText = 'text';
+
+/**
+ * Combined type for all possible match fields.
+ */
+export type TriggerMatchField =
+  | MatchFieldForToolResult
+  | MatchFieldForBash
+  | MatchFieldForTask
+  | MatchFieldForRead
+  | MatchFieldForWrite
+  | MatchFieldForEdit
+  | MatchFieldForGlob
+  | MatchFieldForGrep
+  | MatchFieldForWebFetch
+  | MatchFieldForWebSearch
+  | MatchFieldForTodoWrite
+  | MatchFieldForSkill
+  | MatchFieldForThinking
+  | MatchFieldForText;
+
+/**
+ * Notification trigger configuration.
+ * Defines when notifications should be generated.
+ */
+export interface NotificationTrigger {
+  /** Unique identifier for this trigger */
+  id: string;
+  /** Human-readable name for this trigger */
+  name: string;
+  /** Whether this trigger is enabled */
+  enabled: boolean;
+  /** Content type to match */
+  contentType: TriggerContentType;
+  /** For tool_result triggers: require is_error to be true (no matchField needed when true) */
+  requireError?: boolean;
+  /** For tool_use/tool_result: specific tool name to match */
+  toolName?: TriggerToolName;
+  /** Field to match against - depends on contentType and toolName */
+  matchField?: TriggerMatchField;
+  /** Regex pattern to match (triggers if MATCHES) */
+  matchPattern?: string;
+  /** Regex patterns to IGNORE (skip notification if content matches any of these) */
+  ignorePatterns?: string[];
+  /** Whether this is a built-in trigger (cannot be deleted) */
+  isBuiltin?: boolean;
 }
 
 export interface GeneralConfig {
@@ -57,6 +133,34 @@ const DEFAULT_IGNORED_REGEX = [
   "The user doesn't want to proceed with this tool use\\.",
 ];
 
+/**
+ * Default built-in notification triggers.
+ */
+const DEFAULT_TRIGGERS: NotificationTrigger[] = [
+  {
+    id: 'builtin-tool-result-error',
+    name: 'Tool Result Error',
+    enabled: true,
+    contentType: 'tool_result',
+    requireError: true,
+    // No matchField needed for requireError=true
+    ignorePatterns: [
+      "The user doesn't want to proceed with this tool use\\.",
+    ],
+    isBuiltin: true,
+  },
+  {
+    id: 'builtin-bash-command',
+    name: 'Bash Command Alert',
+    enabled: false,
+    contentType: 'tool_use',
+    toolName: 'Bash',
+    matchField: 'command',
+    matchPattern: '',  // User sets pattern like 'npm|sudo|rm -rf'
+    isBuiltin: true,
+  },
+];
+
 const DEFAULT_CONFIG: AppConfig = {
   notifications: {
     enabled: true,
@@ -65,6 +169,7 @@ const DEFAULT_CONFIG: AppConfig = {
     ignoredProjects: [],
     snoozedUntil: null,
     snoozeMinutes: 30,
+    triggers: DEFAULT_TRIGGERS,
   },
   general: {
     launchAtLogin: false,
@@ -161,12 +266,21 @@ export class ConfigManager {
 
   /**
    * Merges loaded config with defaults to ensure all fields exist.
+   * Special handling for triggers array to preserve existing triggers
+   * and add any missing builtin triggers.
    */
   private mergeWithDefaults(loaded: Partial<AppConfig>): AppConfig {
+    const loadedNotifications = loaded.notifications || {} as Partial<NotificationConfig>;
+    const loadedTriggers = loadedNotifications.triggers || [];
+
+    // Merge triggers: preserve existing triggers, add missing builtin ones
+    const mergedTriggers = this.mergeTriggers(loadedTriggers, DEFAULT_TRIGGERS);
+
     return {
       notifications: {
         ...DEFAULT_CONFIG.notifications,
-        ...(loaded.notifications || {}),
+        ...loadedNotifications,
+        triggers: mergedTriggers,
       },
       general: {
         ...DEFAULT_CONFIG.general,
@@ -177,6 +291,31 @@ export class ConfigManager {
         ...(loaded.display || {}),
       },
     };
+  }
+
+  /**
+   * Merges loaded triggers with default triggers.
+   * - Preserves all existing triggers (including user-modified builtin triggers)
+   * - Adds any missing builtin triggers from defaults
+   */
+  private mergeTriggers(
+    loaded: NotificationTrigger[],
+    defaults: NotificationTrigger[]
+  ): NotificationTrigger[] {
+    // Start with all loaded triggers
+    const merged = [...loaded];
+
+    // Add any missing builtin triggers from defaults
+    for (const defaultTrigger of defaults) {
+      if (defaultTrigger.isBuiltin) {
+        const existsInLoaded = loaded.some(t => t.id === defaultTrigger.id);
+        if (!existsInLoaded) {
+          merged.push(defaultTrigger);
+        }
+      }
+    }
+
+    return merged;
   }
 
   /**
@@ -308,6 +447,92 @@ export class ConfigManager {
       this.saveConfig();
     }
     return this.getConfig();
+  }
+
+  // ===========================================================================
+  // Trigger Management
+  // ===========================================================================
+
+  /**
+   * Adds a new notification trigger.
+   * @param trigger - The trigger configuration to add
+   * @returns Updated config
+   */
+  addTrigger(trigger: NotificationTrigger): AppConfig {
+    const current = this.config.notifications.triggers || [];
+
+    // Check if trigger with same ID already exists
+    if (current.some(t => t.id === trigger.id)) {
+      throw new Error(`Trigger with ID "${trigger.id}" already exists`);
+    }
+
+    this.config.notifications.triggers = [...current, trigger];
+    this.saveConfig();
+    return this.deepClone(this.config);
+  }
+
+  /**
+   * Updates an existing notification trigger.
+   * @param triggerId - ID of the trigger to update
+   * @param updates - Partial trigger configuration to apply
+   * @returns Updated config
+   */
+  updateTrigger(triggerId: string, updates: Partial<NotificationTrigger>): AppConfig {
+    const current = this.config.notifications.triggers || [];
+    const index = current.findIndex(t => t.id === triggerId);
+
+    if (index === -1) {
+      throw new Error(`Trigger with ID "${triggerId}" not found`);
+    }
+
+    // Preserve isBuiltin flag - cannot be changed
+    const { isBuiltin, ...allowedUpdates } = updates;
+
+    this.config.notifications.triggers = current.map((t, i) =>
+      i === index ? { ...t, ...allowedUpdates } : t
+    );
+    this.saveConfig();
+    return this.deepClone(this.config);
+  }
+
+  /**
+   * Removes a notification trigger.
+   * Built-in triggers cannot be removed.
+   * @param triggerId - ID of the trigger to remove
+   * @returns Updated config
+   */
+  removeTrigger(triggerId: string): AppConfig {
+    const current = this.config.notifications.triggers || [];
+    const trigger = current.find(t => t.id === triggerId);
+
+    if (!trigger) {
+      throw new Error(`Trigger with ID "${triggerId}" not found`);
+    }
+
+    if (trigger.isBuiltin) {
+      throw new Error('Cannot remove built-in triggers. Disable them instead.');
+    }
+
+    this.config.notifications.triggers = current.filter(t => t.id !== triggerId);
+    this.saveConfig();
+    return this.deepClone(this.config);
+  }
+
+  /**
+   * Gets all notification triggers.
+   * @returns Array of notification triggers
+   */
+  getTriggers(): NotificationTrigger[] {
+    return this.deepClone(this.config.notifications.triggers || DEFAULT_TRIGGERS);
+  }
+
+  /**
+   * Gets enabled notification triggers only.
+   * @returns Array of enabled notification triggers
+   */
+  getEnabledTriggers(): NotificationTrigger[] {
+    const triggers = this.config.notifications.triggers || DEFAULT_TRIGGERS;
+    return this.deepClone(triggers.filter(t => t.enabled));
   }
 
   // ===========================================================================

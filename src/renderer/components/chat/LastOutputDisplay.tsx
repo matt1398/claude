@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, AlertTriangle, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -383,6 +383,30 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
           style={{ color: 'var(--warning-text, #f59e0b)' }}
         >
           Request interrupted by user
+        </span>
+      </div>
+    );
+  }
+
+  // Render ongoing session indicator
+  if (type === 'ongoing') {
+    return (
+      <div
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg"
+        style={{
+          backgroundColor: 'var(--info-bg, rgba(59, 130, 246, 0.1))',
+          border: '1px solid var(--info-border, rgba(59, 130, 246, 0.3))',
+        }}
+      >
+        <Loader2
+          className="w-4 h-4 flex-shrink-0 animate-spin"
+          style={{ color: 'var(--info-text, #3b82f6)' }}
+        />
+        <span
+          className="text-sm"
+          style={{ color: 'var(--info-text, #3b82f6)' }}
+        >
+          Session is in progress...
         </span>
       </div>
     );

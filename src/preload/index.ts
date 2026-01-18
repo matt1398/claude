@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { ElectronAPI } from '../renderer/types/data';
+import type { NotificationTrigger } from '../renderer/types/data';
+import type { ElectronAPI } from '../renderer/types/data';
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
@@ -111,6 +112,56 @@ const electronAPI: ElectronAPI = {
       if (!result.success) throw new Error(result.error || 'Failed to clear snooze');
       const configResult = await ipcRenderer.invoke('config:get');
       return configResult.data;
+    },
+    addTrigger: async (trigger: Omit<NotificationTrigger, 'isBuiltin'>) => {
+      const result = await ipcRenderer.invoke('config:addTrigger', trigger);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to add trigger');
+      }
+      // Return updated config
+      const configResult = await ipcRenderer.invoke('config:get');
+      if (!configResult.success) {
+        throw new Error(configResult.error || 'Failed to fetch config');
+      }
+      return configResult.data;
+    },
+    updateTrigger: async (triggerId: string, updates: Partial<NotificationTrigger>) => {
+      const result = await ipcRenderer.invoke('config:updateTrigger', triggerId, updates);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update trigger');
+      }
+      // Return updated config
+      const configResult = await ipcRenderer.invoke('config:get');
+      if (!configResult.success) {
+        throw new Error(configResult.error || 'Failed to fetch config');
+      }
+      return configResult.data;
+    },
+    removeTrigger: async (triggerId: string) => {
+      const result = await ipcRenderer.invoke('config:removeTrigger', triggerId);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to remove trigger');
+      }
+      // Return updated config
+      const configResult = await ipcRenderer.invoke('config:get');
+      if (!configResult.success) {
+        throw new Error(configResult.error || 'Failed to fetch config');
+      }
+      return configResult.data;
+    },
+    getTriggers: async () => {
+      const result = await ipcRenderer.invoke('config:getTriggers');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to get triggers');
+      }
+      return result.data;
+    },
+    testTrigger: async (trigger: NotificationTrigger) => {
+      const result = await ipcRenderer.invoke('config:testTrigger', trigger);
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to test trigger');
+      }
+      return result.data;
     },
   },
 

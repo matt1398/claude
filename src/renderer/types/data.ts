@@ -414,6 +414,8 @@ export interface Process {
   isParallel: boolean;
   /** The tool_use ID of the Task call that spawned this */
   parentTaskId?: string;
+  /** Whether this subagent is still in progress */
+  isOngoing?: boolean;
 }
 
 // =============================================================================
@@ -598,6 +600,22 @@ export interface NotificationsAPI {
 }
 
 /**
+ * Result of testing a trigger against historical data.
+ */
+export interface TriggerTestResult {
+  totalCount: number;
+  errors: Array<{
+    id: string;
+    sessionId: string;
+    projectId: string;
+    message: string;
+    timestamp: number;
+    source: string;
+    context: { projectName: string };
+  }>;
+}
+
+/**
  * Config API exposed via preload.
  */
 export interface ConfigAPI {
@@ -609,6 +627,12 @@ export interface ConfigAPI {
   removeIgnoreProject: (projectId: string) => Promise<AppConfig>;
   snooze: (minutes: number) => Promise<AppConfig>;
   clearSnooze: () => Promise<AppConfig>;
+  // Trigger management methods
+  addTrigger: (trigger: Omit<NotificationTrigger, 'isBuiltin'>) => Promise<AppConfig>;
+  updateTrigger: (triggerId: string, updates: Partial<NotificationTrigger>) => Promise<AppConfig>;
+  removeTrigger: (triggerId: string) => Promise<AppConfig>;
+  getTriggers: () => Promise<NotificationTrigger[]>;
+  testTrigger: (trigger: NotificationTrigger) => Promise<TriggerTestResult>;
 }
 
 /**
@@ -985,8 +1009,100 @@ export interface FileChangeEvent {
 }
 
 // =============================================================================
+// Notification Trigger Types
+// =============================================================================
+
+/**
+ * Content types that can trigger notifications.
+ */
+export type TriggerContentType = 'tool_result' | 'tool_use' | 'thinking' | 'text';
+
+/**
+ * Tool names that can be filtered for tool_use triggers.
+ */
+export type TriggerToolName = 'Bash' | 'Task' | 'TodoWrite' | 'Read' | 'Write' | 'Edit' | 'Grep' | 'Glob' | 'WebFetch' | 'WebSearch' | 'LSP' | 'Skill' | 'NotebookEdit' | 'AskUserQuestion' | 'KillShell' | 'TaskOutput' | string;
+
+/**
+ * Match fields available for different content types and tools.
+ */
+export type MatchFieldForToolResult = 'content';
+export type MatchFieldForBash = 'command' | 'description';
+export type MatchFieldForTask = 'description' | 'prompt' | 'subagent_type';
+export type MatchFieldForRead = 'file_path';
+export type MatchFieldForWrite = 'file_path' | 'content';
+export type MatchFieldForEdit = 'file_path' | 'old_string' | 'new_string';
+export type MatchFieldForGlob = 'pattern' | 'path';
+export type MatchFieldForGrep = 'pattern' | 'path' | 'glob';
+export type MatchFieldForWebFetch = 'url' | 'prompt';
+export type MatchFieldForWebSearch = 'query';
+export type MatchFieldForTodoWrite = 'content';
+export type MatchFieldForSkill = 'skill' | 'args';
+export type MatchFieldForThinking = 'thinking';
+export type MatchFieldForText = 'text';
+
+/**
+ * Combined type for all possible match fields.
+ */
+export type TriggerMatchField =
+  | MatchFieldForToolResult
+  | MatchFieldForBash
+  | MatchFieldForTask
+  | MatchFieldForRead
+  | MatchFieldForWrite
+  | MatchFieldForEdit
+  | MatchFieldForGlob
+  | MatchFieldForGrep
+  | MatchFieldForWebFetch
+  | MatchFieldForWebSearch
+  | MatchFieldForTodoWrite
+  | MatchFieldForSkill
+  | MatchFieldForThinking
+  | MatchFieldForText;
+
+/**
+ * Notification trigger configuration.
+ * Defines when notifications should be generated.
+ */
+export interface NotificationTrigger {
+  /** Unique identifier for this trigger */
+  id: string;
+  /** Human-readable name for this trigger */
+  name: string;
+  /** Whether this trigger is enabled */
+  enabled: boolean;
+  /** Content type to match */
+  contentType: TriggerContentType;
+  /** For tool_result triggers: require is_error to be true (no matchField needed when true) */
+  requireError?: boolean;
+  /** For tool_use/tool_result: specific tool name to match */
+  toolName?: TriggerToolName;
+  /** Field to match against - depends on contentType and toolName */
+  matchField?: TriggerMatchField;
+  /** Regex pattern to match (triggers if MATCHES) */
+  matchPattern?: string;
+  /** Regex patterns to IGNORE (skip notification if content matches any of these) */
+  ignorePatterns?: string[];
+  /** Whether this is a built-in trigger (cannot be deleted) */
+  isBuiltin?: boolean;
+}
+
+// =============================================================================
 // Notification & Configuration Types
 // =============================================================================
+
+/**
+ * Notification configuration settings.
+ */
+export interface NotificationConfig {
+  enabled: boolean;
+  soundEnabled: boolean;
+  ignoredRegex: string[];
+  ignoredProjects: string[];
+  snoozedUntil: number | null;
+  snoozeMinutes: number;
+  /** Notification triggers - define when to generate notifications */
+  triggers: NotificationTrigger[];
+}
 
 /**
  * Application configuration settings.
@@ -1007,6 +1123,8 @@ export interface AppConfig {
     snoozedUntil: number | null;
     /** Default snooze duration in minutes */
     snoozeMinutes: number;
+    /** Notification triggers - define when to generate notifications */
+    triggers: NotificationTrigger[];
   };
   /** General application settings */
   general: {

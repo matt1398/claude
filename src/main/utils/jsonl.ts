@@ -721,14 +721,96 @@ export function getTaskCalls(messages: ParsedMessage[]): ToolCall[] {
 }
 
 /**
+ * Check if messages indicate an ongoing session (AI response in progress).
+ *
+ * A session is considered "ongoing" if there are AI-related activities
+ * (thinking, tool_use, tool_result) AFTER the last "ending" event (text output or interruption).
+ *
+ * This is the core logic shared between session files and subagent messages.
+ *
+ * @param messages - Array of ParsedMessage to check
+ * @returns boolean - true if ongoing
+ */
+export function checkMessagesOngoing(messages: ParsedMessage[]): boolean {
+  // Track AI-related activities in order
+  const activities: Array<{
+    type: 'text_output' | 'thinking' | 'tool_use' | 'tool_result' | 'interruption';
+    index: number;
+  }> = [];
+
+  let activityIndex = 0;
+
+  for (const msg of messages) {
+    if (msg.type === 'assistant' && Array.isArray(msg.content)) {
+      // Process assistant message content blocks
+      for (const block of msg.content) {
+        if (block.type === 'thinking' && block.thinking) {
+          activities.push({ type: 'thinking', index: activityIndex++ });
+        } else if (block.type === 'tool_use' && block.id) {
+          activities.push({ type: 'tool_use', index: activityIndex++ });
+        } else if (block.type === 'text' && block.text && String(block.text).trim().length > 0) {
+          activities.push({ type: 'text_output', index: activityIndex++ });
+        }
+      }
+    } else if (msg.type === 'user' && Array.isArray(msg.content)) {
+      // Check for tool results and interruptions in internal user messages
+      for (const block of msg.content) {
+        if (block.type === 'tool_result' && block.tool_use_id) {
+          activities.push({ type: 'tool_result', index: activityIndex++ });
+        }
+        // Check for interruption message - this ends the session
+        if (block.type === 'text' && typeof block.text === 'string' &&
+            block.text.startsWith('[Request interrupted by user')) {
+          activities.push({ type: 'interruption', index: activityIndex++ });
+        }
+      }
+    }
+  }
+
+  if (activities.length === 0) {
+    return false;
+  }
+
+  // Find the index of the last "ending" event (text_output or interruption)
+  let lastEndingIndex = -1;
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const actType = activities[i].type;
+    if (actType === 'text_output' || actType === 'interruption') {
+      lastEndingIndex = activities[i].index;
+      break;
+    }
+  }
+
+  // If no ending event found, check if there's any AI activity at all
+  if (lastEndingIndex === -1) {
+    return activities.some(a =>
+      a.type === 'thinking' || a.type === 'tool_use' || a.type === 'tool_result'
+    );
+  }
+
+  // Check if there are any AI activities AFTER the last ending event
+  for (const activity of activities) {
+    if (activity.index > lastEndingIndex &&
+        (activity.type === 'thinking' || activity.type === 'tool_use' || activity.type === 'tool_result')) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if a session is ongoing (AI response in progress).
  *
- * A session is considered "ongoing" if:
- * 1. The last non-noise message is an assistant message with tool_use blocks
- *    but no corresponding tool_result has been received yet (orphaned tool calls)
- * 2. Or if the last message is an assistant message with only thinking blocks
+ * A session is considered "ongoing" if there are AI-related activities
+ * (thinking, tool_use, tool_result) AFTER the last text output.
  *
- * This is an efficient check that reads from the end of the file.
+ * This matches how findLastOutput in aiGroupEnhancer works:
+ * - The "last output" is the last assistant text message
+ * - If AI activities continue after that output, the session is still in progress
+ *
+ * Noise types (system, summary, file-history-snapshot, queue-operation) are ignored
+ * as they don't represent AI activities.
  *
  * @param filePath - Path to the session JSONL file
  * @returns Promise<boolean> - true if session is ongoing
@@ -738,26 +820,22 @@ export async function checkSessionOngoing(filePath: string): Promise<boolean> {
     return false;
   }
 
-  // Read the file content - we need to check the last few messages
-  // For efficiency, we read all lines but only process the last relevant ones
   const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
   const rl = readline.createInterface({
     input: fileStream,
     crlfDelay: Infinity,
   });
 
-  // Collect relevant messages (skip noise)
-  const recentMessages: Array<{
-    type: string;
-    hasToolUse: boolean;
-    hasToolResult: boolean;
-    hasTextOutput: boolean;
-    toolUseIds: Set<string>;
-    toolResultIds: Set<string>;
-    isMeta: boolean;
+  // Track AI-related activities in order
+  // We need to find if there's any AI activity after the last "ending" event
+  // Ending events: text_output, interruption
+  const activities: Array<{
+    type: 'text_output' | 'thinking' | 'tool_use' | 'tool_result' | 'interruption';
+    index: number;
   }> = [];
 
   const NOISE_TYPES = ['system', 'summary', 'file-history-snapshot', 'queue-operation'];
+  let activityIndex = 0;
 
   try {
     for await (const line of rl) {
@@ -770,50 +848,35 @@ export async function checkSessionOngoing(filePath: string): Promise<boolean> {
         // Skip entries without uuid
         if (!entry.uuid) continue;
 
-        // Skip noise types
+        // Skip noise types - these don't represent AI activity
         if (NOISE_TYPES.includes(entry.type)) continue;
-
-        // Extract message properties
-        const type = entry.type;
-        let hasToolUse = false;
-        let hasToolResult = false;
-        let hasTextOutput = false;
-        const toolUseIds = new Set<string>();
-        const toolResultIds = new Set<string>();
-        const isMeta = (entry as any).isMeta === true;
 
         const content = (entry as any).message?.content;
 
-        if (type === 'assistant' && Array.isArray(content)) {
+        if (entry.type === 'assistant' && Array.isArray(content)) {
+          // Process assistant message content blocks
           for (const block of content) {
-            if (block.type === 'tool_use' && block.id) {
-              hasToolUse = true;
-              toolUseIds.add(block.id);
-            }
-            if (block.type === 'text' && block.text && block.text.trim().length > 0) {
-              hasTextOutput = true;
+            if (block.type === 'thinking' && block.thinking) {
+              activities.push({ type: 'thinking', index: activityIndex++ });
+            } else if (block.type === 'tool_use' && block.id) {
+              activities.push({ type: 'tool_use', index: activityIndex++ });
+            } else if (block.type === 'text' && block.text && block.text.trim().length > 0) {
+              activities.push({ type: 'text_output', index: activityIndex++ });
             }
           }
-        }
-
-        if (type === 'user' && Array.isArray(content)) {
+        } else if (entry.type === 'user' && Array.isArray(content)) {
+          // Check for tool results in internal user messages
           for (const block of content) {
             if (block.type === 'tool_result' && block.tool_use_id) {
-              hasToolResult = true;
-              toolResultIds.add(block.tool_use_id);
+              activities.push({ type: 'tool_result', index: activityIndex++ });
+            }
+            // Check for interruption message - this ends the session
+            if (block.type === 'text' && typeof block.text === 'string' &&
+                block.text.startsWith('[Request interrupted by user')) {
+              activities.push({ type: 'interruption', index: activityIndex++ });
             }
           }
         }
-
-        recentMessages.push({
-          type,
-          hasToolUse,
-          hasToolResult,
-          hasTextOutput,
-          toolUseIds,
-          toolResultIds,
-          isMeta,
-        });
       } catch {
         // Skip invalid lines
         continue;
@@ -824,57 +887,41 @@ export async function checkSessionOngoing(filePath: string): Promise<boolean> {
     return false;
   }
 
-  // Analyze the messages to determine if ongoing
-  // Work backwards to find the last assistant message and check if it has pending tool calls
-  if (recentMessages.length === 0) {
+  if (activities.length === 0) {
     return false;
   }
 
-  // Find the last assistant message
-  let lastAssistantIndex = -1;
-  for (let i = recentMessages.length - 1; i >= 0; i--) {
-    if (recentMessages[i].type === 'assistant') {
-      lastAssistantIndex = i;
+  // Find the index of the last "ending" event (text_output or interruption)
+  // Both mark the session as potentially complete
+  let lastEndingIndex = -1;
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const actType = activities[i].type;
+    if (actType === 'text_output' || actType === 'interruption') {
+      lastEndingIndex = activities[i].index;
       break;
     }
   }
 
-  if (lastAssistantIndex === -1) {
-    // No assistant message found
-    return false;
+  // If no ending event found, check if there's any AI activity at all
+  // (thinking, tool_use, tool_result with no final output means ongoing)
+  if (lastEndingIndex === -1) {
+    // Session has AI activities but no ending event yet - ongoing
+    return activities.some(a =>
+      a.type === 'thinking' || a.type === 'tool_use' || a.type === 'tool_result'
+    );
   }
 
-  const lastAssistant = recentMessages[lastAssistantIndex];
-
-  // If the last assistant message has text output, it's not ongoing
-  if (lastAssistant.hasTextOutput) {
-    return false;
-  }
-
-  // If the last assistant message has tool calls, check if they have results
-  if (lastAssistant.hasToolUse) {
-    // Collect all tool results that came after this assistant message
-    const receivedResults = new Set<string>();
-    for (let i = lastAssistantIndex + 1; i < recentMessages.length; i++) {
-      const msg = recentMessages[i];
-      if (msg.hasToolResult) {
-        msg.toolResultIds.forEach(id => receivedResults.add(id));
-      }
-    }
-
-    // Check if any tool calls are still pending
-    for (const toolUseId of lastAssistant.toolUseIds) {
-      if (!receivedResults.has(toolUseId)) {
-        // Found a tool call without a result - session is ongoing
-        return true;
-      }
+  // Check if there are any AI activities AFTER the last ending event
+  // If so, the session is ongoing (Claude is still working)
+  for (const activity of activities) {
+    if (activity.index > lastEndingIndex &&
+        (activity.type === 'thinking' || activity.type === 'tool_use' || activity.type === 'tool_result')) {
+      // Found AI activity after the last ending event
+      return true;
     }
   }
 
-  // If we reach here after the last assistant message, check what comes after
-  // If the last message is a user message without isMeta (real user input waiting for response)
-  // that would mean waiting for AI, but typically the last AI message has been processed
-  // For our purposes, we only mark ongoing if there are pending tool calls
+  // Last ending event is truly the last relevant activity - session is complete
   return false;
 }
 

@@ -71,16 +71,26 @@ export function formatToolResult(content: string | unknown[]): string {
  * Find the last visible output in the AI Group.
  *
  * Strategy:
- * 1. Iterate through steps in reverse order
- * 2. Find the last 'output' step with outputText
- * 3. If no output found, find the last 'tool_result' step
- * 4. If no tool_result found, find the last 'interruption' step
- * 5. Return null if none exists
+ * 1. If isOngoing is true, return 'ongoing' type (session still in progress)
+ * 2. Iterate through steps in reverse order
+ * 3. Find the last 'output' step with outputText
+ * 4. If no output found, find the last 'tool_result' step
+ * 5. If no tool_result found, find the last 'interruption' step
+ * 6. Return null if none exists
  *
  * @param steps - Semantic steps from the AI Group
+ * @param isOngoing - Whether this AI group is still in progress
  * @returns The last output or null
  */
-export function findLastOutput(steps: SemanticStep[]): AIGroupLastOutput | null {
+export function findLastOutput(steps: SemanticStep[], isOngoing: boolean = false): AIGroupLastOutput | null {
+  // If session is ongoing, return 'ongoing' type instead of forcing a last output
+  if (isOngoing) {
+    return {
+      type: 'ongoing',
+      timestamp: steps.length > 0 ? toDate(steps[steps.length - 1].startTime) : new Date(),
+    };
+  }
+
   // First pass: look for last 'output' step with outputText
   for (let i = steps.length - 1; i >= 0; i--) {
     const step = steps[i];
@@ -454,7 +464,8 @@ export function enhanceAIGroup(
   aiGroup: AIGroup,
   claudeMdStats?: ClaudeMdStats
 ): EnhancedAIGroup {
-  const lastOutput = findLastOutput(aiGroup.steps);
+  // Pass isOngoing to findLastOutput - if ongoing, it returns 'ongoing' type instead of forcing a last output
+  const lastOutput = findLastOutput(aiGroup.steps, aiGroup.isOngoing ?? false);
   const linkedTools = linkToolCallsToResults(aiGroup.steps);
   const displayItems = buildDisplayItems(aiGroup.steps, lastOutput, aiGroup.processes);
   const summary = buildSummary(displayItems);

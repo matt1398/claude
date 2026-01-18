@@ -10,10 +10,15 @@
  * - config:removeIgnoreProject: Remove a project from ignore list
  * - config:snooze: Set snooze duration for notifications
  * - config:clearSnooze: Clear the snooze timer
+ * - config:addTrigger: Add a new notification trigger
+ * - config:updateTrigger: Update an existing notification trigger
+ * - config:removeTrigger: Remove a notification trigger
+ * - config:getTriggers: Get all notification triggers
+ * - config:testTrigger: Test a trigger against historical session data
  */
 
 import { IpcMain, IpcMainInvokeEvent } from 'electron';
-import { ConfigManager, AppConfig } from '../services/ConfigManager';
+import { ConfigManager, AppConfig, TriggerContentType, TriggerMatchField } from '../services/ConfigManager';
 
 // Get singleton instance
 const configManager = ConfigManager.getInstance();
@@ -49,7 +54,14 @@ export function registerConfigHandlers(ipcMain: IpcMain): void {
   ipcMain.handle('config:snooze', handleSnooze);
   ipcMain.handle('config:clearSnooze', handleClearSnooze);
 
-  console.log('IPC: Config handlers registered');
+  // Trigger management handlers
+  ipcMain.handle('config:addTrigger', handleAddTrigger);
+  ipcMain.handle('config:updateTrigger', handleUpdateTrigger);
+  ipcMain.handle('config:removeTrigger', handleRemoveTrigger);
+  ipcMain.handle('config:getTriggers', handleGetTriggers);
+  ipcMain.handle('config:testTrigger', handleTestTrigger);
+
+  console.log('IPC: Config handlers registered (including trigger management)');
 }
 
 // =============================================================================
@@ -238,6 +250,190 @@ async function handleClearSnooze(
   }
 }
 
+/**
+ * Handler for 'config:addTrigger' - Adds a new notification trigger.
+ */
+async function handleAddTrigger(
+  _event: IpcMainInvokeEvent,
+  trigger: {
+    id: string;
+    name: string;
+    enabled: boolean;
+    contentType: string;
+    requireError?: boolean;
+    toolName?: string;
+    matchField?: string;
+    matchPattern?: string;
+    ignorePatterns?: string[];
+  }
+): Promise<ConfigResult> {
+  try {
+    if (!trigger.id || !trigger.name || !trigger.contentType) {
+      return {
+        success: false,
+        error: 'Trigger must have id, name, and contentType',
+      };
+    }
+
+    console.log(`IPC: config:addTrigger (id: ${trigger.id}, name: ${trigger.name})`);
+
+    configManager.addTrigger({
+      id: trigger.id,
+      name: trigger.name,
+      enabled: trigger.enabled,
+      contentType: trigger.contentType as TriggerContentType,
+      requireError: trigger.requireError,
+      toolName: trigger.toolName,
+      matchField: trigger.matchField as TriggerMatchField | undefined,
+      matchPattern: trigger.matchPattern,
+      ignorePatterns: trigger.ignorePatterns,
+      isBuiltin: false,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('IPC: Error in config:addTrigger:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add trigger',
+    };
+  }
+}
+
+/**
+ * Handler for 'config:updateTrigger' - Updates an existing notification trigger.
+ */
+async function handleUpdateTrigger(
+  _event: IpcMainInvokeEvent,
+  triggerId: string,
+  updates: Partial<{
+    name: string;
+    enabled: boolean;
+    contentType: string;
+    requireError: boolean;
+    toolName: string;
+    matchField: string;
+    matchPattern: string;
+  }>
+): Promise<ConfigResult> {
+  try {
+    if (!triggerId) {
+      return {
+        success: false,
+        error: 'Trigger ID is required',
+      };
+    }
+
+    console.log(`IPC: config:updateTrigger (id: ${triggerId})`);
+
+    configManager.updateTrigger(triggerId, updates as Partial<import('../services/ConfigManager').NotificationTrigger>);
+
+    return { success: true };
+  } catch (error) {
+    console.error('IPC: Error in config:updateTrigger:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update trigger',
+    };
+  }
+}
+
+/**
+ * Handler for 'config:removeTrigger' - Removes a notification trigger.
+ */
+async function handleRemoveTrigger(
+  _event: IpcMainInvokeEvent,
+  triggerId: string
+): Promise<ConfigResult> {
+  try {
+    if (!triggerId) {
+      return {
+        success: false,
+        error: 'Trigger ID is required',
+      };
+    }
+
+    console.log(`IPC: config:removeTrigger (id: ${triggerId})`);
+
+    configManager.removeTrigger(triggerId);
+
+    return { success: true };
+  } catch (error) {
+    console.error('IPC: Error in config:removeTrigger:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to remove trigger',
+    };
+  }
+}
+
+/**
+ * Handler for 'config:getTriggers' - Gets all notification triggers.
+ */
+async function handleGetTriggers(
+  _event: IpcMainInvokeEvent
+): Promise<ConfigResult<import('../services/ConfigManager').NotificationTrigger[]>> {
+  try {
+    console.log('IPC: config:getTriggers');
+
+    const triggers = configManager.getTriggers();
+
+    return { success: true, data: triggers };
+  } catch (error) {
+    console.error('IPC: Error in config:getTriggers:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get triggers',
+    };
+  }
+}
+
+/**
+ * Handler for 'config:testTrigger' - Tests a trigger against historical session data.
+ * Returns errors that would have been detected by the trigger.
+ */
+async function handleTestTrigger(
+  _event: IpcMainInvokeEvent,
+  trigger: import('../services/ConfigManager').NotificationTrigger
+): Promise<ConfigResult<{
+  totalCount: number;
+  errors: Array<{
+    id: string;
+    sessionId: string;
+    projectId: string;
+    message: string;
+    timestamp: number;
+    source: string;
+    context: { projectName: string };
+  }>;
+}>> {
+  try {
+    console.log(`IPC: config:testTrigger (id: ${trigger.id}, name: ${trigger.name})`);
+
+    const { errorDetector } = await import('../services/ErrorDetector');
+    const result = await errorDetector.testTrigger(trigger, 50);
+
+    // Map the DetectedError objects to the simplified format expected by the renderer
+    const errors = result.errors.map((error) => ({
+      id: error.id,
+      sessionId: error.sessionId,
+      projectId: error.projectId,
+      message: error.message,
+      timestamp: error.timestamp,
+      source: error.source,
+      context: { projectName: error.context.projectName },
+    }));
+
+    return { success: true, data: { totalCount: result.totalCount, errors } };
+  } catch (error) {
+    console.error('IPC: Error in config:testTrigger:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to test trigger',
+    };
+  }
+}
+
 // =============================================================================
 // Cleanup
 // =============================================================================
@@ -255,5 +451,10 @@ export function removeConfigHandlers(ipcMain: IpcMain): void {
   ipcMain.removeHandler('config:removeIgnoreProject');
   ipcMain.removeHandler('config:snooze');
   ipcMain.removeHandler('config:clearSnooze');
+  ipcMain.removeHandler('config:addTrigger');
+  ipcMain.removeHandler('config:updateTrigger');
+  ipcMain.removeHandler('config:removeTrigger');
+  ipcMain.removeHandler('config:getTriggers');
+  ipcMain.removeHandler('config:testTrigger');
   console.log('IPC: Config handlers removed');
 }

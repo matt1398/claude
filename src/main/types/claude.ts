@@ -832,6 +832,8 @@ export interface Process {
   isParallel: boolean;
   /** The tool_use ID of the Task call that spawned this */
   parentTaskId?: string;
+  /** Whether this subagent is still in progress */
+  isOngoing?: boolean;
 }
 
 // =============================================================================

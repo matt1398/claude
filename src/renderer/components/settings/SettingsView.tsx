@@ -6,7 +6,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, X, RefreshCw, Download, Upload, Loader2 } from 'lucide-react';
 import { SettingsTabs, type SettingsSection } from './SettingsTabs';
-import type { AppConfig } from '../../types/data';
+import { NotificationTriggerSettings } from './NotificationTriggerSettings';
+import type { AppConfig, NotificationTrigger } from '../../types/data';
 import { useStore } from '../../store';
 
 // Get the setState function from the store to update appConfig globally
@@ -430,6 +431,51 @@ export function SettingsView() {
     }
   }, []);
 
+  // Add trigger
+  const handleAddTrigger = useCallback(async (trigger: Omit<NotificationTrigger, 'isBuiltin'>) => {
+    try {
+      setSaving(true);
+      const updatedConfig = await window.electronAPI.config.addTrigger(trigger);
+      setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add trigger');
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // Update trigger
+  const handleUpdateTrigger = useCallback(async (triggerId: string, updates: Partial<NotificationTrigger>) => {
+    try {
+      setSaving(true);
+      const updatedConfig = await window.electronAPI.config.updateTrigger(triggerId, updates);
+      setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update trigger');
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // Remove trigger
+  const handleRemoveTrigger = useCallback(async (triggerId: string) => {
+    try {
+      setSaving(true);
+      const updatedConfig = await window.electronAPI.config.removeTrigger(triggerId);
+      setConfig(updatedConfig);
+      setOptimisticConfig(updatedConfig);
+      setStoreState({ appConfig: updatedConfig });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove trigger');
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
   // Reset to defaults
   const handleResetToDefaults = useCallback(async () => {
     if (!confirm('Are you sure you want to reset all settings to defaults?')) {
@@ -442,6 +488,31 @@ export function SettingsView() {
       const defaultIgnoredRegex = [
         "The user doesn't want to proceed with this tool use\\.",
       ];
+      // Note: These default triggers match ConfigManager's DEFAULT_TRIGGERS
+      const defaultTriggers: NotificationTrigger[] = [
+        {
+          id: 'builtin-tool-result-error',
+          name: 'Tool Result Error',
+          enabled: true,
+          contentType: 'tool_result',
+          requireError: true,
+          // No matchField needed for requireError=true
+          ignorePatterns: [
+            "The user doesn't want to proceed with this tool use\\.",
+          ],
+          isBuiltin: true,
+        },
+        {
+          id: 'builtin-bash-command',
+          name: 'Bash Command Alert',
+          enabled: false,
+          contentType: 'tool_use',
+          toolName: 'Bash',
+          matchField: 'command',
+          matchPattern: '',  // User sets pattern like 'npm|sudo|rm -rf'
+          isBuiltin: true,
+        },
+      ];
       const defaultConfig: AppConfig = {
         notifications: {
           enabled: true,
@@ -450,6 +521,7 @@ export function SettingsView() {
           ignoredProjects: [],
           snoozedUntil: null,
           snoozeMinutes: 30,
+          triggers: defaultTriggers,
         },
         general: {
           launchAtLogin: false,
@@ -586,6 +658,7 @@ export function SettingsView() {
       ignoredProjects: displayConfig?.notifications?.ignoredProjects ?? [],
       snoozedUntil: displayConfig?.notifications?.snoozedUntil ?? null,
       snoozeMinutes: displayConfig?.notifications?.snoozeMinutes ?? 30,
+      triggers: displayConfig?.notifications?.triggers ?? [],
     },
     display: {
       showTimestamps: displayConfig?.display?.showTimestamps ?? true,
@@ -684,6 +757,16 @@ export function SettingsView() {
           {/* Notifications Section */}
           {activeSection === 'notifications' && (
             <div className="space-y-6">
+              {/* Notification Triggers */}
+              <NotificationTriggerSettings
+                triggers={safeConfig.notifications.triggers || []}
+                saving={saving}
+                onUpdateTrigger={handleUpdateTrigger}
+                onAddTrigger={handleAddTrigger}
+                onRemoveTrigger={handleRemoveTrigger}
+              />
+
+              {/* Notification Settings */}
               <div className="bg-claude-dark-surface rounded-lg p-4">
                 <SectionHeader title="Notification Settings" />
                 <div className="divide-y divide-claude-dark-border">
