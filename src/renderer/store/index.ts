@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConfig, ProjectGroup } from '../types/data';
+import { Project, Session, SessionDetail, SubagentDetail, DetectedError, AppConfig } from '../types/data';
 import type { SessionConversation, AIGroup, AIGroupExpansionLevel } from '../types/groups';
 import { transformChunksToConversation } from '../utils/groupTransformer';
 import { findLastOutput } from '../utils/aiGroupEnhancer';
@@ -48,11 +48,6 @@ interface AppState {
   selectedProjectId: string | null;
   projectsLoading: boolean;
   projectsError: string | null;
-
-  // Project groups state
-  projectGroups: ProjectGroup[];
-  projectGroupsLoading: boolean;
-  expandedProjectGroupIds: Set<string>;
 
   // Sessions state
   sessions: Session[];
@@ -141,8 +136,6 @@ interface AppState {
 
   // Actions
   fetchProjects: () => Promise<void>;
-  fetchProjectGroups: () => Promise<void>;
-  toggleProjectGroupExpansion: (groupId: string) => void;
   selectProject: (id: string) => void;
   fetchSessions: (projectId: string) => Promise<void>;
   fetchSessionsInitial: (projectId: string) => Promise<void>;
@@ -213,11 +206,6 @@ export const useStore = create<AppState>((set, get) => ({
   selectedProjectId: null,
   projectsLoading: false,
   projectsError: null,
-
-  // Project groups state
-  projectGroups: [],
-  projectGroupsLoading: false,
-  expandedProjectGroupIds: new Set(),
 
   sessions: [],
   selectedSessionId: null,
@@ -304,31 +292,6 @@ export const useStore = create<AppState>((set, get) => ({
         projectsLoading: false
       });
     }
-  },
-
-  // Fetch project groups from main process
-  fetchProjectGroups: async () => {
-    set({ projectGroupsLoading: true });
-    try {
-      const groups = await window.electronAPI.getProjectGroups();
-      set({ projectGroups: groups, projectGroupsLoading: false });
-    } catch (error) {
-      console.error('Failed to fetch project groups:', error);
-      set({ projectGroupsLoading: false });
-    }
-  },
-
-  // Toggle project group expansion state
-  toggleProjectGroupExpansion: (groupId: string) => {
-    set((state) => {
-      const newExpanded = new Set(state.expandedProjectGroupIds);
-      if (newExpanded.has(groupId)) {
-        newExpanded.delete(groupId);
-      } else {
-        newExpanded.add(groupId);
-      }
-      return { expandedProjectGroupIds: newExpanded };
-    });
   },
 
   // Select a project and fetch its sessions (paginated)

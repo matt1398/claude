@@ -10,7 +10,7 @@
  * the actual cwd from session files.
  */
 
-import type { PathInfo, WorktreeMetadata, ProjectGroup, Project } from '../types/claude';
+import { PathInfo } from '../types/claude';
 
 // =============================================================================
 // Core Encoding/Decoding
@@ -265,118 +265,4 @@ export function getProjectsBasePath(): string {
  */
 export function getTodosBasePath(): string {
   return `${getClaudeBasePath()}/todos`;
-}
-
-// =============================================================================
-// Worktree Detection & Grouping
-// =============================================================================
-
-/**
- * Extract worktree metadata from a decoded project path.
- * Detects if the path is inside a git worktree and extracts grouping information.
- *
- * @param decodedPath - The decoded filesystem path (e.g., "/path/to/repo/worktrees/branch-name/subdir")
- * @returns WorktreeMetadata with isWorktree flag and grouping indicator
- */
-export function extractWorktreeMetadata(decodedPath: string): WorktreeMetadata {
-  const worktreeIndex = decodedPath.indexOf('/worktrees/');
-
-  if (worktreeIndex === -1) {
-    // Not a worktree - use full path as self-indicator
-    return {
-      isWorktree: false,
-      mainRepoIndicator: decodedPath,
-    };
-  }
-
-  // Extract: /path/to/repo/worktrees/{hash-branch}/{project}
-  const worktreeRoot = decodedPath.substring(0, worktreeIndex);
-  const afterWorktrees = decodedPath.substring(worktreeIndex + '/worktrees/'.length);
-  const worktreeId = afterWorktrees.split('/')[0]; // e.g., "1116-support-git-work"
-
-  return {
-    isWorktree: true,
-    worktreeRoot,
-    worktreeId,
-    mainRepoIndicator: worktreeRoot, // Parent of /worktrees/ for grouping
-  };
-}
-
-/**
- * Group projects by their worktree relationship.
- * Projects sharing the same mainRepoIndicator are grouped together.
- *
- * @param projects - Array of projects to group
- * @returns Array of ProjectGroup, sorted by most recent session
- */
-export function groupProjectsByWorktree(projects: Project[]): ProjectGroup[] {
-  const groupMap = new Map<string, Project[]>();
-
-  for (const project of projects) {
-    const indicator = project.worktree?.mainRepoIndicator || project.path;
-    if (!groupMap.has(indicator)) {
-      groupMap.set(indicator, []);
-    }
-    groupMap.get(indicator)!.push(project);
-  }
-
-  return Array.from(groupMap.entries())
-    .map(([indicator, groupProjects]) => {
-      // Sort: main repo first, then worktrees by recency
-      groupProjects.sort((a, b) => {
-        const aIsWorktree = a.worktree?.isWorktree ?? false;
-        const bIsWorktree = b.worktree?.isWorktree ?? false;
-        if (!aIsWorktree && bIsWorktree) return -1;
-        if (aIsWorktree && !bIsWorktree) return 1;
-        return (b.mostRecentSession || 0) - (a.mostRecentSession || 0);
-      });
-
-      const worktreeCount = groupProjects.filter((p) => p.worktree?.isWorktree).length;
-      const displayName = extractGroupDisplayName(groupProjects);
-
-      return {
-        id: hashString(indicator),
-        displayName,
-        mainRepoPath: groupProjects[0].path,
-        projects: groupProjects,
-        worktreeCount,
-        mostRecentSession: Math.max(...groupProjects.map((p) => p.mostRecentSession || 0)),
-        totalSessions: groupProjects.reduce((sum, p) => sum + p.sessions.length, 0),
-      };
-    })
-    .sort((a, b) => (b.mostRecentSession || 0) - (a.mostRecentSession || 0));
-}
-
-/**
- * Extract a display name for a project group.
- *
- * @param projects - Projects in the group
- * @returns Display name for the group
- */
-function extractGroupDisplayName(projects: Project[]): string {
-  // For worktree groups, use the last segment of worktreeRoot
-  // For standalone projects, use the project name
-  const firstProject = projects[0];
-  if (firstProject.worktree?.isWorktree && firstProject.worktree.worktreeRoot) {
-    const segments = firstProject.worktree.worktreeRoot.split('/').filter(Boolean);
-    return segments[segments.length - 1] || firstProject.name;
-  }
-  return firstProject.name;
-}
-
-/**
- * Generate a simple hash string for stable group IDs.
- *
- * @param str - String to hash
- * @returns Base-36 hash string
- */
-function hashString(str: string): string {
-  // Simple hash for stable group IDs
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(36);
 }

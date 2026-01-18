@@ -5,7 +5,6 @@ import { ElectronAPI } from '../renderer/types/data';
 // the ipcRenderer without exposing the entire object
 const electronAPI: ElectronAPI = {
   getProjects: () => ipcRenderer.invoke('get-projects'),
-  getProjectGroups: () => ipcRenderer.invoke('get-project-groups'),
   getSessions: (projectId: string) => ipcRenderer.invoke('get-sessions', projectId),
   getSessionsPaginated: (projectId: string, cursor: string | null, limit?: number) =>
     ipcRenderer.invoke('get-sessions-paginated', projectId, cursor, limit),

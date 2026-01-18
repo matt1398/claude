@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
-import { Project, Session, ChatHistoryEntry, isHardNoiseMessage, PaginatedSessionsResult, SessionCursor, SearchResult, SearchSessionsResult, isParsedHardNoiseMessage, ParsedMessage, ProjectGroup } from '../types/claude';
+import { Project, Session, ChatHistoryEntry, isHardNoiseMessage, PaginatedSessionsResult, SessionCursor, SearchResult, SearchSessionsResult, isParsedHardNoiseMessage, ParsedMessage } from '../types/claude';
 import {
   decodePath,
   isValidEncodedPath,
@@ -24,8 +24,6 @@ import {
   buildTodoPath,
   extractSessionId,
   isAmbiguousEncoding,
-  extractWorktreeMetadata,
-  groupProjectsByWorktree,
 } from '../utils/pathDecoder';
 import { extractFirstUserMessage, extractCwd, countTriggerMessages, checkSessionOngoing } from '../utils/jsonl';
 
@@ -75,15 +73,6 @@ export class ProjectScanner {
   }
 
   /**
-   * Scans the projects directory and returns projects grouped by worktree.
-   * @returns Promise resolving to project groups sorted by most recent activity
-   */
-  async scanGrouped(): Promise<ProjectGroup[]> {
-    const projects = await this.scan();
-    return groupProjectsByWorktree(projects);
-  }
-
-  /**
    * Scans a single project directory and returns project metadata.
    */
   private async scanProject(encodedName: string): Promise<Project | null> {
@@ -125,9 +114,6 @@ export class ProjectScanner {
         }
       }
 
-      // Extract worktree metadata from the actual path
-      const worktreeMetadata = extractWorktreeMetadata(actualPath);
-
       return {
         id: encodedName,
         path: actualPath,
@@ -135,7 +121,6 @@ export class ProjectScanner {
         sessions: sessionIds,
         createdAt: Math.floor(createdAt),
         mostRecentSession: mostRecentSession ? Math.floor(mostRecentSession) : undefined,
-        worktree: worktreeMetadata,
       };
     } catch (error) {
       console.error(`Error scanning project ${encodedName}:`, error);

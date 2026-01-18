@@ -26,7 +26,6 @@ import * as os from 'os';
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import {
   Project,
-  ProjectGroup,
   Session,
   SessionDetail,
   SessionMetrics,
@@ -50,41 +49,6 @@ let sessionParser: SessionParser;
 let subagentResolver: SubagentResolver;
 let chunkBuilder: ChunkBuilder;
 let dataCache: DataCache;
-
-// =============================================================================
-// Project Handlers (defined before registerHandlers to avoid hoisting issues)
-// =============================================================================
-
-/**
- * Handler for 'get-projects' IPC call.
- * Lists all projects from ~/.claude/projects/
- */
-async function handleGetProjects(_event: IpcMainInvokeEvent): Promise<Project[]> {
-  try {
-    console.log('IPC: get-projects');
-    const projects = await projectScanner.scan();
-    console.log(`IPC: Found ${projects.length} projects`);
-    return projects;
-  } catch (error) {
-    console.error('IPC: Error in get-projects:', error);
-    return [];
-  }
-}
-
-/**
- * Handler for 'get-project-groups' IPC call.
- * Lists all projects grouped by date from ~/.claude/projects/
- */
-export async function handleGetProjectGroups(): Promise<ProjectGroup[]> {
-  console.log('[IPC] get-project-groups called');
-  const groups = await projectScanner.scanGrouped();
-  console.log(`[IPC] Returning ${groups.length} project groups`);
-  return groups;
-}
-
-// =============================================================================
-// Initialization
-// =============================================================================
 
 /**
  * Initializes IPC handlers with service instances.
@@ -111,7 +75,6 @@ export function initializeIpcHandlers(
 function registerHandlers(): void {
   // Project handlers
   ipcMain.handle('get-projects', handleGetProjects);
-  ipcMain.handle('get-project-groups', handleGetProjectGroups);
 
   // Session handlers
   ipcMain.handle('get-sessions', handleGetSessions);
@@ -139,6 +102,26 @@ function registerHandlers(): void {
   registerConfigHandlers(ipcMain);
 
   console.log('IPC: Handlers registered');
+}
+
+// =============================================================================
+// Project Handlers
+// =============================================================================
+
+/**
+ * Handler for 'get-projects' IPC call.
+ * Lists all projects from ~/.claude/projects/
+ */
+async function handleGetProjects(_event: IpcMainInvokeEvent): Promise<Project[]> {
+  try {
+    console.log('IPC: get-projects');
+    const projects = await projectScanner.scan();
+    console.log(`IPC: Found ${projects.length} projects`);
+    return projects;
+  } catch (error) {
+    console.error('IPC: Error in get-projects:', error);
+    return [];
+  }
 }
 
 // =============================================================================
@@ -551,7 +534,6 @@ async function handleScrollToLine(
  */
 export function removeIpcHandlers(): void {
   ipcMain.removeHandler('get-projects');
-  ipcMain.removeHandler('get-project-groups');
   ipcMain.removeHandler('get-sessions');
   ipcMain.removeHandler('get-sessions-paginated');
   ipcMain.removeHandler('get-session-detail');

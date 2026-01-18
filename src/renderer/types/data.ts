@@ -66,27 +66,6 @@ export interface Project {
 }
 
 /**
- * A group of related projects, either from the same repo or worktrees.
- * Used to organize the project list by repository.
- */
-export interface ProjectGroup {
-  /** Hash of mainRepoIndicator for stability */
-  id: string;
-  /** Display name (e.g., "vibe-kanban" or project name) */
-  displayName: string;
-  /** Full path to main repo */
-  mainRepoPath?: string;
-  /** All projects in this group (sorted: main first, then by recency) */
-  projects: Project[];
-  /** Number of worktree projects (0 for standalone) */
-  worktreeCount: number;
-  /** Max timestamp across all projects */
-  mostRecentSession?: number;
-  /** Sum of sessions across all projects */
-  totalSessions: number;
-}
-
-/**
  * Cursor for session pagination.
  * Uses timestamp + sessionId as a composite cursor for stable pagination.
  */
@@ -639,7 +618,6 @@ export interface SessionAPI {
 
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>;
-  getProjectGroups: () => Promise<ProjectGroup[]>;
   getSessions: (projectId: string) => Promise<Session[]>;
   getSessionsPaginated: (projectId: string, cursor: string | null, limit?: number) => Promise<PaginatedSessionsResult>;
   searchSessions: (projectId: string, query: string, maxResults?: number) => Promise<SearchSessionsResult>;
