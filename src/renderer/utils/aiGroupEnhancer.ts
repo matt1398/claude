@@ -83,7 +83,19 @@ export function formatToolResult(content: string | unknown[]): string {
  * @returns The last output or null
  */
 export function findLastOutput(steps: SemanticStep[], isOngoing: boolean = false): AIGroupLastOutput | null {
-  // If session is ongoing, return 'ongoing' type instead of forcing a last output
+  // Check for interruption first - interruption takes precedence over ongoing status
+  // This ensures user interruptions are always visible even if session appears ongoing
+  for (let i = steps.length - 1; i >= 0; i--) {
+    const step = steps[i];
+    if (step.type === 'interruption') {
+      return {
+        type: 'interruption',
+        timestamp: step.startTime,
+      };
+    }
+  }
+
+  // If session is ongoing (and no interruption), return 'ongoing' type
   if (isOngoing) {
     return {
       type: 'ongoing',

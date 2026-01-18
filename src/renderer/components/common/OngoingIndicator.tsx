@@ -1,0 +1,74 @@
+/**
+ * OngoingIndicator - Pulsing green dot for sessions/groups in progress.
+ * Shared across SessionItem (sidebar) and LastOutputDisplay (chat).
+ */
+
+import { Loader2 } from 'lucide-react';
+
+interface OngoingIndicatorProps {
+  /** Size variant */
+  size?: 'sm' | 'md';
+  /** Whether to show text label */
+  showLabel?: boolean;
+  /** Custom label text */
+  label?: string;
+}
+
+/**
+ * Pulsing green dot indicator for ongoing sessions.
+ * Use size="sm" for compact displays (sidebar), size="md" for larger displays (chat).
+ */
+export function OngoingIndicator({
+  size = 'sm',
+  showLabel = false,
+  label = 'Session in progress...',
+}: OngoingIndicatorProps) {
+  const dotSize = size === 'sm' ? 'h-2 w-2' : 'h-2.5 w-2.5';
+
+  return (
+    <span
+      className="inline-flex items-center gap-2"
+      title="Session in progress"
+    >
+      <span className={`relative flex ${dotSize} flex-shrink-0`}>
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+        <span className={`relative inline-flex rounded-full ${dotSize} bg-green-500`} />
+      </span>
+      {showLabel && (
+        <span
+          className="text-sm"
+          style={{ color: 'var(--info-text, #3b82f6)' }}
+        >
+          {label}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * OngoingBanner - Full-width banner variant for the LastOutputDisplay.
+ * Shows animated spinner and text.
+ */
+export function OngoingBanner() {
+  return (
+    <div
+      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg"
+      style={{
+        backgroundColor: 'var(--info-bg, rgba(59, 130, 246, 0.1))',
+        border: '1px solid var(--info-border, rgba(59, 130, 246, 0.3))',
+      }}
+    >
+      <Loader2
+        className="w-4 h-4 flex-shrink-0 animate-spin"
+        style={{ color: 'var(--info-text, #3b82f6)' }}
+      />
+      <span
+        className="text-sm"
+        style={{ color: 'var(--info-text, #3b82f6)' }}
+      >
+        Session is in progress...
+      </span>
+    </div>
+  );
+}

@@ -138,13 +138,17 @@ export function transformChunksToConversation(
     }
   }
 
-  // If session is ongoing, mark the last AI group
+  // If session is ongoing, mark the last AI group (but don't override interrupted status)
   if (isOngoing && aiCount > 0) {
     // Find the last AI item and mark it as ongoing
     for (let i = items.length - 1; i >= 0; i--) {
       if (items[i].type === 'ai') {
-        (items[i].group as any).isOngoing = true;
-        (items[i].group as any).status = 'in_progress';
+        const currentStatus = (items[i].group as any).status;
+        // Don't override 'interrupted' status - interruption takes precedence over ongoing
+        if (currentStatus !== 'interrupted') {
+          (items[i].group as any).isOngoing = true;
+          (items[i].group as any).status = 'in_progress';
+        }
         break;
       }
     }

@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AIGroupLastOutput } from '../../types/groups';
 import { SearchHighlight } from './SearchHighlight';
 import { useStore } from '../../store';
+import { OngoingBanner } from '../common/OngoingIndicator';
 
 interface LastOutputDisplayProps {
   lastOutput: AIGroupLastOutput | null;
   aiGroupId: string;
+  /** Whether this is the last AI group in the conversation */
+  isLastGroup?: boolean;
+  /** Whether the session is ongoing (from sessions array, same source as sidebar) */
+  isSessionOngoing?: boolean;
 }
 
 /**
@@ -210,7 +215,12 @@ const markdownComponents: Components = {
  * - Shows timestamp
  * - Expandable for long content
  */
-export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayProps) {
+export function LastOutputDisplay({
+  lastOutput,
+  aiGroupId,
+  isLastGroup = false,
+  isSessionOngoing = false,
+}: LastOutputDisplayProps) {
   const searchQuery = useStore((s) => s.searchQuery);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -228,6 +238,12 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
       }
     }
   }, [searchQuery, lastOutput]);
+
+  // Show ongoing banner if this is the last AI group and session is ongoing
+  // This uses the same source (sessions array) as the sidebar green dot for consistency
+  if (isLastGroup && isSessionOngoing) {
+    return <OngoingBanner />;
+  }
 
   if (!lastOutput) {
     return null;
@@ -365,30 +381,6 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
           style={{ color: 'var(--warning-text, #f59e0b)' }}
         >
           Request interrupted by user
-        </span>
-      </div>
-    );
-  }
-
-  // Render ongoing session indicator
-  if (type === 'ongoing') {
-    return (
-      <div
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg"
-        style={{
-          backgroundColor: 'var(--info-bg, rgba(59, 130, 246, 0.1))',
-          border: '1px solid var(--info-border, rgba(59, 130, 246, 0.3))',
-        }}
-      >
-        <Loader2
-          className="w-4 h-4 flex-shrink-0 animate-spin"
-          style={{ color: 'var(--info-text, #3b82f6)' }}
-        />
-        <span
-          className="text-sm"
-          style={{ color: 'var(--info-text, #3b82f6)' }}
-        >
-          Session is in progress...
         </span>
       </div>
     );

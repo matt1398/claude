@@ -58,6 +58,13 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
   const sessionDetail = useStore((s) => s.sessionDetail);
   const projectRoot = sessionDetail?.session?.projectPath;
 
+  // Check if current session is ongoing from the sessions array (same source as sidebar)
+  // This ensures consistency between sidebar green dot and chat "Session in progress..."
+  const sessions = useStore((s) => s.sessions);
+  const selectedSessionId = useStore((s) => s.selectedSessionId);
+  const currentSession = sessions.find((s) => s.id === selectedSessionId);
+  const isSessionOngoing = currentSession?.isOngoing ?? false;
+
   // Enhance the AI group to get display-ready data
   const enhanced: EnhancedAIGroup = enhanceAIGroup(aiGroup, claudeMdStats);
 
@@ -253,7 +260,12 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
 
       {/* Always-visible Output */}
       <div>
-        <LastOutputDisplay lastOutput={enhanced.lastOutput} aiGroupId={aiGroup.id} />
+        <LastOutputDisplay
+          lastOutput={enhanced.lastOutput}
+          aiGroupId={aiGroup.id}
+          isLastGroup={aiGroup.isOngoing ?? false}
+          isSessionOngoing={isSessionOngoing}
+        />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import { formatDistanceToNowStrict } from 'date-fns';
 import { GitBranch, MessageSquare } from 'lucide-react';
 import type { Session } from '../../types/data';
 import { useStore } from '../../store';
+import { OngoingIndicator } from '../common/OngoingIndicator';
 
 interface SessionItemProps {
   session: Session;
@@ -33,18 +34,6 @@ function formatShortTime(date: Date): string {
     .replace(' month', 'mo')
     .replace(' years', 'y')
     .replace(' year', 'y');
-}
-
-/**
- * Pulsing green dot indicator for ongoing sessions.
- */
-function OngoingIndicator() {
-  return (
-    <span className="relative flex h-2 w-2 flex-shrink-0" title="Session in progress">
-      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-    </span>
-  );
 }
 
 export function SessionItem({ session, isActive }: SessionItemProps) {

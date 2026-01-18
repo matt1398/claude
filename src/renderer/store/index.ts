@@ -663,10 +663,19 @@ export const useStore = create<AppState>((set, get) => ({
 
       console.log('[Store] refreshSessionInPlace: Updating with', newConversation.items.length, 'items');
 
+      // Also update the session's isOngoing in the sessions array
+      // This keeps the sidebar in sync with the chat view
+      const updatedSessions = currentState.sessions.map((s) =>
+        s.id === sessionId
+          ? { ...s, isOngoing: detail.session?.isOngoing ?? false }
+          : s
+      );
+
       // Update only the data, preserve UI states
       set({
         sessionDetail: detail,
         conversation: newConversation,
+        sessions: updatedSessions,
         // Preserve visible group if it still exists, otherwise keep current
         ...(visibleGroupStillExists ? {
           selectedAIGroup: updatedSelectedGroup
