@@ -85,6 +85,8 @@ interface AppState {
   // Expansion states
   aiGroupExpansionLevels: Map<string, AIGroupExpansionLevel>;
   expandedStepIds: Set<string>;
+  /** Display item expansion state per AI group - persists across refreshes */
+  expandedDisplayItemIds: Map<string, Set<string>>;
 
   // Chart mode
   ganttChartMode: 'timeline' | 'context';
@@ -143,6 +145,8 @@ interface AppState {
   resetSessionsPagination: () => void;
   selectSession: (id: string) => void;
   fetchSessionDetail: (projectId: string, sessionId: string) => Promise<void>;
+  /** Refresh session without loading states or UI resets - for real-time updates */
+  refreshSessionInPlace: (projectId: string, sessionId: string) => Promise<void>;
   clearSelection: () => void;
 
   // Drill-down actions
@@ -154,6 +158,10 @@ interface AppState {
   setVisibleAIGroup: (aiGroupId: string | null) => void;
   setAIGroupExpansion: (aiGroupId: string, level: AIGroupExpansionLevel) => void;
   toggleStepExpansion: (stepId: string) => void;
+  /** Toggle expansion of a display item within an AI group */
+  toggleDisplayItemExpansion: (aiGroupId: string, itemId: string) => void;
+  /** Get expanded display item IDs for an AI group */
+  getExpandedDisplayItemIds: (aiGroupId: string) => Set<string>;
   setGanttChartMode: (mode: 'timeline' | 'context') => void;
 
   // Detail popover actions
@@ -237,6 +245,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   aiGroupExpansionLevels: new Map(),
   expandedStepIds: new Set(),
+  expandedDisplayItemIds: new Map(),
 
   ganttChartMode: 'timeline',
 
@@ -588,6 +597,83 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  // Refresh session in place without loading states or UI resets
+  // Used for real-time file change updates to avoid flickering
+  refreshSessionInPlace: async (projectId: string, sessionId: string) => {
+    const currentState = get();
+
+    // Only refresh if we're actually viewing this session
+    if (currentState.selectedSessionId !== sessionId) {
+      const activeTab = currentState.getActiveTab();
+      if (!(activeTab?.type === 'session' && activeTab.sessionId === sessionId)) {
+        console.log('[Store] refreshSessionInPlace: Not viewing this session, skipping');
+        return;
+      }
+    }
+
+    try {
+      console.log('[Store] refreshSessionInPlace: Fetching updated data for', sessionId);
+      const detail = await window.electronAPI.getSessionDetail(projectId, sessionId);
+
+      if (!detail) {
+        console.log('[Store] refreshSessionInPlace: No detail returned');
+        return;
+      }
+
+      // Transform chunks to conversation
+      const isOngoing = detail.session?.isOngoing ?? false;
+      const newConversation = transformChunksToConversation(
+        detail.chunks as any,
+        detail.processes,
+        isOngoing
+      );
+
+      if (!newConversation) {
+        return;
+      }
+
+      // Preserve current visibleAIGroupId if it still exists in new conversation
+      // Otherwise keep it (it might be scrolled to an item that still exists)
+      const currentVisibleId = currentState.visibleAIGroupId;
+      const currentSelectedGroup = currentState.selectedAIGroup;
+
+      // Check if current visible group still exists
+      const visibleGroupStillExists = currentVisibleId &&
+        newConversation.items.some(item =>
+          item.type === 'ai' && item.group.id === currentVisibleId
+        );
+
+      // Find the updated group if it exists
+      let updatedSelectedGroup = currentSelectedGroup;
+      if (visibleGroupStillExists && currentVisibleId) {
+        const foundItem = newConversation.items.find(item =>
+          item.type === 'ai' && item.group.id === currentVisibleId
+        );
+        if (foundItem?.type === 'ai') {
+          updatedSelectedGroup = foundItem.group;
+        }
+      }
+
+      console.log('[Store] refreshSessionInPlace: Updating with', newConversation.items.length, 'items');
+
+      // Update only the data, preserve UI states
+      set({
+        sessionDetail: detail,
+        conversation: newConversation,
+        // Preserve visible group if it still exists, otherwise keep current
+        ...(visibleGroupStillExists ? {
+          selectedAIGroup: updatedSelectedGroup
+        } : {})
+        // Note: aiGroupExpansionLevels and expandedStepIds are NOT touched
+        // so expansion states are preserved
+      });
+
+    } catch (error) {
+      console.error('[Store] refreshSessionInPlace error:', error);
+      // Don't set error state - this is a background refresh
+    }
+  },
+
   // Clear all selections
   clearSelection: () => {
     set({
@@ -735,6 +821,29 @@ export const useStore = create<AppState>((set, get) => ({
       newExpandedStepIds.add(stepId);
     }
     set({ expandedStepIds: newExpandedStepIds });
+  },
+
+  // Toggle expansion of a display item within an AI group
+  toggleDisplayItemExpansion: (aiGroupId: string, itemId: string) => {
+    const state = get();
+    const newMap = new Map(state.expandedDisplayItemIds);
+    const currentSet = newMap.get(aiGroupId) || new Set<string>();
+    const newSet = new Set(currentSet);
+
+    if (newSet.has(itemId)) {
+      newSet.delete(itemId);
+    } else {
+      newSet.add(itemId);
+    }
+
+    newMap.set(aiGroupId, newSet);
+    set({ expandedDisplayItemIds: newMap });
+  },
+
+  // Get expanded display item IDs for an AI group
+  getExpandedDisplayItemIds: (aiGroupId: string) => {
+    const state = get();
+    return state.expandedDisplayItemIds.get(aiGroupId) || new Set<string>();
   },
 
   // Set Gantt chart display mode
@@ -1350,27 +1459,28 @@ export function initializeNotificationListeners(): () => void {
   // Listen for file changes to auto-refresh current session
   if (window.electronAPI.onFileChange) {
     const cleanup = window.electronAPI.onFileChange((event) => {
+      // Only handle session file changes (not subagent files, not deletions)
+      if (
+        event.type !== 'change' ||
+        event.isSubagent ||
+        !event.projectId ||
+        !event.sessionId
+      ) {
+        return;
+      }
+
       const state = useStore.getState();
 
-      // Only refresh if viewing the changed session (not subagent files)
-      if (
-        event.type === 'change' &&
-        !event.isSubagent &&
-        event.projectId &&
-        event.sessionId
-      ) {
-        // Check if the changed session is currently being viewed
-        // (either via selectedSessionId or active tab)
-        const activeTab = state.getActiveTab();
-        const isViewingSession =
-          (state.selectedSessionId === event.sessionId) ||
-          (activeTab?.type === 'session' && activeTab.sessionId === event.sessionId);
+      // Check if the changed session is currently being viewed
+      const activeTab = state.getActiveTab();
+      const isViewingSession =
+        (state.selectedSessionId === event.sessionId) ||
+        (activeTab?.type === 'session' && activeTab.sessionId === event.sessionId);
 
-        if (isViewingSession) {
-          console.log('[Store] File changed, refreshing session:', event.sessionId);
-          // Re-fetch session detail (cache already invalidated by FileWatcher)
-          state.fetchSessionDetail(event.projectId, event.sessionId);
-        }
+      if (isViewingSession) {
+        console.log('[Store] File changed, refreshing session in place:', event.sessionId);
+        // Use refreshSessionInPlace to avoid flickering and preserve UI state
+        state.refreshSessionInPlace(event.projectId, event.sessionId);
       }
     });
     if (typeof cleanup === 'function') {

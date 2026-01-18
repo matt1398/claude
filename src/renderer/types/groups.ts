@@ -244,6 +244,8 @@ export interface AIGroupTokens {
 export interface AIGroup {
   /** Unique identifier */
   id: string;
+  /** 0-based index of this AI group within the session (for turn navigation) */
+  turnIndex: number;
   /** Start timestamp */
   startTime: Date;
   /** End timestamp */

@@ -119,17 +119,20 @@ export function transformChunksToConversation(
         type: 'system',
         group: createSystemGroup(chunk),
       });
+      systemCount++;
     } else if (isEnhancedAIChunk(chunk)) {
       items.push({
         type: 'ai',
-        group: createAIGroupFromChunk(chunk),
+        group: createAIGroupFromChunk(chunk, aiCount),
       });
+      aiCount++;
     } else if (isEnhancedCompactChunk(chunk)) {
       console.log('[groupTransformer] Found compact chunk, creating group');
       items.push({
         type: 'compact',
         group: createCompactGroup(chunk),
       });
+      compactCount++;
     } else {
       console.warn('[groupTransformer] Unhandled chunk type:', (chunk as any).chunkType);
     }
@@ -339,7 +342,6 @@ function extractFileReferences(text: string): FileReference[] {
  * Creates a SystemGroup from an EnhancedSystemChunk.
  *
  * @param chunk - The system chunk to transform
- * @param index - Index within the session (for ordering)
  * @returns SystemGroup with command output
  */
 function createSystemGroup(chunk: EnhancedSystemChunk): SystemGroup {
@@ -359,7 +361,6 @@ function createSystemGroup(chunk: EnhancedSystemChunk): SystemGroup {
  * Creates a CompactGroup from an EnhancedCompactChunk.
  *
  * @param chunk - The compact chunk to transform
- * @param index - Index within the session (for ordering)
  * @returns CompactGroup marking where conversation was compacted, with message content
  */
 function createCompactGroup(chunk: EnhancedCompactChunk): CompactGroup {
@@ -378,10 +379,10 @@ function createCompactGroup(chunk: EnhancedCompactChunk): CompactGroup {
  * Creates an AIGroup from an EnhancedAIChunk.
  *
  * @param chunk - The AI chunk to transform
- * @param index - Index within the session (for ordering)
+ * @param turnIndex - 0-based index of this AI group within the session
  * @returns AIGroup with semantic steps and metrics
  */
-function createAIGroupFromChunk(chunk: EnhancedAIChunk): AIGroup {
+function createAIGroupFromChunk(chunk: EnhancedAIChunk, turnIndex: number): AIGroup {
   const steps = chunk.semanticSteps;
 
   // Calculate timing from all steps
@@ -405,6 +406,7 @@ function createAIGroupFromChunk(chunk: EnhancedAIChunk): AIGroup {
 
   return {
     id: chunk.id, // Use stable chunk ID instead of array index
+    turnIndex,
     startTime,
     endTime,
     durationMs,

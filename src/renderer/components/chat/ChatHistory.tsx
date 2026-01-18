@@ -170,7 +170,15 @@ export function ChatHistory(): JSX.Element {
 
   // Handler to navigate to a specific turn (AI group) from CLAUDE.md panel
   const handleNavigateToTurn = useCallback((turnIndex: number) => {
-    const groupId = `ai-${turnIndex}`;
+    if (!conversation) return;
+
+    // Find the AI group with matching turnIndex
+    const targetItem = conversation.items.find(
+      (item) => item.type === 'ai' && (item.group as AIGroup).turnIndex === turnIndex
+    );
+    if (!targetItem || targetItem.type !== 'ai') return;
+
+    const groupId = targetItem.group.id;
     const element = aiGroupRefs.current.get(groupId);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -182,7 +190,7 @@ export function ChatHistory(): JSX.Element {
         setIsNavigationHighlight(false);
       }, 2000);
     }
-  }, []);
+  }, [conversation]);
 
   // Calculate target AI group ID based on error timestamp
   const targetGroupId = useMemo(() => {

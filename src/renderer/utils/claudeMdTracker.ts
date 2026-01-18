@@ -350,8 +350,10 @@ export function computeClaudeMdStats(params: ComputeClaudeMdStatsParams): Claude
   const previousPaths = new Set(previousInjections.map(inj => inj.path));
 
   // For the first group, add global injections
+  // Use "ai-N" format for firstSeenInGroup to enable turn navigation in SessionClaudeMdPanel
+  const turnGroupId = `ai-${aiGroup.turnIndex}`;
   if (isFirstGroup) {
-    const globalInjections = createGlobalInjections(projectRoot, aiGroup.id, tokenData);
+    const globalInjections = createGlobalInjections(projectRoot, turnGroupId, tokenData);
     for (const injection of globalInjections) {
       if (!previousPaths.has(injection.path)) {
         newInjections.push(injection);
@@ -392,7 +394,7 @@ export function computeClaudeMdStats(params: ComputeClaudeMdStatsParams): Claude
       }
 
       // Create directory injection
-      const injection = createDirectoryInjection(claudeMdPath, aiGroup.id);
+      const injection = createDirectoryInjection(claudeMdPath, turnGroupId);
       newInjections.push(injection);
       previousPaths.add(claudeMdPath);
     }

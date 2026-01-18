@@ -110,17 +110,13 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
     return null;
   };
 
-  // Local state for inline item expansion - allows multiple items to be expanded
-  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(() => {
-    // Auto-expand the errored item if present
-    if (highlightToolUseId && containsHighlightedError) {
-      const itemId = findHighlightedItemId(highlightToolUseId);
-      if (itemId) {
-        return new Set([itemId]);
-      }
-    }
-    return new Set();
-  });
+  // Get expanded item IDs from store (persists across refreshes)
+  const expandedDisplayItemIds = useStore((s) => s.expandedDisplayItemIds);
+  const toggleDisplayItemExpansion = useStore((s) => s.toggleDisplayItemExpansion);
+  const expandedItemIds = useMemo(
+    () => expandedDisplayItemIds.get(aiGroup.id) || new Set<string>(),
+    [expandedDisplayItemIds, aiGroup.id]
+  );
 
   // Effect to auto-expand when highlightToolUseId changes
   useEffect(() => {
@@ -128,11 +124,11 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
       setIsExpanded(true);
       // Find and expand the item containing the error
       const itemId = findHighlightedItemId(highlightToolUseId);
-      if (itemId) {
-        setExpandedItemIds(prev => new Set([...prev, itemId]));
+      if (itemId && !expandedItemIds.has(itemId)) {
+        toggleDisplayItemExpansion(aiGroup.id, itemId);
       }
     }
-  }, [highlightToolUseId, containsHighlightedError]);
+  }, [highlightToolUseId, containsHighlightedError, aiGroup.id, expandedItemIds, toggleDisplayItemExpansion]);
 
   // Effect to auto-expand when search navigates to this group
   useEffect(() => {
@@ -140,8 +136,8 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
       setIsExpanded(true);
 
       // Expand the specific display item containing the search result
-      if (searchCurrentDisplayItemId) {
-        setExpandedItemIds(prev => new Set([...prev, searchCurrentDisplayItemId]));
+      if (searchCurrentDisplayItemId && !expandedItemIds.has(searchCurrentDisplayItemId)) {
+        toggleDisplayItemExpansion(aiGroup.id, searchCurrentDisplayItemId);
       }
 
       // If any subagents in this group need their trace expanded for search, expand them
@@ -149,26 +145,20 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
         const item = enhanced.displayItems[i];
         if (item.type === 'subagent' && searchExpandedSubagentIds.has(item.subagent.id)) {
           const subagentItemId = `subagent-${item.subagent.id}-${i}`;
-          setExpandedItemIds(prev => new Set([...prev, subagentItemId]));
+          if (!expandedItemIds.has(subagentItemId)) {
+            toggleDisplayItemExpansion(aiGroup.id, subagentItemId);
+          }
         }
       }
     }
-  }, [shouldExpandForSearch, searchCurrentDisplayItemId, searchExpandedSubagentIds, enhanced.displayItems]);
+  }, [shouldExpandForSearch, searchCurrentDisplayItemId, searchExpandedSubagentIds, enhanced.displayItems, aiGroup.id, expandedItemIds, toggleDisplayItemExpansion]);
 
   // Determine if there's content to toggle
   const hasToggleContent = enhanced.displayItems.length > 0;
 
-  // Handle item click - toggle inline expansion (add/remove from Set)
+  // Handle item click - toggle inline expansion using store action
   const handleItemClick = (itemId: string) => {
-    setExpandedItemIds(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId);
-      } else {
-        newSet.add(itemId);
-      }
-      return newSet;
-    });
+    toggleDisplayItemExpansion(aiGroup.id, itemId);
   };
 
   return (

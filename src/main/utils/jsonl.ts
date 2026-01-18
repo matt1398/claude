@@ -324,9 +324,8 @@ function extractToolResults(content: ContentBlock[] | string): ToolResult[] {
  * Used for session previews.
  *
  * Priority:
- * 1. First summary entry (preferred for preview)
- * 2. First non-command user message
- * 3. First command message as fallback (for command-only sessions)
+ * 1. First non-command user message
+ * 2. First command message as fallback (for command-only sessions)
  */
 export async function extractFirstUserMessage(
   filePath: string
@@ -345,39 +344,7 @@ export async function extractFirstUserMessage(
   let firstCommandMessage: { text: string; timestamp: string } | null = null;
 
   try {
-    // FIRST PASS: Scan for summary entry
     for await (const line of rl) {
-      if (!line.trim()) continue;
-
-      const entry = JSON.parse(line) as ChatHistoryEntry;
-
-      // Found a summary entry - use it immediately
-      if (entry.type === 'summary') {
-        const summaryEntry = entry as any;
-        const summaryText = summaryEntry.summary;
-
-        if (summaryText && typeof summaryText === 'string') {
-          fileStream.destroy();
-          return {
-            text: summaryText.substring(0, 100), // Limit to 100 chars as requested
-            timestamp: entry.timestamp ?? new Date().toISOString(),
-          };
-        }
-      }
-    }
-
-    // If we reach here, no summary was found - need to scan again for user messages
-    rl.close();
-    fileStream.destroy();
-
-    // SECOND PASS: Scan for user messages (fallback)
-    const fileStream2 = fs.createReadStream(filePath, { encoding: 'utf8' });
-    const rl2 = readline.createInterface({
-      input: fileStream2,
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl2) {
       if (!line.trim()) continue;
 
       const entry = JSON.parse(line) as ChatHistoryEntry;
@@ -412,7 +379,7 @@ export async function extractFirstUserMessage(
         // Found a valid non-command user message - apply sanitization for display
         const sanitized = sanitizeDisplayContent(content);
         if (sanitized.length > 0) {
-          fileStream2.destroy();
+          fileStream.destroy();
           return {
             text: sanitized.substring(0, 500), // Limit preview length
             timestamp: entry.timestamp ?? new Date().toISOString(),
@@ -431,7 +398,7 @@ export async function extractFirstUserMessage(
           // Apply sanitization for display
           const sanitized = sanitizeDisplayContent(textContent);
           if (sanitized.length > 0) {
-            fileStream2.destroy();
+            fileStream.destroy();
             return {
               text: sanitized.substring(0, 500),
               timestamp: entry.timestamp ?? new Date().toISOString(),
