@@ -667,6 +667,8 @@ export interface Project {
   createdAt: number;
   /** Unix timestamp of most recent session activity */
   mostRecentSession?: number;
+  /** Worktree metadata if project is part of a git worktree */
+  worktree?: WorktreeMetadata;
 }
 
 /**
@@ -1251,6 +1253,42 @@ export interface PathInfo {
   decoded: string;
   /** Display name */
   name: string;
+}
+
+/**
+ * Metadata about a project's worktree status.
+ * Used to detect and group git worktree-based projects together.
+ */
+export interface WorktreeMetadata {
+  /** Whether this project is a git worktree */
+  isWorktree: boolean;
+  /** Parent of /worktrees/ (e.g., /path/to/vibe-kanban) */
+  worktreeRoot?: string;
+  /** Branch identifier (e.g., "1116-support-git-work") */
+  worktreeId?: string;
+  /** For grouping - worktreeRoot for worktrees, full path for non-worktrees */
+  mainRepoIndicator: string;
+}
+
+/**
+ * A group of related projects, either from the same repo or worktrees.
+ * Used to organize the project list by repository.
+ */
+export interface ProjectGroup {
+  /** Hash of mainRepoIndicator for stability */
+  id: string;
+  /** Display name (e.g., "vibe-kanban" or project name) */
+  displayName: string;
+  /** Full path to main repo */
+  mainRepoPath?: string;
+  /** All projects in this group (sorted: main first, then by recency) */
+  projects: Project[];
+  /** Number of worktree projects (0 for standalone) */
+  worktreeCount: number;
+  /** Max timestamp across all projects */
+  mostRecentSession?: number;
+  /** Sum of sessions across all projects */
+  totalSessions: number;
 }
 
 /**
