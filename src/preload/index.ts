@@ -170,6 +170,13 @@ const electronAPI: ElectronAPI = {
     scrollToLine: (sessionId: string, lineNumber: number) =>
       ipcRenderer.invoke('session:scrollToLine', sessionId, lineNumber),
   },
+
+  // File change events (real-time updates)
+  onFileChange: (callback: (event: { type: 'add' | 'change' | 'unlink'; path: string; projectId?: string; sessionId?: string; isSubagent: boolean }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, data: { type: 'add' | 'change' | 'unlink'; path: string; projectId?: string; sessionId?: string; isSubagent: boolean }) => callback(data);
+    ipcRenderer.on('file-change', listener);
+    return () => ipcRenderer.removeListener('file-change', listener);
+  },
 };
 
 // Use contextBridge to securely expose the API to the renderer process

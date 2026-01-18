@@ -1347,6 +1347,37 @@ export function initializeNotificationListeners(): () => void {
     }
   }
 
+  // Listen for file changes to auto-refresh current session
+  if (window.electronAPI.onFileChange) {
+    const cleanup = window.electronAPI.onFileChange((event) => {
+      const state = useStore.getState();
+
+      // Only refresh if viewing the changed session (not subagent files)
+      if (
+        event.type === 'change' &&
+        !event.isSubagent &&
+        event.projectId &&
+        event.sessionId
+      ) {
+        // Check if the changed session is currently being viewed
+        // (either via selectedSessionId or active tab)
+        const activeTab = state.getActiveTab();
+        const isViewingSession =
+          (state.selectedSessionId === event.sessionId) ||
+          (activeTab?.type === 'session' && activeTab.sessionId === event.sessionId);
+
+        if (isViewingSession) {
+          console.log('[Store] File changed, refreshing session:', event.sessionId);
+          // Re-fetch session detail (cache already invalidated by FileWatcher)
+          state.fetchSessionDetail(event.projectId, event.sessionId);
+        }
+      }
+    });
+    if (typeof cleanup === 'function') {
+      cleanupFns.push(cleanup);
+    }
+  }
+
   // Return cleanup function
   return () => {
     cleanupFns.forEach((fn) => fn());

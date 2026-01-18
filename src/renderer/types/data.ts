@@ -685,6 +685,9 @@ export interface ElectronAPI {
 
   // Deep link navigation
   session: SessionAPI;
+
+  // File change events (real-time updates)
+  onFileChange: (callback: (event: FileChangeEvent) => void) => () => void;
 }
 
 // =============================================================================
