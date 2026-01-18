@@ -42,28 +42,28 @@ export const ThinkingItem: React.FC<ThinkingItemProps> = ({ step, preview, onCli
       {/* Expanded Content - Card style matching CodeBlockViewer */}
       {isExpanded && (
         <div className="pl-4 ml-2 mt-1 mb-2">
-          <div
-            className="rounded-lg shadow-sm overflow-hidden"
-            style={{
-              backgroundColor: 'var(--code-bg)',
-              border: '1px solid var(--code-border)',
-            }}
-          >
-            <div className="p-4 max-h-96 overflow-y-auto">
-              {searchQuery ? (
+          {searchQuery ? (
+            <div
+              className="rounded-lg shadow-sm overflow-hidden"
+              style={{
+                backgroundColor: 'var(--code-bg)',
+                border: '1px solid var(--code-border)',
+              }}
+            >
+              <div className="p-4 max-h-96 overflow-y-auto">
                 <SearchHighlight
                   text={fullContent}
                   itemId={aiGroupId}
                   className="text-sm whitespace-pre-wrap"
                 />
-              ) : (
-                <MarkdownViewer
-                  content={fullContent}
-                  maxHeight="max-h-96"
-                />
-              )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <MarkdownViewer
+              content={fullContent}
+              maxHeight="max-h-96"
+            />
+          )}
         </div>
       )}
     </div>

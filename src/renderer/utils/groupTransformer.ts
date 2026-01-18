@@ -117,18 +117,18 @@ export function transformChunksToConversation(
       });
       items.push({
         type: 'system',
-        group: createSystemGroup(chunk, systemCount++),
+        group: createSystemGroup(chunk),
       });
     } else if (isEnhancedAIChunk(chunk)) {
       items.push({
         type: 'ai',
-        group: createAIGroupFromChunk(chunk, aiCount++),
+        group: createAIGroupFromChunk(chunk),
       });
     } else if (isEnhancedCompactChunk(chunk)) {
       console.log('[groupTransformer] Found compact chunk, creating group');
       items.push({
         type: 'compact',
-        group: createCompactGroup(chunk, compactCount++),
+        group: createCompactGroup(chunk),
       });
     } else {
       console.warn('[groupTransformer] Unhandled chunk type:', (chunk as any).chunkType);
@@ -342,9 +342,9 @@ function extractFileReferences(text: string): FileReference[] {
  * @param index - Index within the session (for ordering)
  * @returns SystemGroup with command output
  */
-function createSystemGroup(chunk: EnhancedSystemChunk, index: number): SystemGroup {
+function createSystemGroup(chunk: EnhancedSystemChunk): SystemGroup {
   return {
-    id: `system-${index}`,
+    id: chunk.id, // Use stable chunk ID instead of array index
     message: chunk.message,
     timestamp: chunk.startTime,
     commandOutput: chunk.commandOutput,
@@ -362,9 +362,9 @@ function createSystemGroup(chunk: EnhancedSystemChunk, index: number): SystemGro
  * @param index - Index within the session (for ordering)
  * @returns CompactGroup marking where conversation was compacted, with message content
  */
-function createCompactGroup(chunk: EnhancedCompactChunk, index: number): CompactGroup {
+function createCompactGroup(chunk: EnhancedCompactChunk): CompactGroup {
   return {
-    id: `compact-${index}`,
+    id: chunk.id, // Use stable chunk ID instead of array index
     timestamp: chunk.startTime,
     message: chunk.message,  // Pass through the compact summary message
   };
@@ -381,7 +381,7 @@ function createCompactGroup(chunk: EnhancedCompactChunk, index: number): Compact
  * @param index - Index within the session (for ordering)
  * @returns AIGroup with semantic steps and metrics
  */
-function createAIGroupFromChunk(chunk: EnhancedAIChunk, index: number): AIGroup {
+function createAIGroupFromChunk(chunk: EnhancedAIChunk): AIGroup {
   const steps = chunk.semanticSteps;
 
   // Calculate timing from all steps
@@ -404,7 +404,7 @@ function createAIGroupFromChunk(chunk: EnhancedAIChunk, index: number): AIGroup 
   const status = determineAIGroupStatus(steps);
 
   return {
-    id: `ai-${index}`,
+    id: chunk.id, // Use stable chunk ID instead of array index
     startTime,
     endTime,
     durationMs,

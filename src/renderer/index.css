@@ -2,179 +2,228 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme CSS Custom Properties */
+/* Theme CSS Custom Properties - Linear-style Premium Dark Mode */
 :root {
-  /* Dark theme (default) */
-  --color-surface: #18181b;
-  --color-surface-raised: #27272a;
-  --color-surface-overlay: #3f3f46;
-  --color-border: #3f3f46;
-  --color-border-subtle: #27272a;
-  --color-border-emphasis: #52525b;
-  --color-text: #fafafa;
-  --color-text-secondary: #a1a1aa;
-  --color-text-muted: #71717a;
+  /* =================================================================
+     LINEAR-STYLE DARK THEME - LAYERED DEPTH SYSTEM
+     Two-tone backgrounds with elevated cards for visual hierarchy
+     ================================================================= */
 
-  /* Scrollbar colors */
-  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
-  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.25);
-  --scrollbar-thumb-active: rgba(255, 255, 255, 0.35);
+  /* ---------------------------------------------------------------
+     LAYERED SURFACE HIERARCHY (dark → light)
+     Creates depth and separates navigation from content
+     --------------------------------------------------------------- */
 
-  /* Search highlights */
-  --highlight-bg: rgba(202, 138, 4, 0.7);
-  --highlight-bg-inactive: rgba(113, 63, 18, 0.5);
-  --highlight-text: #fef9c3;
-  --highlight-text-inactive: #fef08a;
-  --highlight-ring: #facc15;
+  /* Layer 0: Sidebar/Header - Deepest, anchors the layout */
+  --color-surface: #0E0F11;
 
-  /* User chat bubble */
-  --chat-user-bg: rgba(37, 99, 235, 0.15);
-  --chat-user-text: #e4e4e7;
-  --chat-user-border: transparent;
+  /* Layer 1: Main Content Area - Slightly lighter for reading focus */
+  --color-surface-content: #161719;
 
-  /* User bubble inline tags */
-  --chat-user-tag-bg: rgba(255, 255, 255, 0.1);
-  --chat-user-tag-text: #fde68a;
-  --chat-user-tag-border: rgba(255, 255, 255, 0.15);
+  /* Layer 2: Cards/Bubbles - Elevated elements that float above content */
+  --color-surface-raised: #1F2124;
 
-  /* Tool items */
-  --tool-item-name: #e4e4e7;
-  --tool-item-summary: #a1a1aa;
-  --tool-item-muted: #71717a;
-  --tool-item-hover-bg: rgba(39, 39, 42, 0.5);
+  /* Layer 3: Code blocks/Modals - Highest elevation, most prominent */
+  --color-surface-overlay: #232529;
 
-  /* System chat bubble */
-  --chat-system-bg: rgba(39, 39, 42, 0.5);
-  --chat-system-text: #d4d4d8;
+  /* Micro-borders - Low opacity white for crisp layer separation */
+  --color-border: rgba(255, 255, 255, 0.10);          /* Default border */
+  --color-border-subtle: rgba(255, 255, 255, 0.06);   /* Subtle dividers */
+  --color-border-emphasis: rgba(255, 255, 255, 0.14); /* Emphasized borders */
 
-  /* AI message styling */
-  --chat-ai-border: rgba(63, 63, 70, 0.6);
-  --chat-ai-icon: #71717a;
+  /* Text hierarchy - Soft white to reduce eye strain */
+  --color-text: #EDEDED;              /* Primary text - soft white, not stark */
+  --color-text-secondary: #9DA3AE;    /* Secondary text - warmer gray */
+  --color-text-muted: #6B7280;        /* Tertiary/disabled text */
 
-  /* Code blocks */
-  --code-bg: rgba(24, 24, 27, 0.5);
-  --code-header-bg: rgba(39, 39, 42, 0.5);
-  --code-border: rgba(63, 63, 70, 0.3);
-  --code-line-number: #52525b;
-  --code-filename: #60a5fa;
+  /* Scrollbar colors - Subtle, unobtrusive */
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.20);
+  --scrollbar-thumb-active: rgba(255, 255, 255, 0.28);
 
-  /* Syntax highlighting - Dark theme */
-  --syntax-string: #4ade80;
-  --syntax-comment: #71717a;
-  --syntax-number: #fb923c;
-  --syntax-keyword: #c084fc;
-  --syntax-type: #facc15;
-  --syntax-operator: #a1a1aa;
-  --syntax-function: #60a5fa;
+  /* Search highlights - Desaturated amber accent */
+  --highlight-bg: rgba(180, 140, 60, 0.5);
+  --highlight-bg-inactive: rgba(140, 110, 50, 0.3);
+  --highlight-text: #F5E6C8;
+  --highlight-text-inactive: #D4C4A8;
+  --highlight-ring: #C9A84C;
 
-  /* Inline code */
-  --inline-code-bg: #27272a;
-  --inline-code-text: #fbbf24;
+  /* ---------------------------------------------------------------
+     CHAT BUBBLES - Elevated above content area
+     --------------------------------------------------------------- */
 
-  /* Diff viewer */
-  --diff-added-bg: rgba(34, 197, 94, 0.15);
-  --diff-added-text: #4ade80;
-  --diff-added-border: #22c55e;
-  --diff-removed-bg: rgba(239, 68, 68, 0.15);
-  --diff-removed-text: #f87171;
-  --diff-removed-border: #ef4444;
+  /* User chat bubble - Elevated with subtle blue tint */
+  --chat-user-bg: #1E2328;
+  --chat-user-text: #EDEDED;
+  --chat-user-border: rgba(255, 255, 255, 0.10);
 
-  /* Markdown prose */
-  --prose-heading: #fafafa;
-  --prose-body: #d4d4d8;
-  --prose-muted: #a1a1aa;
-  --prose-link: #60a5fa;
-  --prose-code-bg: #27272a;
-  --prose-code-text: #fbbf24;
-  --prose-pre-bg: #27272a;
-  --prose-pre-border: #3f3f46;
-  --prose-blockquote-border: #52525b;
-  --prose-table-border: #3f3f46;
-  --prose-table-header-bg: #27272a;
+  /* User bubble inline tags - Subtle warmth */
+  --chat-user-tag-bg: rgba(255, 255, 255, 0.08);
+  --chat-user-tag-text: #D4B896;
+  --chat-user-tag-border: rgba(255, 255, 255, 0.12);
 
-  /* Thinking blocks */
-  --thinking-bg: rgba(88, 28, 135, 0.2);
-  --thinking-border: rgba(107, 33, 168, 0.4);
-  --thinking-text: #d8b4fe;
-  --thinking-text-muted: #e9d5ff;
-  --thinking-content-border: rgba(107, 33, 168, 0.3);
-  --thinking-content-text: #f3e8ff;
+  /* AI/Assistant message bubble - Distinct elevated surface */
+  --chat-ai-bg: #1F2124;
+  --chat-ai-text: #EDEDED;
+  --chat-ai-border: rgba(255, 255, 255, 0.10);
+  --chat-ai-icon: #6B7280;
 
-  /* Tool call blocks */
-  --tool-call-bg: rgba(120, 53, 15, 0.2);
-  --tool-call-border: rgba(146, 64, 14, 0.4);
-  --tool-call-text: #fcd34d;
-  --tool-call-code-bg: rgba(69, 26, 3, 0.5);
-  --tool-call-content-border: rgba(146, 64, 14, 0.3);
+  /* System chat bubble - Minimal elevation */
+  --chat-system-bg: #1A1C1F;
+  --chat-system-text: #B8BCC5;
 
-  /* Tool result blocks */
-  --tool-result-success-bg: rgba(20, 83, 45, 0.2);
-  --tool-result-success-border: rgba(22, 101, 52, 0.4);
-  --tool-result-success-text: #86efac;
-  --tool-result-error-bg: rgba(127, 29, 29, 0.2);
-  --tool-result-error-border: rgba(153, 27, 27, 0.4);
-  --tool-result-error-text: #fca5a5;
+  /* Tool items - Clean hierarchy */
+  --tool-item-name: #EDEDED;
+  --tool-item-summary: #9DA3AE;
+  --tool-item-muted: #6B7280;
+  --tool-item-hover-bg: rgba(255, 255, 255, 0.05);
 
-  /* Output blocks */
-  --output-bg: rgba(31, 41, 55, 0.3);
-  --output-border: #374151;
-  --output-text: #e5e7eb;
-  --output-content-border: rgba(55, 65, 81, 0.5);
+  /* ---------------------------------------------------------------
+     CODE BLOCKS - Highest elevation, must stand out
+     --------------------------------------------------------------- */
 
-  /* Badges */
-  --badge-error-bg: #dc2626;
-  --badge-error-text: #ffffff;
-  --badge-warning-bg: #ca8a04;
-  --badge-warning-text: #ffffff;
-  --badge-success-bg: #16a34a;
-  --badge-success-text: #ffffff;
-  --badge-info-bg: #2563eb;
-  --badge-info-text: #ffffff;
-  --badge-neutral-bg: #3f3f46;
-  --badge-neutral-text: #e4e4e7;
+  /* Code blocks - Elevated with visible border */
+  --code-bg: #232529;
+  --code-header-bg: #282C31;
+  --code-border: rgba(255, 255, 255, 0.10);
+  --code-line-number: #4B5563;
+  --code-filename: #7AA2D4;
 
-  /* Language/tag badges */
-  --tag-bg: #27272a;
-  --tag-text: #a1a1aa;
-  --tag-border: transparent;
+  /* Syntax highlighting - Desaturated, elegant palette */
+  --syntax-string: #7EC699;           /* Soft green */
+  --syntax-comment: #6B7280;          /* Muted gray */
+  --syntax-number: #D4A373;           /* Warm amber */
+  --syntax-keyword: #B39DDB;          /* Soft purple */
+  --syntax-type: #C9A84C;             /* Desaturated gold */
+  --syntax-operator: #9DA3AE;         /* Secondary gray */
+  --syntax-function: #7AA2D4;         /* Soft blue */
 
-  /* Highlighted text (skills, paths) */
-  --skill-highlight-bg: rgba(120, 53, 15, 0.3);
-  --skill-highlight-text: #fde68a;
-  --path-highlight-bg: rgba(124, 45, 18, 0.3);
-  --path-highlight-text: #fdba74;
+  /* Inline code - Elevated background */
+  --inline-code-bg: #282C31;
+  --inline-code-text: #D4A373;
 
-  /* Interruption badge */
-  --interruption-bg: rgba(127, 29, 29, 0.3);
-  --interruption-border: #b91c1c;
-  --interruption-text: #fca5a5;
+  /* Diff viewer - Desaturated success/error */
+  --diff-added-bg: rgba(126, 198, 153, 0.12);
+  --diff-added-text: #7EC699;
+  --diff-added-border: rgba(126, 198, 153, 0.3);
+  --diff-removed-bg: rgba(224, 108, 117, 0.12);
+  --diff-removed-text: #E06C75;
+  --diff-removed-border: rgba(224, 108, 117, 0.3);
 
-  /* Warning/Amber colors (for interruption banner) */
-  --warning-bg: rgba(245, 158, 11, 0.15);
-  --warning-border: rgba(245, 158, 11, 0.4);
-  --warning-text: #fbbf24;
+  /* ---------------------------------------------------------------
+     MARKDOWN/PROSE - Optimized for reading in content area
+     --------------------------------------------------------------- */
 
-  /* Error highlight (pulsing) */
-  --error-highlight-ring: #ef4444;
-  --error-highlight-bg: rgba(239, 68, 68, 0.2);
+  --prose-heading: #EDEDED;
+  --prose-body: #D1D5DB;              /* Slightly brighter for readability */
+  --prose-muted: #9DA3AE;
+  --prose-link: #7AA2D4;
+  --prose-code-bg: #282C31;           /* Elevated inline code */
+  --prose-code-text: #D4A373;
+  --prose-pre-bg: #232529;            /* Elevated code blocks */
+  --prose-pre-border: rgba(255, 255, 255, 0.10);
+  --prose-blockquote-border: rgba(255, 255, 255, 0.12);
+  --prose-table-border: rgba(255, 255, 255, 0.10);
+  --prose-table-header-bg: #1F2124;
 
-  /* Keyboard hints */
-  --kbd-bg: #3f3f46;
-  --kbd-border: #52525b;
-  --kbd-text: #d4d4d8;
+  /* ---------------------------------------------------------------
+     SEMANTIC BLOCKS - Thinking, Tool calls, Results
+     --------------------------------------------------------------- */
+
+  /* Thinking blocks - Soft purple accent on elevated surface */
+  --thinking-bg: #1E1D24;
+  --thinking-border: rgba(179, 157, 219, 0.25);
+  --thinking-text: #B39DDB;
+  --thinking-text-muted: #C7B8E0;
+  --thinking-content-border: rgba(179, 157, 219, 0.18);
+  --thinking-content-text: #D8CEE8;
+
+  /* Tool call blocks - Warm amber accent */
+  --tool-call-bg: #211E1A;
+  --tool-call-border: rgba(212, 163, 115, 0.25);
+  --tool-call-text: #D4A373;
+  --tool-call-code-bg: #282420;
+  --tool-call-content-border: rgba(212, 163, 115, 0.18);
+
+  /* Tool result blocks - Desaturated success/error */
+  --tool-result-success-bg: #1A2119;
+  --tool-result-success-border: rgba(126, 198, 153, 0.25);
+  --tool-result-success-text: #7EC699;
+  --tool-result-error-bg: #211A1A;
+  --tool-result-error-border: rgba(224, 108, 117, 0.25);
+  --tool-result-error-text: #E06C75;
+
+  /* Output blocks - Elevated surface */
+  --output-bg: #232529;
+  --output-border: rgba(255, 255, 255, 0.10);
+  --output-text: #D1D5DB;
+  --output-content-border: rgba(255, 255, 255, 0.08);
+
+  /* ---------------------------------------------------------------
+     BADGES & TAGS
+     --------------------------------------------------------------- */
+
+  /* Badges - Desaturated, professional */
+  --badge-error-bg: rgba(224, 108, 117, 0.18);
+  --badge-error-text: #E06C75;
+  --badge-warning-bg: rgba(212, 163, 115, 0.18);
+  --badge-warning-text: #D4A373;
+  --badge-success-bg: rgba(126, 198, 153, 0.18);
+  --badge-success-text: #7EC699;
+  --badge-info-bg: rgba(122, 162, 212, 0.18);
+  --badge-info-text: #7AA2D4;
+  --badge-neutral-bg: rgba(255, 255, 255, 0.08);
+  --badge-neutral-text: #B8BCC5;
+
+  /* Language/tag badges - Elevated micro-border style */
+  --tag-bg: #1F2124;
+  --tag-text: #9DA3AE;
+  --tag-border: rgba(255, 255, 255, 0.10);
+
+  /* Highlighted text (skills, paths) - Subtle warmth */
+  --skill-highlight-bg: rgba(212, 163, 115, 0.18);
+  --skill-highlight-text: #E8C9A8;
+  --path-highlight-bg: rgba(201, 168, 76, 0.18);
+  --path-highlight-text: #E0D4A8;
+
+  /* ---------------------------------------------------------------
+     ALERTS & STATES
+     --------------------------------------------------------------- */
+
+  /* Interruption badge - Desaturated red */
+  --interruption-bg: rgba(224, 108, 117, 0.15);
+  --interruption-border: rgba(224, 108, 117, 0.35);
+  --interruption-text: #E06C75;
+
+  /* Warning/Amber colors - Warm, not harsh */
+  --warning-bg: rgba(212, 163, 115, 0.15);
+  --warning-border: rgba(212, 163, 115, 0.30);
+  --warning-text: #D4A373;
+
+  /* Error highlight (pulsing) - Soft red */
+  --error-highlight-ring: rgba(224, 108, 117, 0.6);
+  --error-highlight-bg: rgba(224, 108, 117, 0.18);
+
+  /* Keyboard hints - Elevated micro-border */
+  --kbd-bg: #1F2124;
+  --kbd-border: rgba(255, 255, 255, 0.14);
+  --kbd-text: #B8BCC5;
 }
 
 /* Light theme overrides - High contrast for accessibility */
 :root.light {
-  --color-surface: #ffffff;
-  --color-surface-raised: #f8fafc;
-  --color-surface-overlay: #f1f5f9;
-  --color-border: #cbd5e1;
-  --color-border-subtle: #e2e8f0;
-  --color-border-emphasis: #94a3b8;
-  --color-text: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748b;
+  /* Layered surface hierarchy (light to dark for light mode) */
+  --color-surface: #ffffff;           /* Sidebar/header - white base */
+  --color-surface-content: #fafafa;   /* Main content - very subtle gray */
+  --color-surface-raised: #f3f4f6;    /* Cards/bubbles - slightly darker */
+  --color-surface-overlay: #e5e7eb;   /* Code blocks/modals - most elevated */
+
+  --color-border: #d1d5db;
+  --color-border-subtle: #e5e7eb;
+  --color-border-emphasis: #9ca3af;
+  --color-text: #111827;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #6b7280;
 
   /* Scrollbar colors for light mode */
   --scrollbar-thumb: rgba(0, 0, 0, 0.2);
@@ -398,4 +447,281 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+/* =================================================================
+   LINEAR-STYLE UTILITY CLASSES
+   Premium dark mode utilities for consistent styling
+   ================================================================= */
+
+/* Micro-border utilities - Use instead of shadows for Linear aesthetic */
+.border-linear {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.border-linear-subtle {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.border-linear-emphasis {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Divider lines */
+.divide-linear > * + * {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ---------------------------------------------------------------
+   SURFACE HIERARCHY CLASSES - Layered Depth System
+   --------------------------------------------------------------- */
+
+/* Layer 0: Sidebar/Header - Deepest anchor */
+.surface-base {
+  background-color: var(--color-surface);
+}
+
+/* Layer 1: Main Content Area - Slightly lighter for reading */
+.surface-content {
+  background-color: var(--color-surface-content);
+}
+
+/* Layer 2: Cards/Bubbles - Elevated elements */
+.surface-raised {
+  background-color: var(--color-surface-raised);
+}
+
+/* Layer 3: Code blocks/Modals - Highest elevation */
+.surface-overlay {
+  background-color: var(--color-surface-overlay);
+}
+
+/* Interactive hover states - subtle brightness increase */
+.hover-linear {
+  transition: background-color 0.15s ease;
+}
+
+.hover-linear:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.hover-linear:active {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Focus ring - desaturated blue */
+.focus-linear:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(122, 162, 212, 0.4);
+}
+
+.focus-linear:focus:not(:focus-visible) {
+  box-shadow: none;
+}
+
+.focus-linear:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(122, 162, 212, 0.4);
+}
+
+/* Text hierarchy utilities - Soft white to reduce eye strain */
+.text-linear-primary {
+  color: #EDEDED;  /* Soft white, not stark */
+}
+
+.text-linear-secondary {
+  color: #9DA3AE;  /* Warmer gray for labels/metadata */
+}
+
+.text-linear-muted {
+  color: #6B7280;  /* Tertiary/disabled */
+}
+
+.text-linear-body {
+  color: #D1D5DB;  /* Optimized for body text readability */
+}
+
+/* ---------------------------------------------------------------
+   COMPONENT CLASSES - Cards, Panels, Code Blocks
+   --------------------------------------------------------------- */
+
+/* Card component - elevated above content area with visible border */
+.card-linear {
+  background-color: var(--color-surface-raised);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+}
+
+/* Panel/Sidebar component - deep anchor with divider */
+.panel-linear {
+  background-color: var(--color-surface);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Content area - slightly lighter than sidebar */
+.content-area-linear {
+  background-color: var(--color-surface-content);
+}
+
+/* Code block component - highest elevation, stands out from content */
+.code-block-linear {
+  background-color: var(--color-surface-overlay);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+}
+
+/* Chat bubble - elevated above content area */
+.chat-bubble-linear {
+  background-color: var(--color-surface-raised);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+}
+
+/* Chat bubble user variant - slightly different tone */
+.chat-bubble-user {
+  background-color: var(--chat-user-bg);
+  border: 1px solid var(--chat-user-border);
+  border-radius: 12px;
+}
+
+/* Input fields - Linear style */
+.input-linear {
+  background-color: var(--color-surface);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--color-text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-linear:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.input-linear:focus {
+  outline: none;
+  border-color: rgba(122, 162, 212, 0.5);
+  box-shadow: 0 0 0 2px rgba(122, 162, 212, 0.2);
+}
+
+.input-linear::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Button styles - Linear aesthetic */
+.btn-linear-primary {
+  background-color: #7AA2D4;
+  color: #0B0C0E;
+  border: none;
+  font-weight: 500;
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.btn-linear-primary:hover {
+  background-color: #8AAED9;
+}
+
+.btn-linear-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-linear-secondary {
+  background-color: transparent;
+  color: var(--color-text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-linear-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.btn-linear-ghost {
+  background-color: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.btn-linear-ghost:hover {
+  color: var(--color-text);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Badge styles - Desaturated, professional */
+.badge-linear {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.badge-linear-neutral {
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #B8BCC5;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.badge-linear-success {
+  background-color: rgba(126, 198, 153, 0.15);
+  color: #7EC699;
+  border-color: rgba(126, 198, 153, 0.25);
+}
+
+.badge-linear-error {
+  background-color: rgba(224, 108, 117, 0.15);
+  color: #E06C75;
+  border-color: rgba(224, 108, 117, 0.25);
+}
+
+.badge-linear-warning {
+  background-color: rgba(212, 163, 115, 0.15);
+  color: #D4A373;
+  border-color: rgba(212, 163, 115, 0.25);
+}
+
+.badge-linear-info {
+  background-color: rgba(122, 162, 212, 0.15);
+  color: #7AA2D4;
+  border-color: rgba(122, 162, 212, 0.25);
+}
+
+/* Dropdown/Menu styles */
+.menu-linear {
+  background-color: var(--color-surface-overlay);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.menu-item-linear {
+  padding: 8px 12px;
+  color: var(--color-text);
+  transition: background-color 0.1s ease;
+}
+
+.menu-item-linear:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.menu-item-linear:active {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Tooltip styles */
+.tooltip-linear {
+  background-color: var(--color-surface-overlay);
+  color: var(--color-text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Selection highlight */
+::selection {
+  background-color: rgba(122, 162, 212, 0.3);
+  color: inherit;
 }

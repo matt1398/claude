@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Bot, ChevronDown } from 'lucide-react';
+import { format } from 'date-fns';
 import type { AIGroup, EnhancedAIGroup, AIGroupDisplayItem } from '../../types/groups';
 import { enhanceAIGroup } from '../../utils/aiGroupEnhancer';
 import { LastOutputDisplay } from './LastOutputDisplay';
@@ -175,62 +176,72 @@ export function AIChatGroup({ aiGroup, highlightToolUseId }: AIChatGroupProps) {
       className="pl-3 border-l-2 space-y-3"
       style={{ borderColor: 'var(--chat-ai-border)' }}
     >
-      {/* Clickable Header */}
+      {/* Header Row */}
       {hasToggleContent && (
-        <div
-          className="flex items-center gap-2 cursor-pointer group"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          <Bot className="w-4 h-4" style={{ color: 'var(--chat-ai-icon)' }} />
-          <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Claude</span>
+        <div className="flex items-center gap-2">
+          {/* Clickable toggle area */}
+          <div
+            className="flex items-center gap-2 cursor-pointer group flex-1"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            <Bot className="w-4 h-4" style={{ color: 'var(--chat-ai-icon)' }} />
+            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Claude</span>
 
-          {/* Main agent model */}
-          {enhanced.mainModel && (
-            <span className={`text-xs ${getModelColorClass(enhanced.mainModel.family)}`}>
-              {enhanced.mainModel.name}
+            {/* Main agent model */}
+            {enhanced.mainModel && (
+              <span className={`text-xs ${getModelColorClass(enhanced.mainModel.family)}`}>
+                {enhanced.mainModel.name}
+              </span>
+            )}
+
+            {/* Subagent models if different */}
+            {enhanced.subagentModels.length > 0 && (
+              <>
+                <span style={{ color: 'var(--color-text-muted)' }}>→</span>
+                <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                  {enhanced.subagentModels.map((m, i) => (
+                    <span key={m.name}>
+                      {i > 0 && ', '}
+                      <span className={getModelColorClass(m.family)}>{m.name}</span>
+                    </span>
+                  ))}
+                </span>
+              </>
+            )}
+
+            {/* CLAUDE.md injection badge */}
+            {enhanced.claudeMdStats && enhanced.claudeMdStats.newCount > 0 && (
+              <ClaudeMdBadge stats={enhanced.claudeMdStats} projectRoot={projectRoot} />
+            )}
+
+            {/* Token usage - show last assistant message's usage (context window snapshot) */}
+            {lastUsage && (
+              <TokenUsageDisplay
+                inputTokens={lastUsage.input_tokens}
+                outputTokens={lastUsage.output_tokens}
+                cacheReadTokens={lastUsage.cache_read_input_tokens || 0}
+                cacheCreationTokens={lastUsage.cache_creation_input_tokens || 0}
+                modelName={enhanced.mainModel?.name}
+                modelFamily={enhanced.mainModel?.family}
+                size="sm"
+                claudeMdStats={enhanced.claudeMdStats || undefined}
+              />
+            )}
+
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>·</span>
+            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{enhanced.itemsSummary}</span>
+            <ChevronDown
+              className={`w-3.5 h-3.5 transition-transform group-hover:opacity-80 ${isExpanded ? 'rotate-180' : ''}`}
+              style={{ color: 'var(--color-text-muted)' }}
+            />
+          </div>
+
+          {/* Timestamp (non-clickable, right-aligned) */}
+          {enhanced.lastOutput?.timestamp && (
+            <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+              {format(enhanced.lastOutput.timestamp, 'h:mm:ss a')}
             </span>
           )}
-
-          {/* Subagent models if different */}
-          {enhanced.subagentModels.length > 0 && (
-            <>
-              <span style={{ color: 'var(--color-text-muted)' }}>→</span>
-              <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                {enhanced.subagentModels.map((m, i) => (
-                  <span key={m.name}>
-                    {i > 0 && ', '}
-                    <span className={getModelColorClass(m.family)}>{m.name}</span>
-                  </span>
-                ))}
-              </span>
-            </>
-          )}
-
-          {/* CLAUDE.md injection badge */}
-          {enhanced.claudeMdStats && enhanced.claudeMdStats.newCount > 0 && (
-            <ClaudeMdBadge stats={enhanced.claudeMdStats} projectRoot={projectRoot} />
-          )}
-
-          {/* Token usage - show last assistant message's usage (context window snapshot) */}
-          {lastUsage && (
-            <TokenUsageDisplay
-              inputTokens={lastUsage.input_tokens}
-              outputTokens={lastUsage.output_tokens}
-              cacheReadTokens={lastUsage.cache_read_input_tokens || 0}
-              cacheCreationTokens={lastUsage.cache_creation_input_tokens || 0}
-              modelName={enhanced.mainModel?.name}
-              modelFamily={enhanced.mainModel?.family}
-              size="sm"
-              claudeMdStats={enhanced.claudeMdStats || undefined}
-            />
-          )}
-
-          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>·</span>
-          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>{enhanced.itemsSummary}</span>
-          <ChevronDown
-            className={`w-3.5 h-3.5 transition-transform group-hover:opacity-80 ${isExpanded ? 'rotate-180' : ''}`}
-            style={{ color: 'var(--color-text-muted)' }}
-          />
         </div>
       )}
 

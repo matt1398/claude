@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, AlertTriangle, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { CheckCircle, XCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AIGroupLastOutput } from '../../types/groups';
@@ -234,7 +233,7 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
     return null;
   }
 
-  const { type, timestamp } = lastOutput;
+  const { type } = lastOutput;
 
   // Render text output
   if (type === 'text' && lastOutput.text) {
@@ -252,20 +251,6 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
           border: '1px solid var(--code-border)',
         }}
       >
-        {/* Header with timestamp */}
-        <div
-          className="flex items-center gap-2 px-4 py-2 text-xs"
-          style={{
-            backgroundColor: 'var(--code-header-bg)',
-            borderBottom: '1px solid var(--code-border)',
-          }}
-        >
-          <Clock className="w-3 h-3" style={{ color: 'var(--color-text-muted)' }} />
-          <span style={{ color: 'var(--color-text-secondary)' }}>
-            {format(timestamp, 'h:mm:ss a')}
-          </span>
-        </div>
-
         {/* Content */}
         <div className={`px-4 py-3 overflow-y-auto ${isExpanded ? '' : 'max-h-96'}`}>
           {searchQuery ? (
@@ -325,9 +310,6 @@ export function LastOutputDisplay({ lastOutput, aiGroupId }: LastOutputDisplayPr
             className="w-4 h-4"
             style={{ color: isError ? 'var(--tool-result-error-text)' : 'var(--tool-result-success-text)' }}
           />
-          <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-            {format(timestamp, 'h:mm:ss a')}
-          </span>
           {lastOutput.toolName && (
             <code
               className="text-xs px-1.5 py-0.5 rounded"
