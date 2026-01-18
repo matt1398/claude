@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { GitBranch } from 'lucide-react';
 import type { ChatItem, AIGroup } from '../../types/groups';
 import { UserChatGroup } from './UserChatGroup';
 import { AIChatGroup } from './AIChatGroup';
@@ -94,6 +95,7 @@ export function ChatHistory(): JSX.Element {
   const clearTabDeepLink = useStore((s) => s.clearTabDeepLink);
   const setSearchQuery = useStore((s) => s.setSearchQuery);
   const sessionClaudeMdStats = useStore((s) => s.sessionClaudeMdStats);
+  const sessionDetail = useStore((s) => s.sessionDetail);
 
   // State for CLAUDE.md panel visibility
   const [showClaudeMdPanel, setShowClaudeMdPanel] = useState(false);
@@ -423,21 +425,40 @@ export function ChatHistory(): JSX.Element {
     }
   };
 
+  // Get gitBranch from session
+  const gitBranch = sessionDetail?.session?.gitBranch;
+
+  // Show header if there's gitBranch or CLAUDE.md injections
+  const showHeader = gitBranch || allInjections.length > 0;
+
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
-      {/* Header with CLAUDE.md toggle button */}
-      {allInjections.length > 0 && (
-        <div className="flex items-center justify-end px-6 py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-          <button
-            onClick={() => setShowClaudeMdPanel(!showClaudeMdPanel)}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-opacity-80 transition-colors"
-            style={{
-              backgroundColor: showClaudeMdPanel ? 'var(--color-accent)' : 'var(--color-surface-raised)',
-              color: showClaudeMdPanel ? 'var(--color-text-on-accent, white)' : 'var(--color-text-secondary)',
-            }}
-          >
-            CLAUDE.md ({allInjections.length})
-          </button>
+      {/* Header with git branch and CLAUDE.md toggle button */}
+      {showHeader && (
+        <div className="flex items-center justify-between px-6 py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+          {/* Git branch display */}
+          {gitBranch ? (
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              <GitBranch className="w-3.5 h-3.5" />
+              <span className="font-mono">{gitBranch}</span>
+            </div>
+          ) : (
+            <div />
+          )}
+
+          {/* CLAUDE.md toggle button */}
+          {allInjections.length > 0 && (
+            <button
+              onClick={() => setShowClaudeMdPanel(!showClaudeMdPanel)}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-opacity-80 transition-colors"
+              style={{
+                backgroundColor: showClaudeMdPanel ? 'var(--color-accent)' : 'var(--color-surface-raised)',
+                color: showClaudeMdPanel ? 'var(--color-text-on-accent, white)' : 'var(--color-text-secondary)',
+              }}
+            >
+              CLAUDE.md ({allInjections.length})
+            </button>
+          )}
         </div>
       )}
 

@@ -693,6 +693,8 @@ export interface Session {
   messageCount: number;
   /** Whether the session is ongoing (last AI response has no output yet) */
   isOngoing?: boolean;
+  /** Git branch name if available */
+  gitBranch?: string;
 }
 
 /**

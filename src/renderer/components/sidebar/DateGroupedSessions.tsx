@@ -19,9 +19,9 @@ type VirtualItem =
   | { type: 'loader'; id: string };
 
 // Item height constants
-const HEADER_HEIGHT = 32;
-const SESSION_HEIGHT = 88;
-const LOADER_HEIGHT = 48;
+const HEADER_HEIGHT = 28;
+const SESSION_HEIGHT = 44;
+const LOADER_HEIGHT = 36;
 const OVERSCAN = 5;
 
 export function DateGroupedSessions() {

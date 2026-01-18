@@ -481,6 +481,39 @@ export async function extractCwd(filePath: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Extract git branch from the first entry that has it.
+ * Used to display the branch context for a session.
+ */
+export async function extractGitBranch(filePath: string): Promise<string | null> {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+
+  const fileStream = fs.createReadStream(filePath, { encoding: 'utf8' });
+  const rl = readline.createInterface({
+    input: fileStream,
+    crlfDelay: Infinity,
+  });
+
+  try {
+    for await (const line of rl) {
+      if (!line.trim()) continue;
+
+      const entry = JSON.parse(line) as ChatHistoryEntry;
+      // Only conversational entries have gitBranch
+      if ('gitBranch' in entry && entry.gitBranch) {
+        fileStream.destroy();
+        return entry.gitBranch;
+      }
+    }
+  } catch (error) {
+    console.error(`Error extracting gitBranch from ${filePath}:`, error);
+  }
+
+  return null;
+}
+
 // =============================================================================
 // Metrics Calculation
 // =============================================================================

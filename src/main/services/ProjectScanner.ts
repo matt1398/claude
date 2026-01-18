@@ -25,7 +25,7 @@ import {
   extractSessionId,
   isAmbiguousEncoding,
 } from '../utils/pathDecoder';
-import { extractFirstUserMessage, extractCwd, countTriggerMessages, checkSessionOngoing } from '../utils/jsonl';
+import { extractFirstUserMessage, extractCwd, extractGitBranch, countTriggerMessages, checkSessionOngoing } from '../utils/jsonl';
 
 export class ProjectScanner {
   private readonly projectsDir: string;
@@ -404,6 +404,9 @@ export class ProjectScanner {
     // Check if session is ongoing (AI response in progress)
     const isOngoing = await checkSessionOngoing(filePath);
 
+    // Extract git branch if available
+    const gitBranch = await extractGitBranch(filePath);
+
     return {
       id: sessionId,
       projectId,
@@ -415,6 +418,7 @@ export class ProjectScanner {
       hasSubagents,
       messageCount,
       isOngoing,
+      gitBranch: gitBranch ?? undefined,
     };
   }
 
