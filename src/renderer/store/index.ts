@@ -495,6 +495,7 @@ export const useStore = create<AppState>((set, get) => ({
           if (directoryPaths.size > 0) {
             console.log('[Store] Fetching real tokens for', directoryPaths.size, 'directory CLAUDE.md files');
             const directoryTokens = new Map<string, number>();
+            const nonExistentPaths = new Set<string>();  // Track non-existent files
 
             for (const fullPath of directoryPaths) {
               try {
@@ -504,39 +505,49 @@ export const useStore = create<AppState>((set, get) => ({
                 const fileInfo = await window.electronAPI.readDirectoryClaudeMd(dirPath);
                 if (fileInfo.exists && fileInfo.estimatedTokens > 0) {
                   directoryTokens.set(fullPath, fileInfo.estimatedTokens);
+                } else {
+                  // File doesn't exist - mark for removal
+                  nonExistentPaths.add(fullPath);
                 }
               } catch (err) {
                 console.error('[Store] Failed to read directory CLAUDE.md:', fullPath, err);
+                nonExistentPaths.add(fullPath);  // Also remove on error
               }
             }
 
-            // Update stats with real tokens
-            if (directoryTokens.size > 0) {
-              console.log('[Store] Updating', directoryTokens.size, 'directory injections with real token counts');
-              for (const [, stats] of claudeMdStats.entries()) {
-                let updated = false;
+            // Log removal count if any
+            if (nonExistentPaths.size > 0) {
+              console.log('[Store] Removing', nonExistentPaths.size, 'non-existent directory CLAUDE.md files');
+            }
 
-                // Update injections with real tokens
-                for (const injection of stats.accumulatedInjections) {
-                  if (injection.source === 'directory' && directoryTokens.has(injection.path)) {
-                    injection.estimatedTokens = directoryTokens.get(injection.path)!;
-                    updated = true;
-                  }
-                }
-                for (const injection of stats.newInjections) {
-                  if (injection.source === 'directory' && directoryTokens.has(injection.path)) {
-                    injection.estimatedTokens = directoryTokens.get(injection.path)!;
-                    updated = true;
-                  }
-                }
+            // Update stats: set real tokens and REMOVE non-existent files
+            for (const [, stats] of claudeMdStats.entries()) {
+              // Filter out non-existent paths
+              stats.accumulatedInjections = stats.accumulatedInjections.filter(
+                inj => inj.source !== 'directory' || !nonExistentPaths.has(inj.path)
+              );
+              stats.newInjections = stats.newInjections.filter(
+                inj => inj.source !== 'directory' || !nonExistentPaths.has(inj.path)
+              );
 
-                // Recalculate totals if any were updated
-                if (updated) {
-                  stats.totalEstimatedTokens = stats.accumulatedInjections.reduce(
-                    (sum, inj) => sum + inj.estimatedTokens, 0
-                  );
+              // Update tokens for existing files
+              for (const injection of stats.accumulatedInjections) {
+                if (injection.source === 'directory' && directoryTokens.has(injection.path)) {
+                  injection.estimatedTokens = directoryTokens.get(injection.path)!;
                 }
               }
+              for (const injection of stats.newInjections) {
+                if (injection.source === 'directory' && directoryTokens.has(injection.path)) {
+                  injection.estimatedTokens = directoryTokens.get(injection.path)!;
+                }
+              }
+
+              // Recalculate totals and counts
+              stats.totalEstimatedTokens = stats.accumulatedInjections.reduce(
+                (sum, inj) => sum + inj.estimatedTokens, 0
+              );
+              stats.accumulatedCount = stats.accumulatedInjections.length;
+              stats.newCount = stats.newInjections.length;
             }
           }
         }
