@@ -22,7 +22,7 @@ const tabs: TabConfig[] = [
 
 export function SettingsTabs({ activeSection, onSectionChange }: SettingsTabsProps) {
   return (
-    <div className="flex border-b border-claude-dark-border">
+    <div className="inline-flex p-1 bg-claude-dark-surface/50 rounded-xl gap-1">
       {tabs.map((tab) => {
         const Icon = tab.icon
         const isActive = activeSection === tab.id
@@ -32,15 +32,16 @@ export function SettingsTabs({ activeSection, onSectionChange }: SettingsTabsPro
             key={tab.id}
             onClick={() => onSectionChange(tab.id)}
             className={`
-              flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors
+              flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg
+              transition-all duration-200 ease-out
               ${
                 isActive
-                  ? 'bg-claude-dark-surface text-claude-dark-text border-b-2 border-blue-500 -mb-px'
+                  ? 'bg-claude-dark-surface text-claude-dark-text shadow-sm'
                   : 'text-claude-dark-text-secondary hover:text-claude-dark-text hover:bg-claude-dark-surface/50'
               }
             `}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className={`w-4 h-4 ${isActive ? 'text-blue-400' : ''}`} />
             <span>{tab.label}</span>
           </button>
         )

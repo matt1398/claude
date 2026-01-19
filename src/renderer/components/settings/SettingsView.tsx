@@ -3,8 +3,29 @@
  * Provides UI for managing notifications, display settings, and advanced options.
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Plus, X, RefreshCw, Download, Upload, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  X,
+  RefreshCw,
+  Download,
+  Upload,
+  Loader2,
+  Rocket,
+  Monitor,
+  Palette,
+  Bell,
+  BellOff,
+  Volume2,
+  Clock,
+  FolderX,
+  Eye,
+  Minimize2,
+  Code,
+  Settings,
+  Info,
+  ChevronDown,
+  Check,
+} from 'lucide-react';
 import { SettingsTabs, type SettingsSection } from './SettingsTabs';
 import { NotificationTriggerSettings } from './NotificationTriggerSettings';
 import type { AppConfig, NotificationTrigger } from '../../types/data';
@@ -38,7 +59,7 @@ const THEME_OPTIONS = [
 
 /**
  * Toggle switch component for boolean settings.
- * Uses inline styles for the dynamic parts to ensure immediate visual feedback.
+ * Modern design with smooth animations and accessibility support.
  */
 function Toggle({
   enabled,
@@ -62,18 +83,20 @@ function Toggle({
       aria-checked={enabled}
       disabled={disabled}
       onClick={handleClick}
-      className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-claude-dark-bg"
-      style={{
-        backgroundColor: enabled ? '#3b82f6' : '#404040',
-        opacity: disabled ? 0.5 : 1,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
+      className={`
+        relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full
+        transition-colors duration-200 ease-in-out
+        focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-claude-dark-bg
+        ${enabled ? 'bg-blue-500' : 'bg-claude-dark-border'}
+        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-90'}
+      `}
     >
       <span
-        className="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-        style={{
-          transform: enabled ? 'translateX(1.25rem)' : 'translateX(0)',
-        }}
+        className={`
+          pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg
+          transform transition-transform duration-200 ease-in-out
+          ${enabled ? 'translate-x-5' : 'translate-x-0.5'}
+        `}
       />
     </button>
   );
@@ -81,25 +104,35 @@ function Toggle({
 
 /**
  * Setting row component for consistent layout.
+ * Supports an optional icon for better visual hierarchy.
  */
 function SettingRow({
   label,
   description,
+  icon: Icon,
   children,
 }: {
   label: string;
   description?: string;
+  icon?: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between py-3">
-      <div className="flex-1 min-w-0 mr-4">
-        <p className="text-sm font-medium text-claude-dark-text">{label}</p>
-        {description && (
-          <p className="text-xs text-claude-dark-text-secondary mt-0.5">
-            {description}
-          </p>
+    <div className="flex items-center justify-between py-4 group">
+      <div className="flex items-start gap-3 flex-1 min-w-0 mr-4">
+        {Icon && (
+          <div className="flex-shrink-0 mt-0.5">
+            <Icon className="w-4 h-4 text-claude-dark-text-secondary group-hover:text-claude-dark-text transition-colors" />
+          </div>
         )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-claude-dark-text">{label}</p>
+          {description && (
+            <p className="text-xs text-claude-dark-text-secondary mt-1 leading-relaxed">
+              {description}
+            </p>
+          )}
+        </div>
       </div>
       <div className="flex-shrink-0">{children}</div>
     </div>
@@ -107,18 +140,28 @@ function SettingRow({
 }
 
 /**
- * Section header component.
+ * Section header component with optional icon.
  */
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({
+  title,
+  icon: Icon,
+}: {
+  title: string;
+  icon?: React.ComponentType<{ className?: string }>;
+}) {
   return (
-    <h3 className="text-xs font-semibold text-claude-dark-text-secondary uppercase tracking-wider mb-3">
-      {title}
-    </h3>
+    <div className="flex items-center gap-2 mb-4 pb-2 border-b border-claude-dark-border/50">
+      {Icon && <Icon className="w-4 h-4 text-claude-dark-text-secondary" />}
+      <h3 className="text-xs font-semibold text-claude-dark-text-secondary uppercase tracking-wider">
+        {title}
+      </h3>
+    </div>
   );
 }
 
 /**
- * Dropdown select component.
+ * Custom dropdown select component with styled dropdown menu.
+ * Avoids browser default select styling for a consistent dark theme experience.
  */
 function Select<T extends string | number>({
   value,
@@ -131,29 +174,158 @@ function Select<T extends string | number>({
   onChange: (value: T) => void;
   disabled?: boolean;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Find current label
+  const currentLabel = options.find(opt => opt.value === value)?.label || 'Select...';
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const handleSelect = (optionValue: T) => {
+    onChange(optionValue);
+    setIsOpen(false);
+  };
+
   return (
-    <select
-      value={value}
-      onChange={(e) => {
-        const newValue = typeof value === 'number'
-          ? Number(e.target.value) as T
-          : e.target.value as T;
-        onChange(newValue);
-      }}
-      disabled={disabled}
-      className={`
-        px-3 py-1.5 text-sm rounded-md border border-claude-dark-border
-        bg-claude-dark-surface text-claude-dark-text
-        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-      `}
-    >
-      {options.map((option) => (
-        <option key={String(option.value)} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <div ref={containerRef} className="relative">
+      {/* Trigger Button */}
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
+        className={`
+          flex items-center justify-between gap-2 min-w-[140px] px-3 py-2 text-sm rounded-lg
+          border border-claude-dark-border bg-claude-dark-surface text-claude-dark-text
+          transition-all duration-150
+          hover:border-claude-dark-text-secondary
+          focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          ${isOpen ? 'ring-2 ring-blue-500/50 border-blue-500' : ''}
+        `}
+      >
+        <span className="truncate">{currentLabel}</span>
+        <ChevronDown
+          className={`w-4 h-4 text-claude-dark-text-secondary transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div className="absolute right-0 z-50 mt-1 min-w-[160px] py-1 rounded-lg border border-claude-dark-border bg-claude-dark-surface shadow-xl shadow-black/20 overflow-hidden">
+          {options.map((option) => (
+            <button
+              key={String(option.value)}
+              type="button"
+              onClick={() => handleSelect(option.value)}
+              className={`
+                w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm text-left
+                transition-colors duration-100
+                ${value === option.value
+                  ? 'bg-blue-500/10 text-blue-400'
+                  : 'text-claude-dark-text hover:bg-claude-dark-border/50'
+                }
+              `}
+            >
+              <span>{option.label}</span>
+              {value === option.value && (
+                <Check className="w-4 h-4 text-blue-400" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Custom project select dropdown for adding ignored projects.
+ */
+function ProjectSelect({
+  projects,
+  onSelect,
+  disabled = false,
+}: {
+  projects: { id: string; name: string }[];
+  onSelect: (projectId: string) => void;
+  disabled?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isOpen]);
+
+  const handleSelect = (projectId: string) => {
+    onSelect(projectId);
+    setIsOpen(false);
+  };
+
+  if (projects.length === 0) return null;
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* Trigger Button */}
+      <button
+        type="button"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        disabled={disabled}
+        className={`
+          w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm rounded-lg
+          border border-claude-dark-border bg-claude-dark-surface text-claude-dark-text-secondary
+          transition-all duration-150
+          hover:border-claude-dark-text-secondary hover:text-claude-dark-text
+          focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500
+          ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          ${isOpen ? 'ring-2 ring-blue-500/50 border-blue-500' : ''}
+        `}
+      >
+        <span>Select project to ignore...</span>
+        <ChevronDown
+          className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown Menu */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto py-1 rounded-lg border border-claude-dark-border bg-claude-dark-surface shadow-xl shadow-black/20">
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              onClick={() => handleSelect(project.id)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-left text-claude-dark-text transition-colors duration-100 hover:bg-claude-dark-border/50"
+            >
+              <span className="truncate">{project.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -170,7 +342,7 @@ function ListItem({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between py-2 px-3 bg-claude-dark-surface rounded-md mb-2">
+    <div className="flex items-center justify-between py-2.5 px-3 bg-claude-dark-bg/50 border border-claude-dark-border/50 rounded-lg mb-2 group hover:border-claude-dark-border transition-colors">
       <code className="text-sm text-claude-dark-text font-mono truncate flex-1 mr-2">
         {value}
       </code>
@@ -179,8 +351,9 @@ function ListItem({
         onClick={onRemove}
         disabled={disabled}
         className={`
-          p-1 rounded hover:bg-claude-dark-border transition-colors
-          text-claude-dark-text-secondary hover:text-claude-dark-text
+          p-1.5 rounded-md transition-all duration-150
+          text-claude-dark-text-secondary hover:text-red-400 hover:bg-red-500/10
+          opacity-0 group-hover:opacity-100
           ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
         `}
         aria-label={`Remove ${value}`}
@@ -188,61 +361,6 @@ function ListItem({
         <X className="w-4 h-4" />
       </button>
     </div>
-  );
-}
-
-/**
- * Add pattern input with button.
- */
-function AddPatternInput({
-  placeholder,
-  onAdd,
-  disabled = false,
-}: {
-  placeholder: string;
-  onAdd: (value: string) => void;
-  disabled?: boolean;
-}) {
-  const [value, setValue] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (value.trim()) {
-      onAdd(value.trim());
-      setValue('');
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        className={`
-          flex-1 px-3 py-1.5 text-sm rounded-md border border-claude-dark-border
-          bg-claude-dark-surface text-claude-dark-text placeholder-claude-dark-text-secondary
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
-      />
-      <button
-        type="submit"
-        disabled={disabled || !value.trim()}
-        className={`
-          flex items-center gap-1 px-3 py-1.5 text-sm rounded-md
-          bg-blue-500 text-white hover:bg-blue-600 transition-colors
-          focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
-          focus:ring-offset-claude-dark-bg
-          ${(disabled || !value.trim()) ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
-      >
-        <Plus className="w-4 h-4" />
-        Add
-      </button>
-    </form>
   );
 }
 
@@ -366,36 +484,6 @@ export function SettingsView() {
       setStoreState({ appConfig: updatedConfig });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear snooze');
-    } finally {
-      setSaving(false);
-    }
-  }, []);
-
-  // Add ignored regex
-  const handleAddIgnoredRegex = useCallback(async (pattern: string) => {
-    try {
-      setSaving(true);
-      const updatedConfig = await window.electronAPI.config.addIgnoreRegex(pattern);
-      setConfig(updatedConfig);
-      setOptimisticConfig(updatedConfig);
-      setStoreState({ appConfig: updatedConfig });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add pattern');
-    } finally {
-      setSaving(false);
-    }
-  }, []);
-
-  // Remove ignored regex
-  const handleRemoveIgnoredRegex = useCallback(async (pattern: string) => {
-    try {
-      setSaving(true);
-      const updatedConfig = await window.electronAPI.config.removeIgnoreRegex(pattern);
-      setConfig(updatedConfig);
-      setOptimisticConfig(updatedConfig);
-      setStoreState({ appConfig: updatedConfig });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove pattern');
     } finally {
       setSaving(false);
     }
@@ -680,10 +768,20 @@ export function SettingsView() {
     <div className="flex-1 overflow-auto bg-claude-dark-bg">
       <div className="max-w-3xl mx-auto p-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-claude-dark-text">Settings</h1>
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-claude-dark-surface to-claude-dark-border flex items-center justify-center">
+              <Settings className="w-5 h-5 text-claude-dark-text" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold text-claude-dark-text">Settings</h1>
+              <p className="text-sm text-claude-dark-text-secondary">Manage your app preferences</p>
+            </div>
+          </div>
           {error && (
-            <p className="text-sm text-red-400 mt-2">{error}</p>
+            <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
           )}
         </div>
 
@@ -698,12 +796,13 @@ export function SettingsView() {
           {/* General Section */}
           {activeSection === 'general' && (
             <div className="space-y-6">
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Startup" />
-                <div className="divide-y divide-claude-dark-border">
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="Startup" icon={Rocket} />
+                <div className="space-y-1">
                   <SettingRow
                     label="Launch at login"
                     description="Automatically start the app when you log in"
+                    icon={Rocket}
                   >
                     <Toggle
                       enabled={safeConfig.general.launchAtLogin}
@@ -714,6 +813,7 @@ export function SettingsView() {
                   <SettingRow
                     label="Show dock icon"
                     description="Display the app icon in the dock (macOS)"
+                    icon={Monitor}
                   >
                     <Toggle
                       enabled={safeConfig.general.showDockIcon}
@@ -724,12 +824,13 @@ export function SettingsView() {
                 </div>
               </div>
 
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Appearance" />
-                <div className="divide-y divide-claude-dark-border">
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="Appearance" icon={Palette} />
+                <div className="space-y-1">
                   <SettingRow
                     label="Theme"
                     description="Choose your preferred color theme"
+                    icon={Palette}
                   >
                     <Select
                       value={safeConfig.general.theme}
@@ -741,6 +842,7 @@ export function SettingsView() {
                   <SettingRow
                     label="Default tab on launch"
                     description="The view shown when the app opens"
+                    icon={Monitor}
                   >
                     <Select
                       value={safeConfig.general.defaultTab}
@@ -767,12 +869,13 @@ export function SettingsView() {
               />
 
               {/* Notification Settings */}
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Notification Settings" />
-                <div className="divide-y divide-claude-dark-border">
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="Notification Settings" icon={Bell} />
+                <div className="space-y-1">
                   <SettingRow
                     label="Enable notifications"
                     description="Show system notifications for errors and events"
+                    icon={Bell}
                   >
                     <Toggle
                       enabled={safeConfig.notifications.enabled}
@@ -783,6 +886,7 @@ export function SettingsView() {
                   <SettingRow
                     label="Play sound"
                     description="Play a sound when notifications appear"
+                    icon={Volume2}
                   >
                     <Toggle
                       enabled={safeConfig.notifications.soundEnabled}
@@ -796,6 +900,7 @@ export function SettingsView() {
                       ? `Snoozed until ${new Date(safeConfig.notifications.snoozedUntil!).toLocaleTimeString()}`
                       : 'Temporarily pause notifications'
                     }
+                    icon={isSnoozed ? BellOff : Clock}
                   >
                     <div className="flex items-center gap-2">
                       {isSnoozed ? (
@@ -803,8 +908,10 @@ export function SettingsView() {
                           onClick={handleClearSnooze}
                           disabled={saving}
                           className={`
-                            px-3 py-1.5 text-sm rounded-md
-                            bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors
+                            px-3 py-2 text-sm font-medium rounded-lg
+                            bg-red-500/20 text-red-400
+                            transition-all duration-150
+                            hover:bg-red-500/30 hover:text-red-300
                             ${saving ? 'opacity-50 cursor-not-allowed' : ''}
                           `}
                         >
@@ -822,42 +929,13 @@ export function SettingsView() {
                   </SettingRow>
                 </div>
               </div>
-
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Ignored Patterns" />
-                <p className="text-xs text-claude-dark-text-secondary mb-3">
-                  Errors matching these regex patterns will be ignored
-                </p>
-                {safeConfig.notifications.ignoredRegex.length > 0 ? (
-                  <div className="mb-3">
-                    {safeConfig.notifications.ignoredRegex.map((pattern) => (
-                      <ListItem
-                        key={pattern}
-                        value={pattern}
-                        onRemove={() => handleRemoveIgnoredRegex(pattern)}
-                        disabled={saving}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-claude-dark-text-secondary mb-3 italic">
-                    No patterns configured
-                  </p>
-                )}
-                <AddPatternInput
-                  placeholder="Enter regex pattern (e.g., warning|deprecated)"
-                  onAdd={handleAddIgnoredRegex}
-                  disabled={saving}
-                />
-              </div>
-
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Ignored Projects" />
-                <p className="text-xs text-claude-dark-text-secondary mb-3">
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="Ignored Projects" icon={FolderX} />
+                <p className="text-xs text-claude-dark-text-secondary mb-4">
                   Notifications from these projects will be ignored
                 </p>
                 {safeConfig.notifications.ignoredProjects.length > 0 ? (
-                  <div className="mb-3">
+                  <div className="mb-4">
                     {safeConfig.notifications.ignoredProjects.map((projectId) => (
                       <ListItem
                         key={projectId}
@@ -868,36 +946,17 @@ export function SettingsView() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-claude-dark-text-secondary mb-3 italic">
-                    No projects ignored
-                  </p>
-                )}
-                {availableProjects.length > 0 && (
-                  <div className="flex gap-2">
-                    <select
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          handleAddIgnoredProject(e.target.value);
-                          e.target.value = '';
-                        }
-                      }}
-                      disabled={saving}
-                      className={`
-                        flex-1 px-3 py-1.5 text-sm rounded-md border border-claude-dark-border
-                        bg-claude-dark-surface text-claude-dark-text
-                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                        ${saving ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-                      `}
-                    >
-                      <option value="">Select project to ignore...</option>
-                      {availableProjects.map((project) => (
-                        <option key={project.id} value={project.id}>
-                          {project.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="mb-4 py-4 text-center border border-dashed border-claude-dark-border rounded-lg">
+                    <p className="text-sm text-claude-dark-text-secondary">
+                      No projects ignored
+                    </p>
                   </div>
                 )}
+                <ProjectSelect
+                  projects={availableProjects}
+                  onSelect={handleAddIgnoredProject}
+                  disabled={saving}
+                />
               </div>
             </div>
           )}
@@ -905,12 +964,13 @@ export function SettingsView() {
           {/* Display Section */}
           {activeSection === 'display' && (
             <div className="space-y-6">
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Display Options" />
-                <div className="divide-y divide-claude-dark-border">
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="Display Options" icon={Eye} />
+                <div className="space-y-1">
                   <SettingRow
                     label="Show timestamps"
                     description="Display timestamps in message views"
+                    icon={Clock}
                   >
                     <Toggle
                       enabled={safeConfig.display.showTimestamps}
@@ -921,6 +981,7 @@ export function SettingsView() {
                   <SettingRow
                     label="Compact mode"
                     description="Use a more compact display for messages"
+                    icon={Minimize2}
                   >
                     <Toggle
                       enabled={safeConfig.display.compactMode}
@@ -931,6 +992,7 @@ export function SettingsView() {
                   <SettingRow
                     label="Syntax highlighting"
                     description="Enable syntax highlighting in code blocks"
+                    icon={Code}
                   >
                     <Toggle
                       enabled={safeConfig.display.syntaxHighlighting}
@@ -946,17 +1008,18 @@ export function SettingsView() {
           {/* Advanced Section */}
           {activeSection === 'advanced' && (
             <div className="space-y-6">
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="Configuration" />
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="Configuration" icon={Settings} />
                 <div className="space-y-3">
                   <button
                     onClick={handleResetToDefaults}
                     disabled={saving}
                     className={`
-                      w-full flex items-center justify-center gap-2 px-4 py-2.5
-                      text-sm rounded-md border border-claude-dark-border
-                      bg-claude-dark-bg text-claude-dark-text
-                      hover:bg-claude-dark-border transition-colors
+                      w-full flex items-center justify-center gap-2 px-4 py-3
+                      text-sm font-medium rounded-lg border border-claude-dark-border
+                      bg-claude-dark-bg/50 text-claude-dark-text
+                      transition-all duration-150
+                      hover:bg-claude-dark-border hover:border-claude-dark-text-secondary
                       ${saving ? 'opacity-50 cursor-not-allowed' : ''}
                     `}
                   >
@@ -967,10 +1030,11 @@ export function SettingsView() {
                     onClick={handleExportConfig}
                     disabled={saving}
                     className={`
-                      w-full flex items-center justify-center gap-2 px-4 py-2.5
-                      text-sm rounded-md border border-claude-dark-border
-                      bg-claude-dark-bg text-claude-dark-text
-                      hover:bg-claude-dark-border transition-colors
+                      w-full flex items-center justify-center gap-2 px-4 py-3
+                      text-sm font-medium rounded-lg border border-claude-dark-border
+                      bg-claude-dark-bg/50 text-claude-dark-text
+                      transition-all duration-150
+                      hover:bg-claude-dark-border hover:border-claude-dark-text-secondary
                       ${saving ? 'opacity-50 cursor-not-allowed' : ''}
                     `}
                   >
@@ -981,10 +1045,11 @@ export function SettingsView() {
                     onClick={handleImportConfig}
                     disabled={saving}
                     className={`
-                      w-full flex items-center justify-center gap-2 px-4 py-2.5
-                      text-sm rounded-md border border-claude-dark-border
-                      bg-claude-dark-bg text-claude-dark-text
-                      hover:bg-claude-dark-border transition-colors
+                      w-full flex items-center justify-center gap-2 px-4 py-3
+                      text-sm font-medium rounded-lg border border-claude-dark-border
+                      bg-claude-dark-bg/50 text-claude-dark-text
+                      transition-all duration-150
+                      hover:bg-claude-dark-border hover:border-claude-dark-text-secondary
                       ${saving ? 'opacity-50 cursor-not-allowed' : ''}
                     `}
                   >
@@ -994,14 +1059,24 @@ export function SettingsView() {
                 </div>
               </div>
 
-              <div className="bg-claude-dark-surface rounded-lg p-4">
-                <SectionHeader title="About" />
-                <p className="text-sm text-claude-dark-text-secondary">
-                  Claude Code Visualizer v1.0.0
-                </p>
-                <p className="text-xs text-claude-dark-text-secondary mt-1">
-                  Visualize and analyze Claude Code session executions
-                </p>
+              <div className="bg-claude-dark-surface rounded-xl p-5 shadow-sm">
+                <SectionHeader title="About" icon={Info} />
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                    <span className="text-white text-xl font-bold">CV</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-claude-dark-text">
+                      Claude Code Visualizer
+                    </p>
+                    <p className="text-xs text-claude-dark-text-secondary mt-1">
+                      Version 1.0.0
+                    </p>
+                    <p className="text-xs text-claude-dark-text-secondary mt-2 leading-relaxed">
+                      Visualize and analyze Claude Code session executions with interactive waterfall charts and detailed insights.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -1009,9 +1084,9 @@ export function SettingsView() {
 
         {/* Saving indicator */}
         {saving && (
-          <div className="fixed bottom-4 right-4 flex items-center gap-2 px-4 py-2 bg-claude-dark-surface rounded-lg shadow-lg">
+          <div className="fixed bottom-6 right-6 flex items-center gap-3 px-5 py-3 bg-claude-dark-surface border border-claude-dark-border rounded-xl shadow-xl backdrop-blur-sm">
             <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-            <span className="text-sm text-claude-dark-text">Saving...</span>
+            <span className="text-sm font-medium text-claude-dark-text">Saving changes...</span>
           </div>
         )}
       </div>
